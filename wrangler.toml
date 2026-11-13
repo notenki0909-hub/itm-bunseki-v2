@@ -1,0 +1,10 @@
+# Cloudflare Pages はダッシュボードのGit連携で設定する想定。
+# ただし bindings（KV等）は本番デプロイでもこのファイルの内容が使われる。
+# ローカル確認: npx wrangler pages dev site --port 8789
+name = "itm-bunseki-v2"
+pages_build_output_dir = "site"
+compatibility_date = "2026-09-22"
+
+[[kv_namespaces]]
+binding = "PRICE_CACHE"
+id = "fa7b02a6ba914b618581e494bf56514a"

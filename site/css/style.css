@@ -1,0 +1,316 @@
+:root{
+  --bg:#fafafa;--card:#ffffff;--line:#e6e6e6;--muted:#666666;--fg:#1a1a1a;
+  --accent:#2563eb;--th:#f3f4f6;--field:#f7f8fa;
+  --gA:#166534;--gB:#854d0e;--gC:#b91c1c;
+  --wbg:#fff7ed;--wbd:#fed7aa;--wfg:#7c2d12;
+  --favA:#1d4ed8;--favB:#b91c1c;
+  --gradRed:#dc2626;--gradOrange:#ea8c0a;--gradYellow:#f2d477;
+  --gradLightBlue:#8ec4f0;--gradBlue:#2f6fed;--gradPurple:#9b3fd4;
+}
+/* 意味色(gA/gB/gC=良い/普通/悪い, wbg/wbd/wfg=警告, favA/favB=前営業日比用の青/赤,
+   gradRed〜gradPurple=詳細マトリクス「先読み」用の7色グラデーション、元Excelの
+   条件付き書式の配色(赤/オレンジ/黄/水色/青/紫)をそのまま踏襲)は
+   アクセント配色プリセットに連動させず、ライト/ダークの2パターンだけ独立に持たせる
+   （プリセットを変えても「緑=有利」「青=有利」等の意味が壊れないように）。*/
+:root[data-mode="dark"]{
+  --bg:#101216;--card:#181b22;--line:#2b303a;--muted:#98a1ad;--fg:#e6e8eb;
+  --accent:#6aa4ff;--th:#1e232c;--field:#161a21;
+  --gA:#4ade80;--gB:#fbbf24;--gC:#f87171;
+  --wbg:#26210f;--wbd:#5a4a1b;--wfg:#e7c06a;
+  --favA:#60a5fa;--favB:#f87171;
+  --gradRed:#f26161;--gradOrange:#f5a83c;--gradYellow:#c9a227;
+  --gradLightBlue:#5b8fc9;--gradBlue:#5a8ef2;--gradPurple:#b06be0;
+}
+@media (prefers-color-scheme: dark){
+  /* JS(head内)が必ずdata-modeを明示設定するため、これはJS無効時のフォールバックとしてのみ働く */
+  :root:not([data-mode]){
+    --bg:#101216;--card:#181b22;--line:#2b303a;--muted:#98a1ad;--fg:#e6e8eb;
+    --accent:#6aa4ff;--th:#1e232c;--field:#161a21;
+    --gA:#4ade80;--gB:#fbbf24;--gC:#f87171;
+    --wbg:#26210f;--wbd:#5a4a1b;--wfg:#e7c06a;
+    --favA:#60a5fa;--favB:#f87171;
+    --gradRed:#f26161;--gradOrange:#f5a83c;--gradYellow:#c9a227;
+    --gradLightBlue:#5b8fc9;--gradBlue:#5a8ef2;--gradPurple:#b06be0;
+  }
+}
+
+/* アクセント配色プリセット。銘柄診断ツールと同じ配色値・同じlocalStorageキー(pp_theme)を使い、
+   ツール間で選んだ配色が引き継がれるようにしている。 */
+:root[data-pal="blueplus"]{--bg:#f7f8fa;--card:#ffffff;--line:#dfe1e6;--muted:#5b6472;--fg:#161a1f;--accent:#2563eb;--th:#eaedf3;--field:#f4f6f9;}
+:root[data-pal="blueplus"][data-mode="dark"]{--bg:#0d0f14;--card:#191d26;--line:#30363f;--muted:#9aa3ae;--fg:#e9ebef;--accent:#7db0ff;--th:#20262f;--field:#161b24;}
+:root[data-pal="teal"]{--bg:#f2f8f6;--card:#ffffff;--line:#d7e6e1;--muted:#556661;--fg:#132019;--accent:#0d7c72;--th:#e4f1ed;--field:#f0f7f5;}
+:root[data-pal="teal"][data-mode="dark"]{--bg:#0b120f;--card:#152019;--line:#28372f;--muted:#8fa39c;--fg:#e2ece7;--accent:#3fd9c8;--th:#1c2b24;--field:#131d17;}
+:root[data-pal="slate"]{--bg:#f5f6f9;--card:#ffffff;--line:#dde1e8;--muted:#5b6577;--fg:#171d28;--accent:#334c86;--th:#e8ebf1;--field:#f3f5f8;}
+:root[data-pal="slate"][data-mode="dark"]{--bg:#0d0f13;--card:#181c23;--line:#2c323d;--muted:#96a0ae;--fg:#e6e8ec;--accent:#8fb0e6;--th:#1e232c;--field:#161a21;}
+:root[data-pal="sand"]{--bg:#f8f4ea;--card:#fffdf8;--line:#e7dcc7;--muted:#6a5f48;--fg:#221c11;--accent:#b1500a;--th:#efe5d1;--field:#f5efe0;}
+:root[data-pal="sand"][data-mode="dark"]{--bg:#131009;--card:#201b11;--line:#372c1b;--muted:#a89d84;--fg:#ece4d3;--accent:#ffab2e;--th:#271f12;--field:#191509;}
+:root[data-pal="violet"]{--bg:#f8f6fd;--card:#ffffff;--line:#e4dcf1;--muted:#635a75;--fg:#1b1626;--accent:#6d28d9;--th:#efe9fa;--field:#f5f2fc;}
+:root[data-pal="violet"][data-mode="dark"]{--bg:#0f0d16;--card:#1c1727;--line:#302742;--muted:#a89fb8;--fg:#ebe5f4;--accent:#b79bff;--th:#231c30;--field:#171223;}
+:root[data-pal="rose"]{--bg:#fdf5f8;--card:#ffffff;--line:#efd9e2;--muted:#7a5a65;--fg:#24171d;--accent:#c2255c;--th:#fbe7ef;--field:#fbf3f6;}
+:root[data-pal="rose"][data-mode="dark"]{--bg:#140f12;--card:#211820;--line:#3a2b33;--muted:#b499a3;--fg:#efe3e9;--accent:#f472b6;--th:#281c24;--field:#1a1318;}
+
+#theme-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:10px 0 4px;font-size:12px}
+#theme-bar .tb-lbl{color:var(--muted)}
+#theme-bar .sw{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);cursor:pointer;padding:0;background:var(--tb-c,#ccc)}
+#theme-bar .sw[data-pal="genko"]{background:linear-gradient(135deg,#fff 48%,#2563eb 52%)}
+#theme-bar .sw[aria-pressed="true"]{outline:2px solid var(--fg);outline-offset:1px}
+#theme-bar .tb-btn{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:7px;padding:3px 9px;font:inherit;font-size:12px;cursor:pointer}
+#theme-bar .tb-reset{color:var(--accent);border:0;background:none;text-decoration:underline;text-underline-offset:2px;cursor:pointer;font:inherit;font-size:12px}
+#theme-bar .tb-sep{width:1px;align-self:stretch;background:var(--line);margin:0 3px}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.6 -apple-system,"Hiragino Kaku Gothic ProN","Meiryo",sans-serif;
+  background:var(--bg);color:var(--fg)}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:12px;margin-bottom:20px}
+
+.topbar{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.topbar h1{margin:0}
+.topbar .pagenav{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.topbar .pagenav a{font-size:12.5px;color:var(--accent);text-decoration:none}
+.topbar .pagenav a:hover{text-decoration:underline}
+.link-btn{border:0;background:none;padding:0;font:inherit;font-size:12.5px;color:var(--accent);
+  text-decoration:none;cursor:pointer}
+.link-btn:hover{text-decoration:underline}
+
+/* 文字リンクだと目立ちにくい操作(別ページを開く、列の展開など)用の、枠線付きの控えめなボタン。 */
+.btn-outline{display:inline-block;padding:6px 14px;border:1px solid var(--accent);border-radius:8px;
+  background:var(--card);color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer}
+.btn-outline:hover{background:var(--field)}
+
+.tab-bar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center}
+.tab{display:flex;align-items:center;gap:6px;padding:6px 8px 6px 12px;border:1px solid var(--line);
+  border-radius:8px 8px 0 0;background:var(--field);color:var(--muted);font-size:12.5px;cursor:pointer;
+  border-bottom:2px solid transparent}
+.tab.active{background:var(--card);color:var(--fg);border-color:var(--line);border-bottom-color:var(--accent)}
+.tab .tab-close{border:0;background:none;color:inherit;opacity:.6;cursor:pointer;font-size:13px;
+  padding:0 2px;line-height:1}
+.tab .tab-close:hover{opacity:1;color:var(--gC)}
+.tab-add{padding:6px 12px;border:1px dashed var(--line);border-radius:8px;background:none;
+  color:var(--muted);font-size:13px;cursor:pointer}
+.tab-add:hover{color:var(--accent);border-color:var(--accent)}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px;position:relative}
+/* 各エリア(カード)の開く/閉じるボタン。閉じているときは見出し行(.card-head)だけを残す。 */
+.card-toggle{position:absolute;top:12px;right:14px;padding:3px 12px;font-size:12px;border-radius:999px;
+  background:var(--field);color:var(--fg);border:1px solid var(--line);cursor:pointer}
+.card-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.card-head{padding-right:72px}
+.card.collapsed > :not(.card-head):not(.card-toggle){display:none}
+.card.collapsed .card-head .explain-box{display:none}
+.card.collapsed > .card-head{margin-bottom:0 !important}
+.form-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field[hidden]{display:none}
+.field label{font-size:12px;color:var(--muted)}
+.field label[data-target]{cursor:pointer;width:fit-content}
+.field label[data-target]:hover{color:var(--accent);text-decoration:underline}
+.field label[data-target].active{color:var(--accent);text-decoration:underline}
+.field input,.field select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;
+  font-size:14px;background:var(--field);color:var(--fg)}
+/* 使わない項目であることがひと目で分かるよう、無効化時ははっきり薄く・斜線調にする */
+.field input:disabled,.field select:disabled{background:repeating-linear-gradient(135deg,var(--line),var(--line) 4px,var(--field) 4px,var(--field) 9px);
+  color:var(--muted);opacity:.55;cursor:not-allowed;border-style:dashed}
+#ticker{width:140px;text-transform:uppercase}
+/* 売り系で「判定する深さ」を入力したときに、総合判定の下に出す損失リスクの表示 */
+.risk-box{margin:10px 0 0;padding:10px 12px;border:1px solid var(--gC);border-radius:8px;
+  background:color-mix(in srgb,var(--gC) 10%,transparent);font-size:13px;line-height:1.7}
+.risk-box[hidden]{display:none}
+.risk-note{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.6}
+.result-head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 18px;margin:0 0 10px}
+.result-head .explain-box{flex:1 1 100%}
+/* 注文内容カード: 売り/買い・単体/SPで使う入力欄を、body属性(updateRiskRewardInputUI)で切り替える。
+   使わない欄は非表示にするだけで、入力済みの値は保持される。 */
+body[data-group="buy"] [data-only="sell"],
+body[data-group="sell"] [data-only="buy"],
+body[data-mode="naked"] [data-only="sp"],
+body[data-mode="sp"] [data-only="naked"]{display:none}
+.order-head{display:flex;align-items:center;gap:12px;margin:0 0 8px}
+.sp-btn{padding:5px 12px;font-size:13px;border-radius:999px;background:var(--field);color:var(--fg);border:1px solid var(--line);cursor:pointer}
+.sp-btn[hidden]{display:none}
+.sp-btn:hover{border-color:var(--accent);color:var(--accent)}
+.sp-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.order-ticker{font-size:16px}
+.order-line{margin:12px 0 4px;padding:10px 12px;background:var(--field);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;line-height:1.7;word-break:keep-all;overflow-wrap:anywhere}
+.field-inline{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}
+.field-hint{font-size:12px;color:var(--muted)}
+.field-warn{font-size:11px;color:var(--gC)}
+.ticker-wrap{position:relative}
+.ticker-dropdown{position:absolute;top:calc(100% + 4px);left:0;min-width:140px;max-height:220px;
+  overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);z-index:20}
+.ticker-dropdown[hidden]{display:none}
+.ticker-dropdown-item{padding:8px 12px;font-size:14px;cursor:pointer;text-transform:uppercase}
+.ticker-dropdown-item:hover{background:var(--field);color:var(--accent)}
+#ratioInput,#orderRatioInput{width:90px}
+/* 金額・割合の入力欄は、入力する数値に見合った幅にする(ブラウザ標準の幅は広すぎるため) */
+#rrPremiumInput,#rrPayPremiumInput,#rrSpreadWidthInput,#rrCutLossInput,#rrCutLossInputM,
+#rrExpectedGainInput,#rrExpectedGainInputM{width:100px;box-sizing:border-box}
+#rrDepthInput,#orderDepthInput,#rrProfitRatioInput,#rrProfitRatioInputM{width:120px;box-sizing:border-box}
+#minMatchDaysInput,#momentumThresholdInput{width:70px}
+button{padding:9px 18px;border:1px solid var(--accent);border-radius:8px;
+  background:var(--accent);color:#fff;font-size:14px;cursor:pointer}
+button:disabled{opacity:.6;cursor:default}
+#status{font-size:12px;color:var(--muted);min-height:16px}
+#status.err{color:var(--gC)}
+
+#result[hidden]{display:none}
+.summary{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 16px;align-items:flex-start}
+.stat{background:var(--field);border:1px solid var(--line);border-radius:8px;
+  padding:8px 14px;min-width:100px;text-align:center;cursor:pointer}
+.stat b{display:block;font-size:20px}
+.stat span{font-size:11px;color:var(--muted)}
+.stat .stat-sub{display:block;font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap}
+.stat:hover b{color:var(--accent)}
+.stat.active{border-color:var(--accent)}
+
+/* 項目クリックで表示される説明。対応するカードの直前(上)に表示される */
+.explain-box{background:var(--info,var(--field));border:1px solid var(--accent);border-radius:8px;
+  padding:10px 12px;margin:6px 0 10px;font-size:12px;color:var(--fg);line-height:1.6;white-space:pre-line}
+/* .summary/.form-rowはflex-wrapなので、クリックした項目の直後に挿入した説明欄を
+   常に1行全幅で折り返させ、他の項目の下に押し出さないようにする */
+.summary .explain-box,.form-row .explain-box{flex:1 1 100%}
+
+.badge{display:inline-block;padding:3px 12px;border-radius:14px;font-size:13px;font-weight:700}
+.b-good{background:color-mix(in srgb,var(--gA) 18%,transparent);color:var(--gA)}
+.b-bad{background:color-mix(in srgb,var(--gC) 18%,transparent);color:var(--gC)}
+.b-neutral{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--muted)}
+/* 該当する/しない: 良し悪しではなく「条件に一致したか」という事実を示すのでアクセントカラーを使う */
+.b-match{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent)}
+.b-nomatch{background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted)}
+
+/* 総合判定バッジ: 詳細マトリクス・営業日ごとのITM確率チャート・エントリーヒートマップと
+   共通の7段階配色(赤=有利〜紫=不利)。b0が最も有利、b6が最も不利。 */
+.badge.b0{background:color-mix(in srgb,var(--gradRed) 30%,transparent);color:var(--gradRed)}
+.badge.b1{background:color-mix(in srgb,var(--gradOrange) 30%,transparent);color:var(--gradOrange)}
+.badge.b2{background:color-mix(in srgb,var(--gradYellow) 34%,transparent);color:var(--gradYellow)}
+.badge.b3{background:color-mix(in srgb,var(--muted) 16%,transparent);color:var(--muted)}
+.badge.b4{background:color-mix(in srgb,var(--gradLightBlue) 30%,transparent);color:var(--gradLightBlue)}
+.badge.b5{background:color-mix(in srgb,var(--gradBlue) 30%,transparent);color:var(--gradBlue)}
+.badge.b6{background:color-mix(in srgb,var(--gradPurple) 30%,transparent);color:var(--gradPurple)}
+
+.chart{width:100%;height:auto;display:block}
+.chart-title{font-size:12px;color:var(--muted);margin:14px 0 4px}
+.chart-title[data-target]{cursor:pointer;display:inline-block}
+/* 分析結果の4つのグラフ・ヒートマップの見出しは、1段階大きく太字にする */
+#dayProbTitle,#entryHeatmapTitle,#depthHeatmapTitle,#otmHeatmapTitle{font-size:13px;font-weight:700}
+/* 4つの見出しは文字色を黒(--fg。ライト系は黒に近い色、ダーク系は読める明るい色)にする。クリック(.active)・マウスを乗せたときは従来どおりアクセント色 */
+#dayProbTitle,#entryHeatmapTitle,#depthHeatmapTitle,#otmHeatmapTitle{color:var(--fg)}
+#dayProbTitle:hover,#entryHeatmapTitle:hover,#depthHeatmapTitle:hover,#otmHeatmapTitle:hover,
+#dayProbTitle.active,#entryHeatmapTitle.active,#depthHeatmapTitle.active,#otmHeatmapTitle.active{color:var(--accent)}
+/* ITM確率/OTM確率の表示切替ボタン(過去の営業日ごとのITM確率の見出しの右) */
+.otm-toggle{margin-left:10px;vertical-align:middle}
+.chart-title[data-target]:hover{color:var(--accent);text-decoration:underline}
+.chart-title[data-target].active{color:var(--accent)}
+
+.card-title-toggle{cursor:pointer;display:inline-block}
+.card-title-toggle:hover{color:var(--accent)}
+.card-title-toggle.active{color:var(--accent)}
+
+.momentum-strip{display:flex;gap:8px;flex-wrap:wrap}
+.momentum-cell{flex:1;min-width:64px;background:var(--field);border:1px solid var(--line);
+  border-radius:8px;padding:8px 6px;text-align:center}
+.momentum-cell .m-label{font-size:10.5px;color:var(--muted);display:block}
+.momentum-cell .m-value{display:block;font-size:14px;font-weight:700;margin-top:2px}
+.momentum-cell .m-value.up{color:var(--gA)}
+.momentum-cell .m-value.down{color:var(--gC)}
+#todayCard[hidden]{display:none}
+#conditionCard[hidden]{display:none}
+
+/* エントリー日ごとのヒートマップ: 判定期間内のITM日数(絶対値)を7段階配色で表す
+   (色はjs/heatmap.jsでインラインstyleとして付与)。1ヶ月の最大営業日数は23日程度
+   なので、各月を5×5(25マス)の正方形にまとめ、月ごとの正方形を並べて表示する。 */
+.hm-months{display:flex;flex-wrap:wrap;gap:14px 18px;margin:8px 0}
+.hm-month{width:63px}
+.hm-month-label{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:3px;white-space:nowrap}
+.hm-grid{display:flex;flex-wrap:wrap;gap:2px;margin:0 0 8px}
+.hm-grid-5x5{display:grid;grid-template-columns:repeat(5,11px);gap:2px}
+.hm-cell{width:11px;height:11px;border-radius:2px;cursor:default}
+/* 判定する深さに届いた日の印(最大ITM深さヒートマップ) */
+.hm-cell.hm-mark{box-shadow:inset 0 0 0 2px var(--fg)}
+/* ヒートマップのマスをクリックしたときに出す説明(日付・深さなど)。他の場所をクリックすると消える。 */
+.hm-cell.hm-click{cursor:pointer}
+.hm-cell.hm-click.hm-tip-active{outline:2px solid var(--accent);outline-offset:1px}
+.cell-tip{position:absolute;z-index:60;max-width:300px;padding:8px 10px;background:var(--card);color:var(--fg);
+  border:1px solid var(--accent);border-radius:8px;font-size:12px;line-height:1.6;
+  box-shadow:0 4px 14px rgba(0,0,0,.28);overflow-wrap:anywhere}
+.cell-tip[hidden]{display:none}
+/* 営業日ごとのITM確率チャート: 各営業日の列(透明な領域)をクリックすると説明を出す */
+.chart-hit{cursor:pointer}
+.chart-hit.hm-tip-active{fill:color-mix(in srgb,var(--accent) 12%,transparent)}
+.hm-legend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+.hm-legend .hm-cell{cursor:default;flex:none}
+
+.disc{margin-top:20px;padding:12px;background:var(--wbg);border:1px solid var(--wbd);
+  border-radius:8px;font-size:11.5px;color:var(--wfg)}
+/* サンプル数が非常に少ない場合の強い警告(通常の.discより赤みを強くする) */
+.disc.disc-strong{background:color-mix(in srgb,var(--gC) 14%,var(--card));
+  border-color:var(--gC);color:var(--gC)}
+
+/* 詳細マトリクスページは列数が多いので、通常より広い最大幅を使う */
+.wrap-wide{max-width:none;padding:20px 24px 60px}
+
+/* 「表示する」ボタンは集計期間のすぐ右に配置(通常のform-rowの並び通り)。
+   「← 分析ページへ戻る」の右端は、1段下にある「標準に戻す」の右端に揃えている
+   (見た目上、戻るリンクが標準に戻すの真上に来る)。どちらも幅が固定値ではない
+   ため、揃える処理はjs/detail.js側で実測して行っている。 */
+
+.dm-legend{display:flex;flex-wrap:wrap;gap:16px;margin:10px 0 12px;font-size:11px;color:var(--muted)}
+.dm-lgroup{display:inline-flex;align-items:center;gap:3px}
+.dm-legend-after{gap:10px 14px;align-items:center}
+.dm-lgroup-title{width:100%;font-size:11px;color:var(--muted);margin-bottom:2px}
+.dm-litem{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--fg)}
+.dm-litem .dc{display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid var(--line)}
+/* 表の中だけでスクロールさせると、行数が多い時に横スクロールバーが画面の一番下(表の最後の行の下)
+   まで見に行かないと出てこず使いづらいため、あえて表からはみ出させて、ブラウザウインドウ自体の
+   横スクロールバー(画面下部に常に表示される)でスクロールできるようにしている。 */
+.dm-table-wrap{border:1px solid var(--line);border-radius:8px}
+.dm-table{border-collapse:collapse;font-size:0}
+.dm-table th,.dm-table td{border:1px solid var(--line);padding:0}
+.dm-table th{background:var(--th);color:var(--muted);font-size:10px;font-weight:600;
+  padding:4px 3px;white-space:nowrap;text-align:center}
+.dm-table th.dm-sticky,.dm-table td.dm-sticky{position:sticky;left:0;background:var(--card);
+  z-index:1;box-shadow:1px 0 0 var(--line)}
+.dm-table td.dm-date{font-size:10.5px;color:var(--fg);padding:2px 6px;white-space:nowrap;text-align:left}
+.dm-table td.dm-num{font-size:10.5px;color:var(--fg);padding:2px 6px;white-space:nowrap;text-align:right}
+.dm-table td.dc{width:16px;height:16px;cursor:default}
+
+/* 判定期間31日後以降の列。初期状態では折りたたみ、expandBtnクリックでdm-show-extraが
+   付いたときだけ表示する(判定期間を最大150日まで許容すると列数が多くなるため)。 */
+.dm-table th.dm-extra,.dm-table td.dc.dm-extra{display:none}
+.dm-table.dm-show-extra th.dm-extra,.dm-table.dm-show-extra td.dc.dm-extra{display:table-cell}
+.dm-expand{margin:0 0 10px}
+
+/* 「変動幅の統計」カードの表 */
+.volatility-wrap{overflow-x:auto}
+.volatility-table{width:100%;border-collapse:collapse;font-size:13px}
+.volatility-table th,.volatility-table td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+.volatility-table th{background:var(--th);color:var(--muted);font-size:11.5px;font-weight:700}
+.volatility-table td{color:var(--fg)}
+.volatility-table td:not(:first-child),.volatility-table th:not(:first-child){text-align:right}
+.volatility-table tr:last-child td{border-bottom:none}
+
+/* 先読み(after)7段階。元Excelの条件付き書式の配色(赤→オレンジ→黄→塗りなし→水色→青→紫)を
+   そのまま踏襲。L0が最も有利、L6が最も不利。しきい値自体はタイプごとに異なる(js/detail.js)。 */
+.dc.L0{background:color-mix(in srgb,var(--gradRed) 75%,var(--card))}
+.dc.L1{background:color-mix(in srgb,var(--gradOrange) 68%,var(--card))}
+.dc.L2{background:color-mix(in srgb,var(--gradYellow) 62%,var(--card))}
+.dc.L3{background:var(--card)}
+.dc.L4{background:color-mix(in srgb,var(--gradLightBlue) 55%,var(--card))}
+.dc.L5{background:color-mix(in srgb,var(--gradBlue) 68%,var(--card))}
+.dc.L6{background:color-mix(in srgb,var(--gradPurple) 75%,var(--card))}
+
+/* 前営業日比較(before): 元Excelのしきい値(10/0/-5/-10%)に合わせた5段階。
+   上昇=赤、下落=青（日本の株式チャート慣習：陽線=赤、陰線=青）。 */
+.dc.U1{background:color-mix(in srgb,var(--favB) 55%,var(--card))} /* 上昇 >10% */
+.dc.Z{background:var(--field)} /* 0〜10%: ほぼ変動なし〜小幅上昇(無地) */
+.dc.D0{background:color-mix(in srgb,var(--favA) 22%,var(--card))} /* 下落 -5〜0% */
+.dc.D1{background:color-mix(in srgb,var(--favA) 42%,var(--card))} /* 下落 -10〜-5% */
+.dc.D2{background:color-mix(in srgb,var(--favA) 65%,var(--card))} /* 下落 10%超 */
+
+/* データが無いセル(集計期間の端で前後の日付が足りない)は、L3(条件的に塗りなし)と
+   区別できるよう、はっきりしたグレーで塗る。 */
+.dm-nodata{background:color-mix(in srgb,var(--muted) 30%,var(--card))}
+
+/* Ver2の印(見出し横) */
+.ver-badge{display:inline-block;margin-left:6px;padding:1px 9px;border-radius:999px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;vertical-align:middle}
