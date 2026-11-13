@@ -85,5 +85,8 @@ IVの自動取得は当面見送り(Twelve DataにIVなし。外部APIは無料�
 - 本番確認: https://itm-bunseki-v2.pages.dev/ で ZTS(未キャッシュ銘柄)を取得でき、画面も正常(リスクリワード分析なし、OTMに戻る日数の統計あり)。
 - KVはVer1と共用(wrangler.tomlのID)。AAPLなどVer1で取得済みの銘柄はキーなしでも返る(KVの共有キャッシュ)ため、
   キー設定の確認には未取得の銘柄で試すこと。
-- 注意: Cloudflareの画面に「This project is disconnected from your Git account」の警告が出ていた(初回デプロイ後)。
-  push時に自動デプロイされるかを確認すること(されなければGitHubのCloudflare Pagesアプリのリポジトリアクセスを見直す)。
+- 自動デプロイ: 最初は「This project is disconnected from your Git account」の警告が出ており、push(86f2971)しても
+  デプロイされなかった(GitHub側のCloudflareアプリがこのリポジトリにアクセスできていなかったため)。ユーザーがGitHubの
+  Settings > Applications > Cloudflare(Workers & Pages)のRepository accessに itm-bunseki-v2 を許可して解決。
+  空コミット b2f5dfe のpushで自動デプロイが走り成功したことを確認済み(GitHubのcheck-run「Cloudflare Pages」でも確認できる。
+  Ver1の最新コミットには付いている。付いていなければ自動デプロイが動いていない合図)。
