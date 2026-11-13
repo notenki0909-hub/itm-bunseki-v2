@@ -74,9 +74,16 @@ IVの自動取得は当面見送り(Twelve DataにIVなし。外部APIは無料�
   4. 引継ぎ資料(このファイル)と guide.html を更新してからコミットする
   リモート: https://notenki0909-hub@github.com/notenki0909-hub/itm-bunseki-v2.git (アカウント名をURLに埋め込む運用)
 
+====================================================================================================================================
+6. セットアップ状況（2026-11-13 完了）
 ====================================================================
-6. セットアップ状況（2026-11-13時点）
-====================================================================
-- ローカルフォルダ作成・Gitコミット: 済み(リモート未設定→GitHubリポジトリ作成後にpush)
-- GitHubリポジトリ itm-bunseki-v2: 未作成(ユーザー作業。ブラウザ未ログインのためClaudeは作成不可)
-- Cloudflare Pagesプロジェクト itm-bunseki-v2 / Secret TWELVEDATA_API_KEY: 未作成(ユーザー作業。APIキーはClaudeは入力しない)
+- GitHub: notenki0909-hub/itm-bunseki-v2 (Public) 作成済み。初回コミット 55c8a3b をpush済み。
+- Cloudflare Pages: プロジェクト itm-bunseki-v2 を「レガシーPagesワークフロー(Continue to Pages)」から作成
+  (新しい「Continue with GitHub」はWorkers作成ルートなので使わない)。本番ブランチmain、ビルドコマンドなし、出力ディレクトリsite。
+- Secret TWELVEDATA_API_KEY: ユーザーが設定。最初は値の入力ミス(Twelve Dataが "apikey parameter is incorrect" を返した)で、
+  入れ直して再デプロイ(Retry deployment)したら取得できた。Secretは追加・変更後に再デプロイしないと反映されない。
+- 本番確認: https://itm-bunseki-v2.pages.dev/ で ZTS(未キャッシュ銘柄)を取得でき、画面も正常(リスクリワード分析なし、OTMに戻る日数の統計あり)。
+- KVはVer1と共用(wrangler.tomlのID)。AAPLなどVer1で取得済みの銘柄はキーなしでも返る(KVの共有キャッシュ)ため、
+  キー設定の確認には未取得の銘柄で試すこと。
+- 注意: Cloudflareの画面に「This project is disconnected from your Git account」の警告が出ていた(初回デプロイ後)。
+  push時に自動デプロイされるかを確認すること(されなければGitHubのCloudflare Pagesアプリのリポジトリアクセスを見直す)。
