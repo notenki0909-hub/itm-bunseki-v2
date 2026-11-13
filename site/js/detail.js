@@ -267,6 +267,10 @@ function applyStateToForm() {
   els.ticker.value = state.symbol || "";
   els.typeSelect.value = state.typeKey;
   els.ratioInput.value = state.ratio;
+  // 分析ページで「満期日の候補」から選んだ営業日数(標準の選択肢にない値)も選べるようにする
+  const days = WINDOW_OPTIONS.includes(state.windowDays) ? [...WINDOW_OPTIONS] : [...WINDOW_OPTIONS, state.windowDays];
+  days.sort((a, b) => a - b);
+  els.windowSelect.innerHTML = days.map((d) => `<option value="${d}">${d}営業日</option>`).join("");
   els.windowSelect.value = String(state.windowDays);
   els.periodSelect.value = String(state.periodDays);
 }

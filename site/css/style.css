@@ -314,3 +314,8 @@ button:disabled{opacity:.6;cursor:default}
 
 /* Ver2の印(見出し横) */
 .ver-badge{display:inline-block;margin-left:6px;padding:1px 9px;border-radius:999px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;vertical-align:middle}
+
+/* 満期日の候補の表で、判定期間と同じ満期の行 */
+.volatility-table tr.exp-match td{background:color-mix(in srgb,var(--accent) 14%,transparent);font-weight:700}
+#expiryTable td,#expiryTable th{text-align:right}
+#expiryTable td:first-child,#expiryTable th:first-child{text-align:left}

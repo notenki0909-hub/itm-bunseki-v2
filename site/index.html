@@ -28,8 +28,16 @@
         <input id="ratioInput" type="number" step="0.01" min="0.01">
       </div>
       <div class="field">
-        <label for="windowSelect">判定期間</label>
-        <select id="windowSelect"></select>
+        <label for="windowDateInput" data-note="オプションの満期日を、日付で入力します（日付の欄をクリックすると、カレンダーから選べます）。
+入力した日付までの営業日数が、分析の「判定期間」になります（例：満期日まで25営業日なら、判定期間は25営業日）。
+選べる範囲は、基準日（最新の終値の日）の5営業日後から、150営業日後までです。講座の満期の目安は、約60暦日までです。
+土日や祝日など休場日を入力した場合は、直前の営業日に直します。
+営業日数だけを保存するので、日付が進むと、満期日の日付は自動で後ろにずれます（営業日数は変わりません）。
+実際にその満期日があるかは、銘柄ごとに違うため、証券会社のオプションチェーンで確認してください。">満期日（判定期間）</label>
+        <div class="field-inline">
+          <input id="windowDateInput" type="date">
+          <span class="field-hint" id="windowHint"></span>
+        </div>
       </div>
       <div class="field">
         <label for="periodSelect">集計期間</label>
@@ -191,8 +199,16 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
         <input id="orderRatioInput" data-mirror="ratioInput" type="number" step="0.01" min="0.01">
       </div>
       <div class="field">
-        <label for="orderWindowSelect">判定期間</label>
-        <select id="orderWindowSelect" data-mirror="windowSelect"></select>
+        <label for="orderWindowDateInput" data-note="オプションの満期日を、日付で入力します（日付の欄をクリックすると、カレンダーから選べます）。
+入力した日付までの営業日数が、分析の「判定期間」になります（例：満期日まで25営業日なら、判定期間は25営業日）。
+選べる範囲は、基準日（最新の終値の日）の5営業日後から、150営業日後までです。講座の満期の目安は、約60暦日までです。
+土日や祝日など休場日を入力した場合は、直前の営業日に直します。
+営業日数だけを保存するので、日付が進むと、満期日の日付は自動で後ろにずれます（営業日数は変わりません）。
+実際にその満期日があるかは、銘柄ごとに違うため、証券会社のオプションチェーンで確認してください。">満期日（判定期間）</label>
+        <div class="field-inline">
+          <input id="orderWindowDateInput" type="date">
+          <span class="field-hint" id="orderWindowHint"></span>
+        </div>
       </div>
       <div class="field">
         <label for="orderPeriodSelect">集計期間</label>
@@ -218,8 +234,9 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
       <div class="field" data-only="sell">
         <label for="rrProfitRatioInput" data-target="orderExplain"
           data-note="受け取ったプレミアムのうち、反対売買（買い戻し）で何%を利益として確定させるつもりかを入力します（例: 80%＝2割を支払って決済）。
-下の注文内容の1行表示に「◯割利確」と表示するのに使います。未入力なら表示しません。">利確割合(%)</label>
-        <input id="rrProfitRatioInput" type="number" step="1" min="0" max="100" placeholder="未入力=100%">
+未入力の場合は、講座の基準の80%（8割利確）で計算します。
+下の注文内容の1行表示（◯割利確）と、「決済の目安」の利確の支払い価格・利益額の計算に使います。">利確割合(%)</label>
+        <input id="rrProfitRatioInput" type="number" step="1" min="0" max="100" placeholder="未入力=80%">
       </div>
       <div class="field" id="orderMaxLossField" hidden>
         <label data-target="orderExplain"
@@ -246,6 +263,16 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
       </div>
     </div>
     <div class="order-line" id="orderLine"></div>
+
+    <div data-only="sell">
+      <h3 style="margin:14px 0 8px;font-size:14px">決済の目安（利確・ロスカット）</h3>
+      <div class="summary" id="orderExitSummary"></div>
+      <p class="sub" id="orderExitNote" style="margin:8px 0 0"></p>
+
+      <h3 style="margin:18px 0 8px;font-size:14px">満期日と、決済の目安日</h3>
+      <div class="summary" id="expirySummary"></div>
+      <p class="sub" id="expiryNote" style="margin:8px 0 0"></p>
+    </div>
     <h3 style="margin:14px 0 8px;font-size:14px">損益分岐点（満期時の株価）</h3>
     <div class="summary" id="rrBreakEvenSummary"></div>
   </div>

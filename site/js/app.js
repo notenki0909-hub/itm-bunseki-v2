@@ -1,5 +1,5 @@
 import {
-  OPTION_TYPES, WINDOW_OPTIONS, DEFAULT_WINDOW,
+  OPTION_TYPES, DEFAULT_WINDOW,
   PERIOD_OPTIONS, DEFAULT_PERIOD_DAYS,
   MOMENTUM_LOOKBACK_OPTIONS, DEFAULT_MOMENTUM_LOOKBACK,
   computeItmAnalysis, computeConditionalItmAnalysis,
@@ -12,6 +12,7 @@ import { renderDayProbChart, DAY_PROB_BANDS } from "./chart.js";
 import { renderEntryHeatmap, ENTRY_HEATMAP_BANDS, renderDepthHeatmap, DEPTH_HEATMAP_BANDS, renderOtmHeatmap, OTM_HEATMAP_BANDS, OTM_RATE_BANDS } from "./heatmap.js";
 import { initThemeBar } from "./theme.js";
 import { isPriceDataStale } from "./marketTime.js";
+import { WEEKDAY_JA, weekday, parseYmd, isTradingDay, previousTradingDay, shiftTradingDays, tradingDaysBetween, expiryKind, EXPIRY_KIND_LABEL, EXPIRY_KIND_NOTE } from "./usMarket.js";
 import { addTickerToHistory, setupTickerHistoryDropdown, loadTickerHistory, mergeTickerHistory } from "./tickerHistory.js";
 
 // 複数銘柄・複数タイプを切り替えながら見比べられるよう「タブ」単位で状態を持つ。
@@ -230,7 +231,10 @@ const els = {
   analyzeBtn: document.getElementById("analyzeBtn"),
   typeSelect: document.getElementById("typeSelect"),
   ratioInput: document.getElementById("ratioInput"),
-  windowSelect: document.getElementById("windowSelect"),
+  windowDateInput: document.getElementById("windowDateInput"),
+  windowHint: document.getElementById("windowHint"),
+  orderWindowDateInput: document.getElementById("orderWindowDateInput"),
+  orderWindowHint: document.getElementById("orderWindowHint"),
   periodSelect: document.getElementById("periodSelect"),
   status: document.getElementById("status"),
 
@@ -248,6 +252,10 @@ const els = {
   recoveryUnrecStat: document.getElementById("recoveryUnrecStat"),
   recoveryUnrec: document.getElementById("recoveryUnrec"),
   recoveryUnrecSub: document.getElementById("recoveryUnrecSub"),
+  orderExitSummary: document.getElementById("orderExitSummary"),
+  orderExitNote: document.getElementById("orderExitNote"),
+  expirySummary: document.getElementById("expirySummary"),
+  expiryNote: document.getElementById("expiryNote"),
   todayTitle: document.getElementById("todayTitle"),
   statusDateInput: document.getElementById("statusDateInput"),
   statusDateReset: document.getElementById("statusDateReset"),
@@ -374,7 +382,7 @@ function switchTab(id) {
   els.ticker.value = t.symbol || "";
   els.typeSelect.value = t.typeKey;
   els.ratioInput.value = t.ratio;
-  els.windowSelect.value = String(t.windowDays);
+  syncWindowInputs(t);
   els.periodSelect.value = String(t.periodDays);
   els.conditionModeSelect.value = t.conditionMode;
   els.momentumLookbackSelect.value = String(t.momentumLookback);
@@ -476,10 +484,75 @@ function initTypeOptions() {
     .join("");
 }
 
-function initWindowOptions() {
-  els.windowSelect.innerHTML = WINDOW_OPTIONS
-    .map((d) => `<option value="${d}" ${d === DEFAULT_WINDOW ? "selected" : ""}>${d}営業日</option>`)
-    .join("");
+// ---- 満期日(判定期間)の入力 ----
+// 判定期間は、満期日の日付で入力する(上の入力欄と注文内容の2か所。どちらで入力しても連動する)。
+// 入力した日付までの営業日数が判定期間(t.windowDays)になる。保存するのは営業日数だけで、
+// 日付が進むと、表示する満期日の日付は(営業日数が同じまま)後ろにずれる。
+const MIN_WINDOW_DAYS = 5;     // 選べる最短(営業日)
+const MAX_WINDOW_DAYS = 150;   // 選べる最長(営業日)。従来の判定期間の最大値に合わせた
+const GUIDE_MAX_CALENDAR_DAYS = 60; // 講座の想定の上限(暦日)。超えても選べるが、ひとこと添える
+
+function etTodayYmd() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" })
+    .formatToParts(new Date());
+  const o = {};
+  for (const p of parts) if (p.type !== "literal") o[p.type] = p.value;
+  return `${o.year}-${o.month}-${o.day}`;
+}
+
+// 満期日までの営業日数を数える基準日。データを取得済みなら最新の終値の日(日付指定中はその日)、
+// 未取得なら、米国の今日(休場日なら直近の営業日)。
+function asOfDateOf(t) {
+  if (t && t.closesFull && t.closesFull.length) {
+    const dates = viewDataOf(t).dates;
+    return dates[dates.length - 1];
+  }
+  return previousTradingDay(etTodayYmd());
+}
+
+function calendarDaysBetween(a, b) {
+  return Math.round((parseYmd(b).getTime() - parseYmd(a).getTime()) / 86400000);
+}
+
+// 満期日の入力欄(2か所)に、現在の判定期間に対応する満期日・選べる範囲・残り日数のヒントを表示する。
+// 入力中の欄は上書きしない(commitのあとだけforce)。messageは調整したときの説明。
+function syncWindowInputs(t, message = "", force = false) {
+  const asOf = asOfDateOf(t);
+  const exp = shiftTradingDays(asOf, -t.windowDays);
+  const min = shiftTradingDays(asOf, -MIN_WINDOW_DAYS);
+  const max = shiftTradingDays(asOf, -MAX_WINDOW_DAYS);
+  const cal = calendarDaysBetween(asOf, exp);
+  const base = `残り${t.windowDays}営業日（${cal}暦日）・${EXPIRY_KIND_LABEL[expiryKind(exp)]}${cal > GUIDE_MAX_CALENDAR_DAYS ? "・講座の想定の約60暦日を超えています" : ""}`;
+  const hint = message ? `${message}　${base}` : base;
+  for (const [inp, h] of [[els.windowDateInput, els.windowHint], [els.orderWindowDateInput, els.orderWindowHint]]) {
+    inp.min = min;
+    inp.max = max;
+    if (force || document.activeElement !== inp) inp.value = exp;
+    h.textContent = hint;
+  }
+}
+
+// 満期日が入力されたとき: 営業日数に直して判定期間にし、全体を再計算する。休場日は直前の営業日に直し、
+// 選べる範囲(5〜150営業日)を超えていれば範囲内に直して、その旨を表示する。
+function commitWindowDate(value) {
+  const t = activeTab();
+  if (!t || !value) return;
+  const asOf = asOfDateOf(t);
+  let date = value;
+  let message = "";
+  if (!isTradingDay(date)) {
+    const prev = previousTradingDay(date);
+    message = `${date}は休場日のため、直前の営業日${prev}にしました。`;
+    date = prev;
+  }
+  let days = tradingDaysBetween(asOf, date);
+  if (days < MIN_WINDOW_DAYS) { days = MIN_WINDOW_DAYS; message = `選べる最短（${MIN_WINDOW_DAYS}営業日後）に調整しました。`; }
+  else if (days > MAX_WINDOW_DAYS) { days = MAX_WINDOW_DAYS; message = `選べる最長（${MAX_WINDOW_DAYS}営業日後）に調整しました。`; }
+  t.windowDays = days;
+  if (t.closesFull) renderAll(t);
+  syncWindowInputs(t, message, true);
+  renderTabBar();
+  persistState();
 }
 
 function initPeriodOptions() {
@@ -554,7 +627,6 @@ function onFormChange() {
   if (!t) return;
   t.typeKey = els.typeSelect.value;
   t.ratio = Number(els.ratioInput.value) || OPTION_TYPES[t.typeKey].ratio;
-  t.windowDays = Number(els.windowSelect.value) || DEFAULT_WINDOW;
   t.periodDays = Number(els.periodSelect.value) || DEFAULT_PERIOD_DAYS;
   t.conditionMode = els.conditionModeSelect.value;
   t.momentumLookback = Number(els.momentumLookbackSelect.value) || DEFAULT_MOMENTUM_LOOKBACK;
@@ -609,6 +681,7 @@ function asOfSuffixOf(t) {
 }
 
 function renderAll(t) {
+  syncWindowInputs(t);
   renderVolatilityCard(t);
   renderTodayCard(t);
   renderMainAnalysis(t);
@@ -975,17 +1048,106 @@ function renderOrderCard(t) {
   const parts = [
     isSp ? labels.spread : labels.naked,
     strikeText,
-    `満期まで${t.windowDays}営業日`,
+    `満期まで${t.windowDays}営業日（${shiftTradingDays(dates[dates.length - 1], -t.windowDays)}）`,
     premium === null ? "プレミアム価格 未入力" : `プレミアム価格${fmt(premium)}ドル`,
   ];
-  if (group === "sell" && t.rrProfitRatio !== null) {
-    const wari = t.rrProfitRatio / 10;
+  if (group === "sell") {
+    const wari = profitPercentOf(t) / 10;
     parts.push(`${Number.isInteger(wari) ? wari : wari.toFixed(1)}割利確`);
   }
   els.orderLine.textContent = parts.join("　");
 
+  if (group === "sell") renderOrderExit(t, dates[dates.length - 1]);
   renderBreakEvenPrice(t, closes, todayStrike);
   els.orderCard.hidden = false;
+}
+
+// 利確割合(%)。未入力のときは講座の基準の80%(8割利確=2割を支払って決済)。
+const DEFAULT_PROFIT_PERCENT = 80;
+function profitPercentOf(t) {
+  return t.rrProfitRatio === null ? DEFAULT_PROFIT_PERCENT : t.rrProfitRatio;
+}
+
+// ロスカット逆指値の倍率(受取プレミアムに対して)。講座の基準は1.9〜2倍。
+const STOP_MULTIPLE_MIN = 1.9;
+const STOP_MULTIPLE_MAX = 2;
+const SHARES_PER_CONTRACT_ORDER = 100;
+
+// 売り系の「決済の目安」と「満期日の候補」を描画する(講座のルールをそのまま数字にしたもの)。
+//  - 利確: 受取プレミアムの利確割合(基準8割)を残す=買い戻しの指値は 受取×(1−利確割合)
+//  - ロスカット: 受取プレミアムの1.9〜2倍の逆指値(発動時の損失は受取プレミアム分に近い額)
+//  - 満期日の候補: 基準日から30〜45暦日後の金曜。2週間(10営業日)前に利確か継続かを判断、3営業日前までに決済
+// プレミアムは1株あたりの額。受取プレミアム未入力のときは、金額の項目を「―」にする。
+function renderOrderExit(t, asOfDate) {
+  const premium = t.rrPremium;
+  const ratio = profitPercentOf(t);
+  const hasPremium = premium !== null && premium >= 0;
+  const money = (v) => v.toFixed(2);
+  const perContract = (v) => (v * SHARES_PER_CONTRACT_ORDER).toLocaleString("ja-JP", { maximumFractionDigits: 2 });
+  const noInput = "受取プレミアム額を入力すると表示";
+  const ratioNote = t.rrProfitRatio === null ? `（利確割合が未入力のため、講座の基準${DEFAULT_PROFIT_PERCENT}%で計算）` : "";
+
+  const items = [
+    {
+      label: "利確の支払い価格(買い戻しの指値)",
+      value: hasPremium ? money(premium * (1 - ratio / 100)) : "―",
+      sub: hasPremium ? `受取${money(premium)}×(1−${ratio}%)${ratioNote}` : noInput,
+      note: "反対売買（買い戻し）で決済するときの指値価格です。受取プレミアム×(1−利確割合)。\n注文が約定したらすぐに、この価格で利確注文を出しておきます（講座の基準は、受取りの2割を支払う＝8割を手元に残す）。\nスプレッドの場合は、2つの脚の差し引き後の価格で出します。\n1株あたりの価格で、手数料は含みません。",
+    },
+    {
+      label: "利確したときの利益額",
+      value: hasPremium ? money(premium * ratio / 100) : "―",
+      sub: hasPremium ? `100株(1契約)で${perContract(premium * ratio / 100)}ドル` : noInput,
+      note: "利確の支払い価格で決済できた場合に、手元に残る利益額（1株あたり）です。受取プレミアム×利確割合。手数料は含みません。",
+    },
+    {
+      label: "ロスカットの逆指値価格",
+      value: hasPremium ? `${money(premium * STOP_MULTIPLE_MIN)}〜${money(premium * STOP_MULTIPLE_MAX)}` : "―",
+      sub: hasPremium ? `受取${money(premium)}の${STOP_MULTIPLE_MIN}〜${STOP_MULTIPLE_MAX}倍` : noInput,
+      note: "ロスカット（損切り）を逆指値の注文で出すときの価格の目安です。講座の基準は、受取プレミアムの1.9〜2倍です。\n現在値がこの価格を超えたときに、買い戻しの注文が出ます。\n逆指値は、発動した後に指定価格より不利な価格で約定することがあります。\nロスカットを入れるかどうか、倍率を何倍にするかは、ご自身のリスク許容度で決めてください。",
+    },
+    {
+      label: "ロスカット時の損失額",
+      value: hasPremium ? `${money(premium * (STOP_MULTIPLE_MIN - 1))}〜${money(premium * (STOP_MULTIPLE_MAX - 1))}` : "―",
+      sub: hasPremium ? `100株(1契約)で${perContract(premium * (STOP_MULTIPLE_MIN - 1))}〜${perContract(premium * (STOP_MULTIPLE_MAX - 1))}ドル` : noInput,
+      note: "逆指値の価格で決済できた場合の損失額（1株あたり）です。逆指値の価格−受取プレミアム。\n2倍で決済すると、受け取ったプレミアムと同じ額の損失になります。\n実際の約定価格がずれた場合は、この額と異なります。手数料は含みません。",
+    },
+  ];
+  els.orderExitSummary.innerHTML = items.map((it) =>
+    `<div class="stat" data-target="orderExplain" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span>`
+    + (it.sub ? `<span class="stat-sub">${it.sub}</span>` : "") + `</div>`
+  ).join("");
+  els.orderExitNote.textContent = "講座の基準: 利確は受取りの8割（2割を支払って買い戻し）が基本です。サクソバンクでは利確注文とロスカット注文を同時に出せないため、利確注文を基本にして、ロスカットは株価や証拠金使用率を見ながらご自身で判断します。";
+
+  // 満期日と、決済の目安日(基準日 = 最新の終値の日。満期日は入力欄の満期日)
+  const days = t.windowDays;
+  const expiry = shiftTradingDays(asOfDate, -days);
+  const cal = calendarDaysBetween(asOfDate, expiry);
+  const fmtDate = (d) => `${d}（${WEEKDAY_JA[weekday(d)]}）`;
+  const reviewDate = days > 10 ? shiftTradingDays(expiry, 10) : null;
+  const closeDate = shiftTradingDays(expiry, 3);
+  const dateItems = [
+    {
+      label: "満期日", value: fmtDate(expiry), sub: `残り${days}営業日（${cal}暦日）・${EXPIRY_KIND_LABEL[expiryKind(expiry)]}`,
+      note: "上の「満期日（判定期間）」で入力した満期日です。基準日（最新の終値の日）から、この営業日数後になります。\n実際にその満期日があるかは、銘柄ごとに異なります。証券会社のオプションチェーンで確認してください。",
+    },
+    {
+      label: "2週間前の判断日", value: reviewDate === null ? "―" : fmtDate(reviewDate),
+      sub: reviewDate === null ? "満期まで10営業日以内のため、ありません" : "満期まで残り10営業日",
+      note: "満期まで残り10営業日（約2週間）になる日です。この時点で利益が出ていれば、利確するか、取引を継続するかを検討する目安日です。\n満期が近いほど、株価が急に動いたときに回復を待つ期間が短くなります。",
+    },
+    {
+      label: "3日前の決済日", value: fmtDate(closeDate), sub: "満期の3営業日前",
+      note: "満期の3営業日前です（金曜満期なら火曜日）。遅くともこの日までに、反対売買で決済します。",
+    },
+  ];
+  els.expirySummary.innerHTML = dateItems.map((it) =>
+    `<div class="stat" data-target="orderExplain" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span><span class="stat-sub">${it.sub}</span></div>`
+  ).join("");
+  els.expiryNote.textContent =
+    `${EXPIRY_KIND_NOTE[expiryKind(expiry)]}実際にあるかは、証券会社のオプションチェーンで確認してください。`
+    + (cal > GUIDE_MAX_CALENDAR_DAYS ? " 講座の満期の目安（約60暦日まで）を超えています。" : "")
+    + " 休場日は、毎年決まっている祝日のみ反映しています（臨時の休場は反映されません）。";
 }
 
 // SPボタン: 単体注文とスプレッド(SP)注文を切り替える。使わない側の入力欄は非表示になり、値は保持される。
@@ -1187,7 +1349,6 @@ function init() {
   setupCollapsibleCards();
   setupCellTip();
   initTypeOptions();
-  initWindowOptions();
   initPeriodOptions();
   initMomentumLookbackOptions();
   setupTickerHistoryDropdown(els.ticker, els.tickerHistoryDropdown);
@@ -1211,7 +1372,11 @@ function init() {
     onFormChange();
   });
   els.ratioInput.addEventListener("input", debounce(onFormChange, 250));
-  els.windowSelect.addEventListener("change", onFormChange);
+  // 満期日(判定期間)の入力。キーボード入力の途中経過で何度も再計算しないよう、入力が止まってから反映する
+  const debouncedCommit = debounce((v) => commitWindowDate(v), 600);
+  for (const inp of [els.windowDateInput, els.orderWindowDateInput]) {
+    inp.addEventListener("change", () => debouncedCommit(inp.value));
+  }
   els.periodSelect.addEventListener("change", onFormChange);
   els.conditionModeSelect.addEventListener("change", onFormChange);
   els.momentumLookbackSelect.addEventListener("change", onFormChange);
