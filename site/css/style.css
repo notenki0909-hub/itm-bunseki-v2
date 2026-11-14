@@ -368,3 +368,6 @@ button:disabled{opacity:.6;cursor:default}
 .hv-history .hv-scroll{overflow-x:auto}
 /* 説明欄(flexの子)が、中の表の幅に引きずられて広がらないようにする(表は.hv-scroll内で横スクロール) */
 .summary .explain-box,.hv-history{min-width:0;max-width:100%}
+
+/* IVとHVの比較: 説明文が長いので、折り返す */
+#ivHvSummary .stat .stat-sub{white-space:normal;max-width:300px}

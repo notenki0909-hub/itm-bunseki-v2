@@ -109,3 +109,18 @@ export function stressTest({ kind, price, strikeSell, strikeBuy, days, premium, 
     meta: { source, ivSell: sellIv, ivBuy: buyIv, v0, received, premiumInput: premium, width, maxLoss: width === null ? null : width - received },
   };
 }
+
+/**
+ * IV÷HVの倍率から、市場の見込み(IV)が、過去の値動き(HV)より高めか低めかを判定する(売り手の目線)。
+ * IVが高いほど、オプションの価格(プレミアム)も高くなる(売り手には有利な側)。
+ * 目安の基準(このツールの簡易的な基準): 1.2倍以上=高め、0.8倍以下=低め、その間=同程度。
+ * 一般にIVはHVより少し高めになりやすいため、「同程度」の幅を持たせている。
+ * @returns {{level:'rich'|'fair'|'cheap', word:string, phrase:string}}
+ */
+export const IV_HV_RICH = 1.2;
+export const IV_HV_CHEAP = 0.8;
+export function judgeIvHv(ratio) {
+  if (ratio >= IV_HV_RICH) return { level: "rich", word: "高め", phrase: "過去の値動き(HV)より、市場の見込み(IV)が高め（プレミアム価格も高めになります）" };
+  if (ratio <= IV_HV_CHEAP) return { level: "cheap", word: "低め", phrase: "過去の値動き(HV)より、市場の見込み(IV)が低め（プレミアム価格も低めになります）" };
+  return { level: "fair", word: "同程度", phrase: "過去の値動き(HV)と、市場の見込み(IV)は同程度（プレミアム価格も標準的です）" };
+}

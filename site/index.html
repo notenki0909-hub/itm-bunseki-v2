@@ -256,7 +256,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
       <div class="field" data-only="sell">
         <label for="rrIvSellInput" data-target="orderExplain"
           data-note="売り建てる側の権利行使価格のIV（年率%）です。証券会社のオプションチェーンで、その権利行使価格の行に出ているIVを入力してください。
-下の「株価が動いたときの現在値の目安（ストレステスト）」の計算に使います。
+下の「IVとHVの比較」と、「株価が動いたときの現在値の目安（ストレステスト）」の計算に使います。
 空欄の場合は、入力した受取プレミアム額に合うIVをツールが逆算して使います（売り脚と買い脚は同じIVとみなします）。">IV（売り建て側）(%)</label>
         <input id="rrIvSellInput" type="number" step="0.1" min="0" placeholder="例: 38（空欄=自動）">
       </div>
@@ -296,7 +296,11 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
     <div class="order-line" id="orderLine"></div>
 
     <div data-only="sell">
-      <h3 style="margin:14px 0 8px;font-size:14px">決済の目安（利確・ロスカット）</h3>
+      <h3 style="margin:14px 0 8px;font-size:14px" id="ivHvTitle">IVとHVの比較（市場の見込みは、過去の値動きより高めか低めか）</h3>
+      <div class="summary" id="ivHvSummary"></div>
+      <p class="sub" id="ivHvNote" style="margin:8px 0 0"></p>
+
+      <h3 style="margin:18px 0 8px;font-size:14px">決済の目安（利確・ロスカット）</h3>
       <div class="summary" id="orderExitSummary"></div>
       <p class="sub" id="orderExitNote" style="margin:8px 0 0"></p>
 

@@ -13,7 +13,7 @@ import { renderDayProbChart, DAY_PROB_BANDS, renderConeChart, renderHvHistoryCha
 import { renderEntryHeatmap, ENTRY_HEATMAP_BANDS, renderDepthHeatmap, DEPTH_HEATMAP_BANDS, renderOtmHeatmap, OTM_HEATMAP_BANDS, OTM_RATE_BANDS } from "./heatmap.js";
 import { initThemeBar } from "./theme.js";
 import { isPriceDataStale } from "./marketTime.js";
-import { stressTest } from "./optionModel.js";
+import { stressTest, solveFlatIv, judgeIvHv, TRADING_DAYS_PER_YEAR } from "./optionModel.js";
 import { WEEKDAY_JA, weekday, parseYmd, isTradingDay, previousTradingDay, shiftTradingDays, tradingDaysBetween, expiryKind, EXPIRY_KIND_LABEL, EXPIRY_KIND_NOTE } from "./usMarket.js";
 import { addTickerToHistory, setupTickerHistoryDropdown, loadTickerHistory, mergeTickerHistory } from "./tickerHistory.js";
 
@@ -333,6 +333,8 @@ const els = {
   rrPremiumInput: document.getElementById("rrPremiumInput"),
   rrProfitRatioInput: document.getElementById("rrProfitRatioInput"),
   rrSpreadWidthInput: document.getElementById("rrSpreadWidthInput"),
+  ivHvSummary: document.getElementById("ivHvSummary"),
+  ivHvNote: document.getElementById("ivHvNote"),
   rrIvSellInput: document.getElementById("rrIvSellInput"),
   rrIvBuyInput: document.getElementById("rrIvBuyInput"),
   stressIntro: document.getElementById("stressIntro"),
@@ -1310,6 +1312,7 @@ function renderOrderCard(t) {
   els.orderLine.textContent = parts.join("　");
 
   if (group === "sell") {
+    renderIvHv(t, latest, type.itmWhen);
     renderOrderExit(t, dates[dates.length - 1]);
     renderStressTest(t, latest, type.itmWhen);
   }
@@ -1403,6 +1406,94 @@ function renderOrderExit(t, asOfDate) {
     `${EXPIRY_KIND_NOTE[expiryKind(expiry)]}実際にあるかは、証券会社のオプションチェーンで確認してください。`
     + (cal > GUIDE_MAX_CALENDAR_DAYS ? " 講座の満期の目安（約60暦日まで）を超えています。" : "")
     + " 休場日は、毎年決まっている祝日のみ反映しています（臨時の休場は反映されません）。";
+}
+
+// 「IVとHVの比較」を描画する(売り系のみ)。
+// IV(オプション価格に織り込まれた将来の変動の大きさ)が、HV(過去の実際の値動きの大きさ。満期と同じ長さ)の何倍かを見て、
+// 市場の見込み(IV)が、過去の値動き(HV)より高め(プレミアム価格も高め。売りに有利)か低め(プレミアム価格も低め。売りに不利)かの目安にする。
+// あわせて、HVの代わりにIVを使った理論上の確率(満期時にITM)を、HV換算の確率と並べて見せる(IVが高いほど、ITMになりやすい見積もりになる)。
+// IVは、売り建て側のIVの入力があればそれを使い、なければ受取プレミアム額から逆算した全体のIVを使う。
+function renderIvHv(t, price, itmWhen) {
+  const kind = itmWhen === "below" ? "put" : "call";
+  const isSp = t.rrVariant === "spread";
+  const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
+  const clear = (msg) => {
+    els.ivHvSummary.innerHTML = "";
+    els.ivHvNote.textContent = msg;
+  };
+  const premium = t.rrPremium !== null && t.rrPremium > 0 ? t.rrPremium : null;
+  const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
+  const days = t.windowDays;
+  const { closes } = viewDataOf(t);
+  const hv = closes ? computeHv(closes, days) : null;
+  if (hv === null) { clear("HVを計算するためのデータが足りないため、表示できません。"); return; }
+
+  let iv;
+  let source;
+  const strikeSell = price * t.ratio;
+  if (ivIn !== null) {
+    iv = ivIn;
+    source = "input";
+  } else {
+    if (premium === null) { clear("IV（売り建て側）か、受取プレミアム額を入力すると表示します。"); return; }
+    if (isSp && !(t.rrSpreadWidth > 0)) { clear("受取プレミアム額からIVを逆算するには、権利行使価格の差額を入力してください（IVを直接入力する場合は不要です）。"); return; }
+    const strikeBuy = isSp ? (kind === "put" ? strikeSell - t.rrSpreadWidth : strikeSell + t.rrSpreadWidth) : null;
+    if (strikeBuy !== null && !(strikeBuy > 0)) { clear("権利行使価格の差額が大きすぎます（買い建て側の権利行使価格が0以下になります）。"); return; }
+    iv = solveFlatIv({ kind, S: price, strikeSell, strikeBuy, T: days / TRADING_DAYS_PER_YEAR, premium });
+    if (iv === null) { clear("受取プレミアム額に合うIVが見つかりませんでした。受取プレミアム額（スプレッドは差し引き後の正味の額）や権利行使価格の差額を、確認してください。"); return; }
+    source = "calibrated";
+  }
+
+  const ratio = iv / hv;
+  const judge = judgeIvHv(ratio);
+  const depthDollar = t.rrDepth ?? 0;
+  const thIv = hvTheory({ price, strike: strikeSell, depthDollar, itmWhen, days, hv: iv });
+  const thHv = hvTheory({ price, strike: strikeSell, depthDollar, itmWhen, days, hv });
+  const pos = hvPosition(closes, days);
+
+  const ivLabel = source === "input" ? "IV（売り建て側・入力値）" : "IV（受取プレミアム額から逆算）";
+  const ivSub = source === "input"
+    ? "証券会社のオプションチェーンの値"
+    : `受取プレミアム額${premium.toFixed(2)}に合うIV（${isSp ? "売り脚・買い脚を同じIVとみなした目安" : "売り脚のIV"}）`;
+  const meaningShort = judge.level === "rich" ? "売りに有利な側" : judge.level === "cheap" ? "売りに不利な側" : "標準的な水準";
+  const items = [
+    {
+      label: ivLabel, value: pct(iv), sub: ivSub,
+      note: `IV（インプライド・ボラティリティ）は、オプションの価格に織り込まれた、これからの値動きの見込みの大きさ（年率）です。HVが「過去に実際に動いた大きさ」なのに対し、IVは「市場がこれから動くと見込んでいる大きさ」で、実際の値動きではありません。IVが高いほど、オプションの価格（プレミアム）も高くなります。\n${source === "input" ? "売り建て側の権利行使価格のIVとして入力した値を使っています。" : "IVが未入力のため、入力した受取プレミアム額に合うIVを、Black-Scholesの式（金利0・配当なし）で逆算しています。スプレッドの場合は、売り脚と買い脚が同じIVだと仮定した目安です（実際は、遠い権利行使価格ほどIVが高いことが多いため、売り脚のIVとはずれます）。"}`,
+    },
+    {
+      label: `HV（直近${days}営業日）`, value: pct(hv),
+      sub: pos ? `満期と同じ長さ・ふだん（中央値）${pct(pos.median, 0)}` : "満期と同じ長さ",
+      note: `満期（${days}営業日）と同じ長さの期間で測った、過去の実際の値動きの大きさ（HV、年率）です。上のHVのエリアと同じ値です。`,
+    },
+    {
+      label: "IV÷HV（倍率）", value: `${ratio.toFixed(2)}倍`,
+      sub: `${judge.phrase}／${meaningShort}`,
+      note: `IVがHVの何倍かを見て、市場のこれからの見込み（IV）が、過去の実際の値動き（HV）より高めか低めかを判断する目安です。IVが高いほど、オプションの価格（プレミアム）も高くなります。\n1.2倍以上＝高め（プレミアム価格も高め。売り手に有利）／0.8倍以下＝低め（プレミアム価格も低め。売り手に不利）／その間＝同程度。この基準は、このツールの簡易的なものです。\n一般に、IVはHVより少し高めになりやすいため、「同程度」の幅を広めに取っています。`,
+    },
+  ];
+  if (thIv && thHv) {
+    items.push({
+      label: "IV換算の理論上の確率（満期時にITM）", value: pct(thIv.probItmAtExpiry),
+      sub: `HV換算 ${pct(thHv.probItmAtExpiry)}／期間中に一度でも届く目安 約${pct(thIv.probTouch, 0)}`,
+      note: `上のHV換算の理論上の確率と同じ計算で、HVの代わりにIVを使ったものです（1σ＝IV×√(営業日数÷252)、株価の平均的な上昇・下落はないと仮定した単純な近似）。\nIVはHVより高いことが多いので、IV換算のほうが、ITMになりやすい（売りには厳しい）見積もりになります。HV換算との差は、市場が織り込んでいる「余分な変動」の大きさです。\n将来を保証するものではありません。`,
+    });
+  }
+  els.ivHvSummary.innerHTML = items.map((it) =>
+    `<div class="stat" data-target="orderExplain" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span><span class="stat-sub">${it.sub}</span></div>`
+  ).join("");
+
+  const meaning = judge.level === "rich"
+    ? "売り手にとっては、高い価格で売れるので有利な側です。ただし、市場が今後の大きな動き（決算発表など）を見込んでいるためで、実際に大きく動けば不利になります。"
+    : judge.level === "cheap"
+      ? "売り手にとっては、受け取る額が少ない割に、動いたときのリスクが大きい側なので、不利です。"
+      : "売り手にとっては、標準的な条件です。";
+  const probText = thIv && thHv
+    ? `IV換算で見ると、満期時にITMになる理論上の確率は${pct(thIv.probItmAtExpiry)}（HV換算は${pct(thHv.probItmAtExpiry)}）です。`
+    : "";
+  els.ivHvNote.textContent = `IV${pct(iv)}は、満期と同じ長さのHV${pct(hv)}の${ratio.toFixed(2)}倍です。${judge.phrase}。${meaning}${probText}`
+    + `※IVは、これからの値動きの見込みです（実際の値動きではありません）。HVは、過去に実際に動いた大きさです。決算発表などの予定された出来事をまたぐ場合は、IVが高いのは自然で、売り手に得とは限りません。判定の基準（1.2倍以上＝高め、0.8倍以下＝低め）は、このツールの簡易的なものです。`;
+  setupStatExplain();
 }
 
 // 「株価が動いたときの現在値の目安(ストレステスト)」を描画する(売り系のみ)。
