@@ -319,3 +319,52 @@ button:disabled{opacity:.6;cursor:default}
 .volatility-table tr.exp-match td{background:color-mix(in srgb,var(--accent) 14%,transparent);font-weight:700}
 #expiryTable td,#expiryTable th{text-align:right}
 #expiryTable td:first-child,#expiryTable th:first-child{text-align:left}
+
+/* ストレステストの表 */
+.stress-table td,.stress-table th{text-align:right;vertical-align:top}
+.stress-table td:first-child,.stress-table th:first-child{text-align:left}
+.stress-table .stress-sub{font-weight:400;color:var(--muted);font-size:11px}
+.stress-table .stress-pnl{font-size:11.5px;color:var(--muted)}
+.stress-table .stress-pnl.neg{color:var(--gradRed)}
+.stress-table td.stress-stop{background:color-mix(in srgb,var(--gradOrange) 22%,transparent)}
+.stress-table td.stress-max{background:color-mix(in srgb,var(--gradRed) 28%,transparent)}
+
+/* HVカード: 過去1年のHVの範囲を表す棒(左端=最小、右端=最大。黒=いま、灰色の縦線=中央値) */
+.hv-bar{position:relative;display:block;height:8px;margin:8px 0 4px;border-radius:4px;
+  background:linear-gradient(90deg,var(--gradLightBlue),var(--gradYellow),var(--gradOrange),var(--gradRed))}
+.hv-bar-now{position:absolute;top:-4px;width:4px;height:16px;margin-left:-2px;border-radius:2px;background:var(--fg);box-shadow:0 0 0 1px var(--card)}
+.hv-bar-med{position:absolute;top:-2px;width:2px;height:12px;margin-left:-1px;background:var(--muted);opacity:.9}
+
+/* 一番上のパネルの、最新の株価(終値)表示 */
+.latest-price{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.latest-price[hidden]{display:none}
+.latest-price .lp-symbol{font-weight:700;font-size:15px}
+.latest-price .lp-label{font-size:12px;color:var(--muted)}
+.latest-price .lp-price{font-size:22px}
+.latest-price .lp-unit{font-size:12px;color:var(--muted);margin-left:-4px}
+.latest-price .lp-date{font-size:12px;color:var(--muted)}
+.latest-price .lp-change{font-size:13px;font-weight:700;margin-left:6px}
+.latest-price .lp-change.up{color:var(--gA)}
+.latest-price .lp-change.down{color:var(--gC)}
+
+/* 満期までの値動きの目安(コーン図) */
+.hv-cone{max-width:680px}
+.cone-chart{width:100%;height:auto;display:block}
+
+#hvMatchSummary .stat .stat-sub{white-space:normal;max-width:300px}
+#hvMatchSummary .hv-line{display:block;margin-top:3px;font-size:10.5px;color:var(--muted)}
+
+/* HVカードをクリックしたときの、過去1年のHVの推移グラフ */
+.hv-history{white-space:normal;margin-top:10px;max-width:680px}
+.hv-history-title{font-weight:700;margin-bottom:4px}
+.hv-history .hv-history-chart{width:100%;height:auto;display:block}
+.hv-history-note{margin-top:4px;font-size:11.5px;color:var(--muted);line-height:1.6}
+
+/* HVカード: 同じHVで満期の長さだけを変えた比較の表 */
+.hv-history .hv-compare{width:100%;margin-top:4px;font-size:12px}
+.hv-history .hv-compare th,.hv-history .hv-compare td{padding:5px 8px;text-align:right;white-space:nowrap}
+.hv-history .hv-compare th:first-child,.hv-history .hv-compare td:first-child{text-align:left}
+.hv-history .hv-compare tr.hv-cmp-now td{font-weight:700;background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.hv-history .hv-scroll{overflow-x:auto}
+/* 説明欄(flexの子)が、中の表の幅に引きずられて広がらないようにする(表は.hv-scroll内で横スクロール) */
+.summary .explain-box,.hv-history{min-width:0;max-width:100%}

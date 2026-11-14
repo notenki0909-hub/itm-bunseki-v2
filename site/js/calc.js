@@ -511,3 +511,108 @@ export function computeDetailMatrix(closes, dates, params) {
   }
   return rows;
 }
+
+// ---- HV(歴史的ボラティリティ) ----
+// HV = 日次の対数騰落率(終値の比の自然対数)の標準偏差(標本、n−1)を、年率に換算(×√252)した値。
+// 「過去の値動きの大きさ」を1つの数字にしたもの。オプション価格に織り込まれる将来の変動の大きさ(IV)とは別物で、
+// このツールでは終値だけから計算する(IVは取得できない)。
+export const HV_TRADING_DAYS_PER_YEAR = 252;
+const HV_RANK_LOOKBACK = 252; // HVの「1年の中での位置」を見る期間(営業日)
+
+// closesの末尾から数えて、直近days個の日次騰落率からHV(年率、割合。0.25=25%)を求める。
+// データが足りない(騰落率がdays個とれない)、またはdaysが2未満ならnull。
+export function computeHv(closes, days) {
+  if (!(days >= 2) || closes.length < days + 1) return null;
+  return hvAt(closes, closes.length - 1, days);
+}
+
+function hvAt(closes, endIdx, days) {
+  let sum = 0;
+  let sumSq = 0;
+  for (let i = endIdx - days + 1; i <= endIdx; i++) {
+    const r = Math.log(closes[i] / closes[i - 1]);
+    sum += r;
+    sumSq += r * r;
+  }
+  const mean = sum / days;
+  const variance = Math.max(0, (sumSq - days * mean * mean) / (days - 1));
+  return Math.sqrt(variance) * Math.sqrt(HV_TRADING_DAYS_PER_YEAR);
+}
+
+/**
+ * 各日を終点とするHV(days日)の推移のうち、直近lookback個を返す(古い順)。
+ * 現在のHVが、過去1年の中で高い方か低い方かを見るために使う。
+ */
+export function computeHvSeries(closes, days, lookback = HV_RANK_LOOKBACK) {
+  const out = [];
+  const first = Math.max(days, closes.length - lookback);
+  for (let i = first; i < closes.length; i++) out.push(hvAt(closes, i, days));
+  return out;
+}
+
+/**
+ * 現在のHVの、過去1年の中での位置。
+ *  percentile: 過去1年のうち、現在以下だった日の割合(0〜1。0.8なら「1年の80%の日より高い」)
+ *  median: 過去1年のHVの中央値(「ふだん」の水準)
+ *  higherCount / lowerCount: 過去1年のうち、いまより高かった日数・低かった日数
+ *  min / max: 過去1年のHVの最小・最大
+ *  rank: (現在−最小)÷(最大−最小)(0〜1。最大と最小の幅の中での位置)
+ */
+export function hvPosition(closes, days, lookback = HV_RANK_LOOKBACK) {
+  if (closes.length < days + 2) return null;
+  const series = computeHvSeries(closes, days, lookback);
+  if (series.length < 2) return null;
+  const current = series[series.length - 1];
+  const min = Math.min(...series);
+  const max = Math.max(...series);
+  const atMostCount = series.filter((v) => v <= current).length;
+  const percentile = atMostCount / series.length;
+  const sortedSeries = [...series].sort((a, b) => a - b);
+  const mid = Math.floor(sortedSeries.length / 2);
+  const median = sortedSeries.length % 2 ? sortedSeries[mid] : (sortedSeries[mid - 1] + sortedSeries[mid]) / 2;
+  return {
+    current, min, max, median, percentile, rank: max > min ? (current - min) / (max - min) : 0, count: series.length,
+    higherCount: series.length - atMostCount, // 過去1年のうち、いまより高かった日数
+    lowerCount: series.filter((v) => v < current).length, // 過去1年のうち、いまより低かった日数
+  };
+}
+
+// 標準正規分布の累積分布関数(Abramowitz-Stegunの近似。誤差は約1.5e-7)
+export function normalCdf(x) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989422804014327 * Math.exp(-x * x / 2);
+  const p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  return x >= 0 ? 1 - p : p;
+}
+
+/**
+ * HVから見た、権利行使価格の位置と、理論上の確率(目安)を求める。
+ * 株価が対数正規分布に従い、平均的な上昇・下落(ドリフト)はないと仮定した、単純な近似。
+ *  sigmaPct:   満期(days営業日)までの1σの値動き(割合)=HV×√(days/252)
+ *  sigmaAmount: 同じく、現在値に対する金額
+ *  zScore:     権利行使価格が現在値から何σ離れているか(ITMと反対側(OTM側)を正とする)
+ *  probItmAtExpiry: 満期時にITMになる確率
+ *  probTouch:  期間中に一度でもITMの水準に届く確率の目安(満期時の確率の2倍。上限100%。毎日の終値だけを見る実績よりやや多めに出る)
+ * ITM側の価格は、プット系は権利行使価格−深さ、コール系は権利行使価格＋深さ(深さはドル)で見る。
+ *
+ * @param {{price:number, strike:number, depthDollar:number, itmWhen:'below'|'above', days:number, hv:number}} p
+ */
+export function hvTheory({ price, strike, depthDollar, itmWhen, days, hv }) {
+  if (!(price > 0) || !(strike > 0) || !(hv > 0) || !(days > 0)) return null;
+  const sigmaPct = hv * Math.sqrt(days / HV_TRADING_DAYS_PER_YEAR);
+  const barrier = itmWhen === "below" ? strike - depthDollar : strike + depthDollar;
+  if (!(barrier > 0)) return null;
+  // OTM側を正とした距離(σ単位)。プット系は現在値より下に、コール系は上に、barrierがある
+  const dist = Math.log(barrier / price) / sigmaPct;
+  const zScore = itmWhen === "below" ? -dist : dist;
+  const probItmAtExpiry = normalCdf(-zScore);
+  return {
+    sigmaPct,
+    sigmaAmount: price * sigmaPct,
+    barrier,
+    distancePct: barrier / price - 1,
+    zScore,
+    probItmAtExpiry,
+    probTouch: Math.min(1, 2 * probItmAtExpiry),
+  };
+}

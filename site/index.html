@@ -45,6 +45,7 @@
       </div>
       <button id="analyzeBtn" type="button">分析する</button>
     </div>
+    <div id="latestPrice" class="latest-price" hidden></div>
     <div id="status"></div>
   </div>
 
@@ -63,6 +64,20 @@
       <tbody id="volatilityTableBody"></tbody>
     </table>
     </div>
+  </div>
+
+  <div id="hvCard" class="card" hidden>
+    <h2 class="card-title-toggle" style="margin:0 0 10px;font-size:16px" data-note="HV（歴史的ボラティリティ）は、過去の日々の値動き（終値の騰落率）のばらつきを、1年あたりの%に換算した値です。大きいほど、株価が大きく動いていたことを表します。
+このツールは終値だけから計算します。オプション価格に織り込まれた将来の変動の大きさ（IV）とは別のもので、IVはここでは取得できません。
+取得済みの全データ（最大800営業日）のうち、基準日（最新の終値の日。日付を指定したときはその日）までを使います。">HV（歴史的ボラティリティ）</h2>
+    <p class="sub" style="margin:0 0 10px">過去の値動きの大きさを、年率換算の%で表します。まず、<b>満期と同じ長さのHV</b>（下のグラフと「1σの値動き」の計算に使う値）を表示します。カードをクリックすると、過去1年のHVの推移グラフが出ます。</p>
+    <div class="chart-title" id="hvMatchTitle" style="margin-top:4px">満期と同じ長さのHV（年率）</div>
+    <div class="summary" id="hvMatchSummary"></div>
+    <div class="chart-title" id="hvTheoryTitle">満期までの値動きの目安と、権利行使価格の位置</div>
+    <div id="hvConeWrap" class="hv-cone"></div>
+    <p class="sub" id="hvConeLegend" style="margin:4px 0 10px"></p>
+    <div class="summary" id="hvTheorySummary"></div>
+    <p class="sub" id="hvTheoryNote" style="margin:8px 0 0"></p>
   </div>
 
   <div id="todayCard" class="card" hidden>
@@ -238,6 +253,22 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
 下の注文内容の1行表示（◯割利確）と、「決済の目安」の利確の支払い価格・利益額の計算に使います。">利確割合(%)</label>
         <input id="rrProfitRatioInput" type="number" step="1" min="0" max="100" placeholder="未入力=80%">
       </div>
+      <div class="field" data-only="sell">
+        <label for="rrIvSellInput" data-target="orderExplain"
+          data-note="売り建てる側の権利行使価格のIV（年率%）です。証券会社のオプションチェーンで、その権利行使価格の行に出ているIVを入力してください。
+下の「株価が動いたときの現在値の目安（ストレステスト）」の計算に使います。
+空欄の場合は、入力した受取プレミアム額に合うIVをツールが逆算して使います（売り脚と買い脚は同じIVとみなします）。">IV（売り建て側）(%)</label>
+        <input id="rrIvSellInput" type="number" step="0.1" min="0" placeholder="例: 38（空欄=自動）">
+      </div>
+      <div data-only="sell">
+        <div class="field" data-only="sp">
+          <label for="rrIvBuyInput" data-target="orderExplain"
+            data-note="買い建てる側（遠い方）の権利行使価格のIV（年率%）です。任意です。
+空欄の場合は、売り建て側と同じIVとして計算します（プットは遠い権利行使価格ほどIVが高くなる傾向があるため、入力すると精度が上がります）。
+売り建て側のIVが空欄のときは、使われません。">IV（買い建て側）(%)</label>
+          <input id="rrIvBuyInput" type="number" step="0.1" min="0" placeholder="任意（空欄=売り側と同じ）">
+        </div>
+      </div>
       <div class="field" id="orderMaxLossField" hidden>
         <label data-target="orderExplain"
           data-note="売り系スプレッド(ブルプット/ベアコール)の、満期まで持った場合の最大損失額です。
@@ -272,6 +303,16 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
       <h3 style="margin:18px 0 8px;font-size:14px">満期日と、決済の目安日</h3>
       <div class="summary" id="expirySummary"></div>
       <p class="sub" id="expiryNote" style="margin:8px 0 0"></p>
+
+      <h3 style="margin:18px 0 8px;font-size:14px" id="stressTitle">株価が動いたときの現在値の目安（ストレステスト）</h3>
+      <p class="sub" id="stressIntro" style="margin:0 0 8px"></p>
+      <div class="volatility-wrap">
+        <table class="volatility-table stress-table" id="stressTable">
+          <thead id="stressHead"></thead>
+          <tbody id="stressBody"></tbody>
+        </table>
+      </div>
+      <p class="sub" id="stressNote" style="margin:8px 0 0"></p>
     </div>
     <h3 style="margin:14px 0 8px;font-size:14px">損益分岐点（満期時の株価）</h3>
     <div class="summary" id="rrBreakEvenSummary"></div>

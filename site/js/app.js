@@ -7,11 +7,13 @@ import {
   RISK_VARIANT_LABELS,
   baseEntryIndices, computeDepthEntryResults, summarizeDepthResults,
   VOLATILITY_PERIODS, computeVolatilityStats, computeRecentVolatilityAmount,
+  computeHv, computeHvSeries, hvPosition, hvTheory,
 } from "./calc.js";
-import { renderDayProbChart, DAY_PROB_BANDS } from "./chart.js";
+import { renderDayProbChart, DAY_PROB_BANDS, renderConeChart, renderHvHistoryChart } from "./chart.js";
 import { renderEntryHeatmap, ENTRY_HEATMAP_BANDS, renderDepthHeatmap, DEPTH_HEATMAP_BANDS, renderOtmHeatmap, OTM_HEATMAP_BANDS, OTM_RATE_BANDS } from "./heatmap.js";
 import { initThemeBar } from "./theme.js";
 import { isPriceDataStale } from "./marketTime.js";
+import { stressTest } from "./optionModel.js";
 import { WEEKDAY_JA, weekday, parseYmd, isTradingDay, previousTradingDay, shiftTradingDays, tradingDaysBetween, expiryKind, EXPIRY_KIND_LABEL, EXPIRY_KIND_NOTE } from "./usMarket.js";
 import { addTickerToHistory, setupTickerHistoryDropdown, loadTickerHistory, mergeTickerHistory } from "./tickerHistory.js";
 
@@ -52,6 +54,8 @@ function tabRecipe(t) {
     rrPayPremium: t.rrPayPremium,
     rrProfitRatio: t.rrProfitRatio,
     rrSpreadWidth: t.rrSpreadWidth,
+    rrIvSell: t.rrIvSell,
+    rrIvBuy: t.rrIvBuy,
   };
 }
 
@@ -73,6 +77,8 @@ function applyRecipe(t, rec) {
     rrPayPremium: rec.rrPayPremium ?? t.rrPayPremium,
     rrProfitRatio: rec.rrProfitRatio ?? t.rrProfitRatio,
     rrSpreadWidth: rec.rrSpreadWidth ?? t.rrSpreadWidth,
+    rrIvSell: rec.rrIvSell ?? t.rrIvSell,
+    rrIvBuy: rec.rrIvBuy ?? t.rrIvBuy,
   });
   // 古い保存状態・共有リンクの引き継ぎ。
   //  - 買い系の支払いプレミアム額は、以前はrrLossBasis(さらに前はrrPremium)に保存していた。
@@ -255,7 +261,16 @@ const els = {
   orderExitSummary: document.getElementById("orderExitSummary"),
   orderExitNote: document.getElementById("orderExitNote"),
   expirySummary: document.getElementById("expirySummary"),
+  hvCard: document.getElementById("hvCard"),
+  hvMatchTitle: document.getElementById("hvMatchTitle"),
+  hvMatchSummary: document.getElementById("hvMatchSummary"),
+  hvTheoryTitle: document.getElementById("hvTheoryTitle"),
+  hvTheorySummary: document.getElementById("hvTheorySummary"),
+  hvConeWrap: document.getElementById("hvConeWrap"),
+  hvConeLegend: document.getElementById("hvConeLegend"),
+  hvTheoryNote: document.getElementById("hvTheoryNote"),
   expiryNote: document.getElementById("expiryNote"),
+  latestPrice: document.getElementById("latestPrice"),
   todayTitle: document.getElementById("todayTitle"),
   statusDateInput: document.getElementById("statusDateInput"),
   statusDateReset: document.getElementById("statusDateReset"),
@@ -318,6 +333,12 @@ const els = {
   rrPremiumInput: document.getElementById("rrPremiumInput"),
   rrProfitRatioInput: document.getElementById("rrProfitRatioInput"),
   rrSpreadWidthInput: document.getElementById("rrSpreadWidthInput"),
+  rrIvSellInput: document.getElementById("rrIvSellInput"),
+  rrIvBuyInput: document.getElementById("rrIvBuyInput"),
+  stressIntro: document.getElementById("stressIntro"),
+  stressHead: document.getElementById("stressHead"),
+  stressBody: document.getElementById("stressBody"),
+  stressNote: document.getElementById("stressNote"),
 };
 
 function activeTab() {
@@ -348,6 +369,8 @@ function newTabState() {
     rrPayPremium: null,
     rrProfitRatio: null,
     rrSpreadWidth: null,
+    rrIvSell: null,
+    rrIvBuy: null,
   };
 }
 
@@ -396,6 +419,8 @@ function switchTab(id) {
   els.rrPayPremiumInput.value = t.rrPayPremium ?? "";
   els.rrProfitRatioInput.value = t.rrProfitRatio ?? "";
   els.rrSpreadWidthInput.value = t.rrSpreadWidth ?? "";
+  els.rrIvSellInput.value = t.rrIvSell ?? "";
+  els.rrIvBuyInput.value = t.rrIvBuy ?? "";
   els.statusDateInput.value = t.statusDate ?? "";
   updateRiskRewardInputUI(t.typeKey, t.rrVariant);
   syncMirrors();
@@ -405,6 +430,8 @@ function switchTab(id) {
     renderAll(t);
   } else {
     els.volatilityCard.hidden = true;
+    els.hvCard.hidden = true;
+    els.latestPrice.hidden = true;
     els.todayCard.hidden = true;
     els.result.hidden = true;
     els.orderCard.hidden = true;
@@ -600,6 +627,8 @@ async function onAnalyze() {
   els.analyzeBtn.disabled = true;
   setStatus("取得中…");
   els.volatilityCard.hidden = true;
+  els.hvCard.hidden = true;
+  els.latestPrice.hidden = true;
   els.todayCard.hidden = true;
   els.result.hidden = true;
   els.orderCard.hidden = true;
@@ -640,6 +669,8 @@ function onFormChange() {
   t.rrPayPremium = els.rrPayPremiumInput.value === "" ? null : Number(els.rrPayPremiumInput.value);
   t.rrProfitRatio = els.rrProfitRatioInput.value === "" ? null : Number(els.rrProfitRatioInput.value);
   t.rrSpreadWidth = els.rrSpreadWidthInput.value === "" ? null : Number(els.rrSpreadWidthInput.value);
+  t.rrIvSell = els.rrIvSellInput.value === "" ? null : Number(els.rrIvSellInput.value);
+  t.rrIvBuy = els.rrIvBuyInput.value === "" ? null : Number(els.rrIvBuyInput.value);
   updateRiskRewardInputUI(t.typeKey, t.rrVariant);
 
   if (t.closesFull) renderAll(t);
@@ -682,7 +713,9 @@ function asOfSuffixOf(t) {
 
 function renderAll(t) {
   syncWindowInputs(t);
+  renderLatestPrice(t);
   renderVolatilityCard(t);
+  renderHvCard(t);
   renderTodayCard(t);
   renderMainAnalysis(t);
   renderOrderCard(t);
@@ -709,6 +742,225 @@ function renderVolatilityCard(t) {
     return `<tr><td>${label}</td><td>${pctText}</td><td>${riseText}</td><td>${fallText}</td><td>${runUpText}</td><td>${drawdownText}</td><td>${amountText}</td></tr>`;
   }).join("");
   els.volatilityCard.hidden = false;
+}
+
+// 過去1年の中でのいまのHVの位置を、日数と言葉で表す(例: 「過去1年の252日中、いまより高かった日は1日（高い方）」)。
+function hvPositionText(pos) {
+  if (!pos) return "データ不足";
+  let word;
+  if (pos.higherCount === 0) word = "過去1年で最も荒れている";
+  else if (pos.higherCount / pos.count <= 0.02) word = "ほぼ最も荒れている";
+  else if (pos.lowerCount === 0) word = "過去1年で最も穏やか";
+  else if (pos.percentile >= 0.8) word = "高い方";
+  else if (pos.percentile <= 0.2) word = "低い方";
+  else word = "平均的";
+  return `過去1年の${pos.count}日中、高い方から${pos.higherCount + 1}番目（${word}）`;
+}
+
+// HVカードをクリックしたときの説明欄に添える、「同じHVで、満期の長さだけを変えた比較」の表。
+// 満期が長いほど、動く幅(1σ)が大きくなり、ITMの確率が上がることを見せる。
+// (満期までの値動きのグラフは、カードの下にすでに表示しているので、ここでは出さない。)
+const HV_COMPARE_MATURITIES = [10, 20, 30, 45, 60];
+function hvCompareBlockHtml(t, closes, dates, days) {
+  const hv = computeHv(closes, days);
+  if (hv === null) return "";
+  const type = OPTION_TYPES[t.typeKey];
+  const window = t.windowDays;
+  const price = closes[closes.length - 1];
+  const strike = price * t.ratio;
+  const depthDollar = t.rrDepth ?? 0;
+  const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
+  const sigmaText = (th) => `${Math.abs(th.zScore).toFixed(2)}σ${th.zScore >= 0 ? "外" : "内"}`;
+  const asOfDate = dates[dates.length - 1];
+  const maturities = [...new Set([...HV_COMPARE_MATURITIES, window])].sort((a, b) => a - b);
+  const rows = maturities.map((dd) => {
+    const th = hvTheory({ price, strike, depthDollar, itmWhen: type.itmWhen, days: dd, hv });
+    if (!th) return "";
+    const exp = shiftTradingDays(asOfDate, -dd);
+    const now = dd === window;
+    return `<tr${now ? ' class="hv-cmp-now"' : ""}><td>${dd}営業日${now ? "（いまの満期）" : ""}</td><td>${exp.slice(5)}</td><td>±${pct(th.sigmaPct)}</td><td>${sigmaText(th)}</td><td>${pct(th.probItmAtExpiry)}</td><td>約${pct(th.probTouch, 0)}</td></tr>`;
+  }).join("");
+  return `<div class="hv-history"><div class="hv-history-title">同じHV（${pct(hv)}）で、満期の長さだけを変えて比べると</div>`
+    + `<div class="hv-scroll"><table class="volatility-table hv-compare"><thead><tr><th>満期までの長さ</th><th>満期日</th><th>1σの値動き</th><th>ITMの水準</th><th>満期時にITMの確率</th><th>期間中に届く目安</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    + `<div class="hv-history-note">満期が長いほど、動く幅（1σ）が大きくなり、ITMの確率が上がります（1σ＝HV×√(満期の営業日数÷252)）。HVは固定なので、変わるのは「満期までの長さ」だけです。</div></div>`;
+}
+
+// HVカードをクリックしたときの説明欄に添える、過去1年のHVの推移グラフ(その期間のHV)。
+// 過去1年の毎日について「その日までの直近days営業日のHV」を並べた折れ線。
+function hvHistoryChartHtml(days) {
+  const t = activeTab();
+  if (!t || !t.closesFull) return "";
+  const { closes, dates } = viewDataOf(t);
+  const series = computeHvSeries(closes, days, 252);
+  const pos = hvPosition(closes, days);
+  if (series.length < 2 || !pos) return "";
+  const start = closes.length - series.length;
+  const points = series.map((hv, i) => ({ date: dates[start + i], hv }));
+  return `<div class="hv-history"><div class="hv-history-title">過去1年の「直近${days}営業日のHV」の推移</div>`
+    + renderHvHistoryChart({ points, median: pos.median })
+    + `<div class="hv-history-note">毎日の「その日までの直近${days}営業日のHV」を、約${series.length}日分並べた折れ線です。黒い点がいま、赤い点が過去1年の最大、青い点が最小、灰色の点線が中央値（ふだんの水準）です（最大がいまに近いときは、赤い点は黒い点と重なります）。線がふだん（点線）より上にあるほど、荒れている時期です。</div></div>`
+    + hvCompareBlockHtml(t, closes, dates, days);
+}
+
+// 過去1年のHVの範囲を表す棒。左端=過去1年の最小、右端=過去1年の最大。黒い目印=いまのHV、灰色の縦線=中央値(ふだんの水準)。
+function hvBarHtml(pos) {
+  const clamp = (v) => Math.max(0, Math.min(1, v)) * 100;
+  const span = pos.max - pos.min;
+  const now = span > 0 ? clamp((pos.current - pos.min) / span) : 50;
+  const med = span > 0 ? clamp((pos.median - pos.min) / span) : 50;
+  return `<span class="hv-bar" aria-hidden="true"><span class="hv-bar-med" style="left:${med.toFixed(1)}%"></span><span class="hv-bar-now" style="left:${now.toFixed(1)}%"></span></span>`;
+}
+
+// 一番上のパネルに、最新の株価(終値)・日付・前日比を表示する。日付を指定しているときは、その日(基準日)の終値。
+// データを取得していないタブでは隠す。
+function renderLatestPrice(t) {
+  const el = els.latestPrice;
+  if (!t || !t.closesFull || t.closesFull.length < 1) {
+    el.hidden = true;
+    el.innerHTML = "";
+    return;
+  }
+  const { closes, dates } = viewDataOf(t);
+  const i = closes.length - 1;
+  const close = closes[i];
+  const date = dates[i];
+  const asOf = resolveStatusDate(t).asOf;
+  let change = "";
+  if (i >= 1) {
+    const diff = close - closes[i - 1];
+    const rate = diff / closes[i - 1];
+    const sign = diff >= 0 ? "+" : "−";
+    const cls = diff >= 0 ? "up" : "down";
+    change = `<span class="lp-change ${cls}">前日比 ${sign}${Math.abs(diff).toFixed(2)}（${sign}${Math.abs(rate * 100).toFixed(2)}%）</span>`;
+  }
+  el.innerHTML = `<span class="lp-symbol">${t.symbol}</span><span class="lp-label">${asOf ? "終値" : "最新の終値"}</span>`
+    + `<b class="lp-price">${close.toFixed(2)}</b><span class="lp-unit">ドル</span>`
+    + `<span class="lp-date">（${date}${asOf ? "時点" : ""}）</span>${change}`;
+  el.hidden = false;
+}
+
+// 「HV（歴史的ボラティリティ）」カードを描画する。基準日までの全データ(closesFull、最大800営業日)の終値から計算する。
+//  1) 直近の期間ごとのHV(年率)と、過去1年の中でのいまの高さ(いまより高かった日数)
+//  2) 満期(判定期間)までの1σの値動き、権利行使価格の位置(何σ外か)、HVから見た理論上の確率(目安)と、過去の実績の比較
+// 理論上の確率は「株価が対数正規分布に従い、平均的な上昇・下落はない」という単純な仮定の目安で、将来を保証するものではない。
+function renderHvCard(t) {
+  const { closes, dates: viewDates } = viewDataOf(t);
+  if (!closes || closes.length < 12) {
+    els.hvCard.hidden = true;
+    return;
+  }
+  const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
+  // 期間d営業日のHVのカード(大きな数字、過去1年の範囲の棒、幅・中央値、順位)
+  const hvCardItem = (d, label, extraNote) => {
+    const hv = computeHv(closes, d);
+    const pos = hv === null ? null : hvPosition(closes, d);
+    return {
+      days: d,
+      label,
+      value: hv === null ? "―" : pct(hv),
+      sub: pos
+        ? `${hvBarHtml(pos)}<span class="hv-line">過去1年のHVの幅：${pct(pos.min, 0)}〜${pct(pos.max, 0)}（ふだん＝中央値 ${pct(pos.median, 0)}）</span><span class="hv-line">${hvPositionText(pos)}</span>`
+        : "データ不足",
+      note: `${extraNote}大きな数字（%）は、直近${d}営業日の、日々の騰落率のばらつきを年率に換算した値（HV）です。「直近${d}営業日」は、計算に使う期間の長さです。\n棒と「過去1年のHVの幅」： 過去1年の毎日について、その日までの直近${d}営業日のHVを計算し（約252個）、その最小〜最大を表します。棒の左端が最小、右端が最大です。黒い目印がいまのHV、灰色の縦線が中央値（ふだんの水準）です。「幅」の%も、HVの値です。\n「高い方から◯番目」： その約252個のHVを高い順に並べたとき、いまのHVが何番目かです。1番目なら、過去1年で最も荒れている時期です。`,
+    };
+  };
+  const statHtml = (it) =>
+    `<div class="stat" data-target="hvExplain" data-hv-days="${it.days}" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span><span class="stat-sub">${it.sub}</span></div>`;
+  // 満期と同じ長さのHV(グラフと「1σの値動き」の計算に使う値)
+  const matchDays = t.windowDays;
+  els.hvMatchTitle.textContent = `満期（${matchDays}営業日）と同じ長さのHV（年率）`;
+  els.hvMatchSummary.innerHTML = statHtml(hvCardItem(
+    matchDays, `直近${matchDays}営業日（満期と同じ長さ）`,
+    "このHVを、下のグラフと「満期までの1σの値動き」の計算に使っています。満期日を変えると、この期間の長さも変わります。\n"));
+
+  // 満期(判定期間)までの値動きの目安
+  const type = OPTION_TYPES[t.typeKey];
+  const group = typeGroup(t.typeKey);
+  const days = t.windowDays;
+  const price = closes[closes.length - 1];
+  const strike = price * t.ratio;
+  const depthDollar = t.rrDepth ?? 0;
+  const hvN = computeHv(closes, days);
+  const theory = hvN === null ? null : hvTheory({ price, strike, depthDollar, itmWhen: type.itmWhen, days, hv: hvN });
+  els.hvTheoryTitle.textContent = `満期（${days}営業日）までの値動きの目安と、権利行使価格の位置`;
+  if (!theory) {
+    els.hvTheorySummary.innerHTML = "";
+    els.hvConeWrap.innerHTML = "";
+    els.hvConeLegend.textContent = "";
+    els.hvTheoryNote.textContent = "データが足りないため、表示できません。";
+    els.hvCard.hidden = false;
+    setupStatExplain();
+    return;
+  }
+
+  // 実績(分析結果と同じ: 判定期間内に毎日の終値で一度でもITM(判定する深さ以上)に届いた割合)
+  const pc = periodClosesOf(t);
+  const pd = periodDatesOf(t);
+  const { depthPct } = depthInfo(t, pc);
+  const analysis = computeItmAnalysis(pc, {
+    ratio: t.ratio, itmWhen: type.itmWhen, window: days, group, depthPct,
+  }, pd);
+  const actual = analysis.overallItmProb;
+
+  const depthText = depthDollar > 0 ? `権利行使価格${type.itmWhen === "below" ? "−" : "＋"}${depthDollar}ドル` : "権利行使価格";
+  const dist = theory.distancePct;
+  const sideText = theory.zScore >= 0 ? "OTM側" : "ITM側";
+  const items = [
+    {
+      label: `満期までの1σの値動き`, value: `±${theory.sigmaAmount.toFixed(2)}ドル`,
+      sub: `±${pct(theory.sigmaPct)}（直近${days}営業日のHV ${pct(hvN)}×√(${days}/252)）`,
+      note: `直近${days}営業日（満期までの営業日数と同じ長さ）のHVから見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。\n1σ＝現在値×HV×√(営業日数÷252)。目安であり、将来を保証するものではありません。`,
+    },
+    {
+      label: `ITMの水準の位置`, value: `${dist >= 0 ? "+" : ""}${pct(dist)}`,
+      sub: `${depthText}＝${theory.barrier.toFixed(2)}・${Math.abs(theory.zScore).toFixed(2)}σ（${sideText}）`,
+      note: `ITMとみなす水準（${depthText}）が、現在値から何%離れているか、またそれがHVから見て何σ分の距離かを表します。\nσの値が大きいほど、HVから見てITMになりにくい水準です。「OTM側」は現在値よりITMの反対側、「ITM側」はすでにITMの側にあることを表します。\n水準は、現在値×権利行使価格の比率（上の入力欄の比率）から求めています。`,
+    },
+    {
+      label: `HV換算の理論上の確率（満期時にITM）`, value: pct(theory.probItmAtExpiry),
+      sub: `期間中に一度でも届く目安 約${pct(theory.probTouch, 0)}`,
+      note: `HVから、満期時にITMの水準を超えている（プット系は下回る、コール系は上回る）確率を、正規分布の近似で求めたものです。\n「期間中に一度でも届く」目安は、満期時の確率の2倍（上限100%）で、毎日の終値だけを見る実績よりやや多めに出ます。\n株価の平均的な上昇・下落はないと仮定した単純な近似です。将来を保証するものではありません。`,
+    },
+    {
+      label: `過去の実績（ITM発生率）`, value: actual === null ? "―" : pct(actual),
+      sub: `分析結果と同じ値（判定期間内に一度でも届いた割合）`,
+      note: `「分析結果」のITM発生エントリー数の割合と同じ値です。判定期間${days}営業日のあいだに、毎日の終値で一度でもITMの水準に届いたエントリー日の割合です。`,
+    },
+  ];
+  // グラフ: 直近の株価の推移 + いまから満期まで広がる±1σ・±2σの範囲 + ITMの水準
+  const asOfDate = viewDates[viewDates.length - 1];
+  const expiryDate = shiftTradingDays(asOfDate, -days);
+  els.hvConeWrap.innerHTML = renderConeChart({
+    pastCloses: closes.slice(-61), price, days, sigmaPct: theory.sigmaPct, barrier: theory.barrier, itmWhen: type.itmWhen,
+    nowLabel: `いま（${asOfDate.slice(5)}）`, expiryLabel: `満期 ${expiryDate.slice(5)}（${days}営業日後）`,
+    barrierLabel: `ITMの水準 ${theory.barrier.toFixed(2)}（${dist >= 0 ? "+" : ""}${pct(dist)}・${Math.abs(theory.zScore).toFixed(2)}σ${theory.zScore >= 0 ? "外" : "内"}）`,
+  });
+  els.hvConeLegend.textContent = `濃い帯＝±1σ（満期時に約68%がこの範囲）、薄い帯＝±2σ（約95%）。赤い破線＝ITMの水準、その先の薄い赤＝ITM側。帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
+  els.hvTheorySummary.innerHTML = items.map((it) =>
+    `<div class="stat" data-target="hvExplain" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span><span class="stat-sub">${it.sub}</span></div>`
+  ).join("");
+
+  let compare = "";
+  if (actual !== null && theory.probTouch > 0) {
+    const ratio = actual / theory.probTouch;
+    const word = ratio < 0.8 ? "少なく" : ratio > 1.25 ? "多く" : "同じくらいに";
+    const meaning = ratio < 0.8
+      ? (group === "sell" ? "過去は、HVから見た理論より穏やかな値動きで、売りには有利な側にずれていました。" : "過去は、HVから見た理論より届きにくく、買いには不利な側にずれていました。")
+      : ratio > 1.25
+        ? (group === "sell" ? "過去は、HVから見た理論より届きやすく、売りには不利な側にずれていました。" : "過去は、HVから見た理論より届きやすく、買いには有利な側にずれていました。")
+        : "過去の実績は、HVから見た理論と、ほぼ合っていました。";
+    compare = `過去の実績（${pct(actual)}）は、理論上の「期間中に一度でも届く目安」（約${pct(theory.probTouch, 0)}）より${word}なっています。${meaning}`;
+  }
+  // いまのHVが過去1年の中で高い/低い位置にあるときは、実績との差の理由として添える
+  let regime = "";
+  const posN = hvPosition(closes, days);
+  if (posN) {
+    if (posN.percentile >= 0.8) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より荒れている時期です。理論と実績の差には、この影響が考えられます。`;
+    else if (posN.percentile <= 0.2) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より穏やかな時期です。理論と実績の差には、この影響が考えられます。`;
+  }
+  els.hvTheoryNote.textContent = `${compare}${compare ? " " : ""}${regime}${regime ? " " : ""}※HVは過去の値動きの大きさで、IV（オプション価格に織り込まれた将来の変動の大きさ）ではありません。理論上の確率は単純な近似の目安です。`;
+  els.hvCard.hidden = false;
+  setupStatExplain();
 }
 
 // 「本日の状況」を、入力された過去の日付の時点で見るための基準日を決める。
@@ -1057,7 +1309,10 @@ function renderOrderCard(t) {
   }
   els.orderLine.textContent = parts.join("　");
 
-  if (group === "sell") renderOrderExit(t, dates[dates.length - 1]);
+  if (group === "sell") {
+    renderOrderExit(t, dates[dates.length - 1]);
+    renderStressTest(t, latest, type.itmWhen);
+  }
   renderBreakEvenPrice(t, closes, todayStrike);
   els.orderCard.hidden = false;
 }
@@ -1148,6 +1403,77 @@ function renderOrderExit(t, asOfDate) {
     `${EXPIRY_KIND_NOTE[expiryKind(expiry)]}実際にあるかは、証券会社のオプションチェーンで確認してください。`
     + (cal > GUIDE_MAX_CALENDAR_DAYS ? " 講座の満期の目安（約60暦日まで）を超えています。" : "")
     + " 休場日は、毎年決まっている祝日のみ反映しています（臨時の休場は反映されません）。";
+}
+
+// 「株価が動いたときの現在値の目安(ストレステスト)」を描画する(売り系のみ)。
+// 売りポジションを今すぐ買い戻すときに必要な価格(現在値)が、株価の下落(コール系は上昇)とIVの上昇でどうなるかを、
+// Black-Scholes(金利0・配当なし)で再計算した目安。IVは、入力があればそれを使い、なければ入力した受取プレミアム額から逆算する。
+// 損益は「受取プレミアム額−そのときの現在値」(受取プレミアム額が未入力のときは、IVから計算した理論値を受取額の代わりに使う)。
+const STRESS_SHOCK_STEPS = [0, 0.05, 0.10, 0.15, 0.20];
+const STRESS_IV_UPS = [0, 0.10, 0.20];
+
+function renderStressTest(t, price, itmWhen) {
+  const kind = itmWhen === "below" ? "put" : "call";
+  const isSp = t.rrVariant === "spread";
+  const sign = kind === "put" ? -1 : 1;
+  const dirText = kind === "put" ? "下がった" : "上がった";
+  els.stressIntro.textContent = `株価が${dirText}とき（IVも同時に上がる場合を含む）に、いま買い戻すのに必要な価格（現在値）と、そのときの損益の目安です。満期まで${t.windowDays}営業日の状態を基準にしています。`;
+  const clear = (msg) => {
+    els.stressHead.innerHTML = "";
+    els.stressBody.innerHTML = "";
+    els.stressNote.textContent = msg;
+  };
+  const premium = t.rrPremium !== null && t.rrPremium > 0 ? t.rrPremium : null;
+  const ivSell = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
+  const ivBuy = t.rrIvBuy !== null && t.rrIvBuy > 0 ? t.rrIvBuy / 100 : null;
+  if (isSp && !(t.rrSpreadWidth > 0)) { clear("権利行使価格の差額を入力すると表示します。"); return; }
+  if (premium === null && ivSell === null) { clear("受取プレミアム額、またはIV（売り建て側）を入力すると表示します。"); return; }
+
+  const strikeSell = price * t.ratio;
+  const strikeBuy = isSp ? (kind === "put" ? strikeSell - t.rrSpreadWidth : strikeSell + t.rrSpreadWidth) : null;
+  if (strikeBuy !== null && !(strikeBuy > 0)) { clear("権利行使価格の差額が大きすぎます（買い建て側の権利行使価格が0以下になります）。"); return; }
+  const res = stressTest({
+    kind, price, strikeSell, strikeBuy, days: t.windowDays, premium, ivSell, ivBuy,
+    shocks: STRESS_SHOCK_STEPS.map((s) => s * sign), ivUps: STRESS_IV_UPS,
+  });
+  if (!res) { clear("受取プレミアム額に合うIVが見つかりませんでした。受取プレミアム額（スプレッドは差し引き後の正味の額）や権利行使価格の差額を、確認してください。"); return; }
+
+  const { rows, meta } = res;
+  if (meta.source === "input" && meta.v0 <= 0) {
+    clear(`入力したIV（売り建て側 ${(meta.ivSell * 100).toFixed(1)}%、買い建て側 ${(meta.ivBuy * 100).toFixed(1)}%）の組み合わせでは、スプレッドの価格が0以下になります（買い建て側のほうが高くなる）。IVの差が大きすぎないか、確認してください。`);
+    return;
+  }
+  const received = meta.received;
+  const stopMin = received * 1.9;
+  const maxValue = meta.width === null ? null : meta.width * 0.98;
+  const money = (v) => v.toFixed(2);
+  const pnlText = (pnl) => `${pnl >= 0 ? "+" : "−"}${Math.abs(pnl).toFixed(2)}（100株で${pnl >= 0 ? "+" : "−"}${Math.abs(pnl * 100).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}ドル）`;
+  els.stressHead.innerHTML = `<tr><th>株価の変化</th><th>株価</th>${STRESS_IV_UPS.map((up) =>
+    `<th>${up === 0 ? "IVは変わらない" : `IVが＋${Math.round(up * 100)}ポイント`}<br><span class="stress-sub">IV ${((meta.ivSell + up) * 100).toFixed(1)}%</span></th>`).join("")}</tr>`;
+  els.stressBody.innerHTML = rows.map((r) => {
+    const label = r.shock === 0 ? "いま" : `${r.shock > 0 ? "+" : "−"}${Math.abs(r.shock * 100).toFixed(0)}%`;
+    return `<tr><td>${label}</td><td>${money(r.price)}</td>${r.cells.map((c) => {
+      const stop = c.value >= stopMin;
+      const nearMax = maxValue !== null && c.value >= maxValue;
+      const cls = nearMax ? "stress-max" : stop ? "stress-stop" : "";
+      return `<td class="${cls}"><b>${money(c.value)}</b><br><span class="stress-pnl ${c.pnl < 0 ? "neg" : ""}">${pnlText(c.pnl)}</span></td>`;
+    }).join("")}</tr>`;
+  }).join("");
+
+  const ivText = meta.source === "input"
+    ? `IVは入力値を使っています（売り建て側 ${(meta.ivSell * 100).toFixed(1)}%${isSp ? `、買い建て側 ${(meta.ivBuy * 100).toFixed(1)}%${ivBuy === null ? "（売り建て側と同じ）" : ""}` : ""}）。`
+    : `IVは、受取プレミアム額${money(premium)}に合うように逆算した ${(meta.ivSell * 100).toFixed(1)}%（売り脚・買い脚とも同じ）を使っています。`;
+  const receivedText = premium === null
+    ? `受取プレミアム額が未入力のため、IVから計算した理論値 ${money(meta.v0)} を受取額の代わりにしています。`
+    : (meta.source === "input" && Math.abs(meta.v0 - premium) > Math.max(0.05, premium * 0.15)
+      ? `※入力したIVから計算した現在値（理論値 ${money(meta.v0)}）と、入力した受取プレミアム額 ${money(premium)} が離れています。損益は、入力した受取プレミアム額を基準にしています。`
+      : "");
+  els.stressNote.textContent = [
+    ivText,
+    receivedText,
+    `色付きのセルは、現在値が${money(stopMin)}以上（受取額の1.9倍以上＝ロスカットの逆指値の水準）です${maxValue !== null ? "。さらに濃い色は、スプレッド幅の上限（最大損失）に近い水準です" : ""}。`,
+    "金利0・配当なし、株価がすぐに動いたとして（時間の経過なし）計算した目安です。実際の価格とは、スキュー・流動性などでずれます。すでに両方の権利行使価格を超えて動いている場合は、IVが上がるとスプレッドの価格がわずかに下がることがあります。",
+  ].filter(Boolean).join(" ");
 }
 
 // SPボタン: 単体注文とスプレッド(SP)注文を切り替える。使わない側の入力欄は非表示になり、値は保持される。
@@ -1272,6 +1598,8 @@ function setupStatExplain() {
       const box = document.createElement("div");
       box.className = "explain-box";
       box.textContent = el.dataset.note;
+      // HVのカードは、説明に加えて、過去1年のHVの推移グラフを出す
+      if (el.dataset.hvDays) box.insertAdjacentHTML("beforeend", hvHistoryChartHtml(Number(el.dataset.hvDays)));
       anchor.insertAdjacentElement("afterend", box);
     });
   });
@@ -1319,7 +1647,7 @@ const COLLAPSE_KEY = "itm-tool-collapsed-v1";
 function setupCollapsibleCards() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}") || {}; } catch (e) { saved = {}; }
-  ["volatilityCard", "result", "orderCard", "conditionCard"].forEach((id) => {
+  ["volatilityCard", "hvCard", "result", "orderCard", "conditionCard"].forEach((id) => {
     const card = document.getElementById(id);
     if (!card) return;
     const head = card.querySelector(":scope > .result-head, :scope > .order-head") || card.querySelector(":scope > h2");
@@ -1389,6 +1717,8 @@ function init() {
   els.rrPremiumInput.addEventListener("input", debounce(onFormChange, 250));
   els.rrProfitRatioInput.addEventListener("input", debounce(onFormChange, 250));
   els.rrSpreadWidthInput.addEventListener("input", debounce(onFormChange, 250));
+  els.rrIvSellInput.addEventListener("input", debounce(onFormChange, 250));
+  els.rrIvBuyInput.addEventListener("input", debounce(onFormChange, 250));
   // 「本日の状況」の日付指定は、その表示だけを切り替える(他のカードは再計算しない)
   const onStatusDateChange = (value) => {
     const t = activeTab();
