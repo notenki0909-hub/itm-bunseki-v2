@@ -13,7 +13,7 @@ import { renderDayProbChart, DAY_PROB_BANDS, renderConeChart, renderHvHistoryCha
 import { renderEntryHeatmap, ENTRY_HEATMAP_BANDS, renderDepthHeatmap, DEPTH_HEATMAP_BANDS, renderOtmHeatmap, OTM_HEATMAP_BANDS, OTM_RATE_BANDS } from "./heatmap.js";
 import { initThemeBar } from "./theme.js";
 import { isPriceDataStale } from "./marketTime.js";
-import { stressTest, ivTimeTable, solveFlatIv, judgeIvHv, TRADING_DAYS_PER_YEAR } from "./optionModel.js";
+import { stressTest, ivTimeTable, solveFlatIv, positionValue, judgeIvHv, TRADING_DAYS_PER_YEAR } from "./optionModel.js";
 import { WEEKDAY_JA, weekday, parseYmd, isTradingDay, previousTradingDay, shiftTradingDays, tradingDaysBetween, expiryKind, EXPIRY_KIND_LABEL, EXPIRY_KIND_NOTE } from "./usMarket.js";
 import { addTickerToHistory, setupTickerHistoryDropdown, loadTickerHistory, mergeTickerHistory } from "./tickerHistory.js";
 
@@ -840,10 +840,20 @@ function renderLatestPrice(t) {
     const cls = diff >= 0 ? "up" : "down";
     change = `<span class="lp-change ${cls}">前日比 ${sign}${Math.abs(diff).toFixed(2)}（${sign}${Math.abs(rate * 100).toFixed(2)}%）</span>`;
   }
-  el.innerHTML = `<span class="lp-symbol">${t.symbol}</span><span class="lp-label">${asOf ? "終値" : "最新の終値"}</span>`
-    + `<b class="lp-price">${close.toFixed(2)}</b><span class="lp-unit">ドル</span>`
+  el.innerHTML = `<span class="lp-symbol">${t.symbol}</span>`
+    + `<span class="lp-main"><span class="lp-label">${asOf ? "終値" : "最新の終値"}：</span><b class="lp-price">${close.toFixed(2)}</b><span class="lp-unit">ドル</span></span>`
     + `<span class="lp-date">（${date}${asOf ? "時点" : ""}）</span>${change}`;
   el.hidden = false;
+}
+
+// 数字のカード。「何の数字か」を数字の前に目立たせる(例: 「HV：53.2%」「満期時ITM率：11.7%（HV換算）」)。
+//  name=何の数字か(数字の前に「：」つきで表示) / value=数字 / suffix=数字の後ろの補足(例: （HV換算）) / line=その下の補足の一行 / sub=小さな説明
+function statCardHtml({ name, value, suffix = "", line = "", sub = "", note = "", attrs = "" }) {
+  return `<div class="stat" ${attrs} data-note="${note}">`
+    + `<div class="stat-head"><span class="stat-name">${name}：</span><b>${value}</b>${suffix ? `<span class="stat-suffix">${suffix}</span>` : ""}</div>`
+    + (line ? `<span class="stat-line">${line}</span>` : "")
+    + (sub ? `<span class="stat-sub">${sub}</span>` : "")
+    + `</div>`;
 }
 
 // 「HV（歴史的ボラティリティ）」カードを描画する。基準日までの全データ(closesFull、最大800営業日)の終値から計算する。
@@ -863,7 +873,8 @@ function renderHvCard(t) {
     const pos = hv === null ? null : hvPosition(closes, d);
     return {
       days: d,
-      label,
+      name: "HV",
+      line: label,
       value: hv === null ? "―" : pct(hv),
       sub: pos
         ? `${hvBarHtml(pos)}<span class="hv-line">過去1年のHVの幅：${pct(pos.min, 0)}〜${pct(pos.max, 0)}（ふだん＝中央値 ${pct(pos.median, 0)}）</span><span class="hv-line">${hvPositionText(pos)}</span>`
@@ -871,8 +882,7 @@ function renderHvCard(t) {
       note: `${extraNote}大きな数字（%）は、直近${d}営業日の、日々の騰落率のばらつきを年率に換算した値（HV）です。「直近${d}営業日」は、計算に使う期間の長さです。\n棒と「過去1年のHVの幅」： 過去1年の毎日について、その日までの直近${d}営業日のHVを計算し（約252個）、その最小〜最大を表します。棒の左端が最小、右端が最大です。黒い目印がいまのHV、灰色の縦線が中央値（ふだんの水準）です。「幅」の%も、HVの値です。\n「高い方から◯番目」： その約252個のHVを高い順に並べたとき、いまのHVが何番目かです。1番目なら、過去1年で最も荒れている時期です。`,
     };
   };
-  const statHtml = (it) =>
-    `<div class="stat" data-target="hvExplain" data-hv-days="${it.days}" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span><span class="stat-sub">${it.sub}</span></div>`;
+  const statHtml = (it) => statCardHtml({ ...it, attrs: `data-target="hvExplain" data-hv-days="${it.days}"` });
   // 満期と同じ長さのHV(グラフと「1σの値動き」の計算に使う値)
   const matchDays = t.windowDays;
   els.hvMatchTitle.textContent = `満期（${matchDays}営業日）と同じ長さのHV（年率）`;
@@ -914,22 +924,22 @@ function renderHvCard(t) {
   const sideText = theory.zScore >= 0 ? "OTM側" : "ITM側";
   const items = [
     {
-      label: `満期までの1σの値動き`, value: `±${theory.sigmaAmount.toFixed(2)}ドル`,
-      sub: `±${pct(theory.sigmaPct)}（直近${days}営業日のHV ${pct(hvN)}×√(${days}/252)）`,
+      name: "1σの値動き", value: `±${theory.sigmaAmount.toFixed(2)}ドル`,
+      sub: `満期まで。±${pct(theory.sigmaPct)}（直近${days}営業日のHV ${pct(hvN)}×√(${days}/252)）`,
       note: `直近${days}営業日（満期までの営業日数と同じ長さ）のHVから見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。\n1σ＝現在値×HV×√(営業日数÷252)。目安であり、将来を保証するものではありません。`,
     },
     {
-      label: `ITMの水準の位置`, value: `${dist >= 0 ? "+" : ""}${pct(dist)}`,
-      sub: `${depthText}＝${theory.barrier.toFixed(2)}・${Math.abs(theory.zScore).toFixed(2)}σ（${sideText}）`,
+      name: "権利行使価格", value: `${dist >= 0 ? "+" : ""}${pct(dist)}`,
+      sub: `ITMの水準の、現在値からの位置。${depthText}＝${theory.barrier.toFixed(2)}・${Math.abs(theory.zScore).toFixed(2)}σ（${sideText}）`,
       note: `ITMとみなす水準（${depthText}）が、現在値から何%離れているか、またそれがHVから見て何σ分の距離かを表します。\nσの値が大きいほど、HVから見てITMになりにくい水準です。「OTM側」は現在値よりITMの反対側、「ITM側」はすでにITMの側にあることを表します。\n水準は、現在値×権利行使価格の比率（上の入力欄の比率）から求めています。`,
     },
     {
-      label: `HV換算の理論上の確率（満期時にITM）`, value: pct(theory.probItmAtExpiry),
-      sub: `期間中に一度でも届く目安 約${pct(theory.probTouch, 0)}`,
+      name: "満期時ITM率", value: pct(theory.probItmAtExpiry), suffix: "（HV換算）",
+      sub: `理論上の確率。期間中に一度でも届く目安 約${pct(theory.probTouch, 0)}`,
       note: `HVから、満期時にITMの水準を超えている（プット系は下回る、コール系は上回る）確率を、正規分布の近似で求めたものです。\n「期間中に一度でも届く」目安は、毎日の終値だけを見る実績よりやや多めに出ます。\n株価の平均的な上昇・下落はないと仮定した単純な近似です。将来を保証するものではありません。`,
     },
     {
-      label: `過去の実績（ITM発生率）`, value: actual === null ? "―" : pct(actual),
+      name: "ITM発生率", value: actual === null ? "―" : pct(actual), suffix: "（過去の実績）",
       sub: `分析結果と同じ値（判定期間内に一度でも届いた割合）`,
       note: `「分析結果」のITM発生エントリー数の割合と同じ値です。判定期間${days}営業日のあいだに、毎日の終値で一度でもITMの水準に届いたエントリー日の割合です。`,
     },
@@ -943,9 +953,7 @@ function renderHvCard(t) {
     barrierLabel: `ITMの水準 ${theory.barrier.toFixed(2)}（${dist >= 0 ? "+" : ""}${pct(dist)}・${Math.abs(theory.zScore).toFixed(2)}σ${theory.zScore >= 0 ? "外" : "内"}）`,
   });
   els.hvConeLegend.textContent = `濃い帯＝±1σ（満期時に約68%がこの範囲）、薄い帯＝±2σ（約95%）。赤い破線＝ITMの水準、その先の薄い赤＝ITM側。帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
-  els.hvTheorySummary.innerHTML = items.map((it) =>
-    `<div class="stat" data-target="hvExplain" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span><span class="stat-sub">${it.sub}</span></div>`
-  ).join("");
+  els.hvTheorySummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: 'data-target="hvExplain"' })).join("");
 
   let compare = "";
   if (actual !== null && theory.probTouch > 0) {
@@ -1353,34 +1361,31 @@ function renderOrderExit(t, asOfDate) {
 
   const items = [
     {
-      label: "利確の支払い価格(買い戻しの指値)",
+      name: "利確の支払い価格", line: "買い戻しの指値",
       value: hasPremium ? money(premium * (1 - ratio / 100)) : "―",
       sub: hasPremium ? `受取${money(premium)}×(1−${ratio}%)${ratioNote}` : noInput,
       note: "反対売買（買い戻し）で決済するときの指値価格です。受取プレミアム×(1−利確割合)。\n注文が約定したらすぐに、この価格で利確注文を出しておきます（講座の基準は、受取りの2割を支払う＝8割を手元に残す）。\nスプレッドの場合は、2つの脚の差し引き後の価格で出します。\n1株あたりの価格で、手数料は含みません。",
     },
     {
-      label: "利確したときの利益額",
+      name: "利確したときの利益額",
       value: hasPremium ? money(premium * ratio / 100) : "―",
       sub: hasPremium ? `100株(1契約)で${perContract(premium * ratio / 100)}ドル` : noInput,
       note: "利確の支払い価格で決済できた場合に、手元に残る利益額（1株あたり）です。受取プレミアム×利確割合。手数料は含みません。",
     },
     {
-      label: "ロスカットの逆指値価格",
+      name: "ロスカットの逆指値価格",
       value: hasPremium ? `${money(premium * STOP_MULTIPLE_MIN)}〜${money(premium * STOP_MULTIPLE_MAX)}` : "―",
       sub: hasPremium ? `受取${money(premium)}の${STOP_MULTIPLE_MIN}〜${STOP_MULTIPLE_MAX}倍` : noInput,
       note: "ロスカット（損切り）を逆指値の注文で出すときの価格の目安です。講座の基準は、受取プレミアムの1.9〜2倍です。\n現在値がこの価格を超えたときに、買い戻しの注文が出ます。\n逆指値は、発動した後に指定価格より不利な価格で約定することがあります。\nロスカットを入れるかどうか、倍率を何倍にするかは、ご自身のリスク許容度で決めてください。",
     },
     {
-      label: "ロスカット時の損失額",
+      name: "ロスカット時の損失額",
       value: hasPremium ? `${money(premium * (STOP_MULTIPLE_MIN - 1))}〜${money(premium * (STOP_MULTIPLE_MAX - 1))}` : "―",
       sub: hasPremium ? `100株(1契約)で${perContract(premium * (STOP_MULTIPLE_MIN - 1))}〜${perContract(premium * (STOP_MULTIPLE_MAX - 1))}ドル` : noInput,
       note: "逆指値の価格で決済できた場合の損失額（1株あたり）です。逆指値の価格−受取プレミアム。\n2倍で決済すると、受け取ったプレミアムと同じ額の損失になります。\n実際の約定価格がずれた場合は、この額と異なります。手数料は含みません。",
     },
   ];
-  els.orderExitSummary.innerHTML = items.map((it) =>
-    `<div class="stat" data-target="orderExplain" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span>`
-    + (it.sub ? `<span class="stat-sub">${it.sub}</span>` : "") + `</div>`
-  ).join("");
+  els.orderExitSummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
   els.orderExitNote.textContent = "講座の基準: 利確は受取りの8割（2割を支払って買い戻し）が基本です。サクソバンクでは利確注文とロスカット注文を同時に出せないため、利確注文を基本にして、ロスカットは株価や証拠金使用率を見ながらご自身で判断します。";
 
   // 満期日と、決済の目安日(基準日 = 最新の終値の日。満期日は入力欄の満期日)
@@ -1392,22 +1397,20 @@ function renderOrderExit(t, asOfDate) {
   const closeDate = shiftTradingDays(expiry, 3);
   const dateItems = [
     {
-      label: "満期日", value: fmtDate(expiry), sub: `残り${days}営業日（${cal}暦日）・${EXPIRY_KIND_LABEL[expiryKind(expiry)]}`,
+      name: "満期日", value: fmtDate(expiry), sub: `残り${days}営業日（${cal}暦日）・${EXPIRY_KIND_LABEL[expiryKind(expiry)]}`,
       note: "上の「満期日（判定期間）」で入力した満期日です。基準日（最新の終値の日）から、この営業日数後になります。\n実際にその満期日があるかは、銘柄ごとに異なります。証券会社のオプションチェーンで確認してください。",
     },
     {
-      label: "2週間前の判断日", value: reviewDate === null ? "―" : fmtDate(reviewDate),
+      name: "2週間前の判断日", value: reviewDate === null ? "―" : fmtDate(reviewDate),
       sub: reviewDate === null ? "満期まで10営業日以内のため、ありません" : "満期まで残り10営業日",
       note: "満期まで残り10営業日（約2週間）になる日です。この時点で利益が出ていれば、利確するか、取引を継続するかを検討する目安日です。\n満期が近いほど、株価が急に動いたときに回復を待つ期間が短くなります。",
     },
     {
-      label: "3日前の決済日", value: fmtDate(closeDate), sub: "満期の3営業日前",
+      name: "3日前の決済日", value: fmtDate(closeDate), sub: "満期の3営業日前",
       note: "満期の3営業日前です（金曜満期なら火曜日）。遅くともこの日までに、反対売買で決済します。",
     },
   ];
-  els.expirySummary.innerHTML = dateItems.map((it) =>
-    `<div class="stat" data-target="orderExplain" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span><span class="stat-sub">${it.sub}</span></div>`
-  ).join("");
+  els.expirySummary.innerHTML = dateItems.map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
   els.expiryNote.textContent =
     `${EXPIRY_KIND_NOTE[expiryKind(expiry)]}実際にあるかは、証券会社のオプションチェーンで確認してください。`
     + (cal > GUIDE_MAX_CALENDAR_DAYS ? " 講座の満期の目安（約60暦日まで）を超えています。" : "")
@@ -1519,7 +1522,7 @@ function renderIvHv(t, price, itmWhen) {
   const thHv = hvTheory({ price, strike: strikeSell, depthDollar, itmWhen, days, hv });
   const pos = hvPosition(closes, days);
 
-  const ivLabel = source === "input" ? "IV（売り建て側・入力値）" : "IV（受取プレミアム額から逆算）";
+  const ivSuffix = source === "input" ? "（売り建て側・入力値）" : "（受取プレミアム額から逆算）";
   const ivSub = source === "input"
     ? "証券会社のオプションチェーンの値"
     : `受取プレミアム額${premium.toFixed(2)}に合うIV（${isSp ? "売り脚・買い脚を同じIVとみなした目安" : "売り脚のIV"}）`;
@@ -1528,31 +1531,48 @@ function renderIvHv(t, price, itmWhen) {
       : "標準的な水準";
   const items = [
     {
-      label: ivLabel, value: pct(iv), sub: ivSub,
+      name: "IV", value: pct(iv), suffix: ivSuffix, sub: ivSub,
       note: `IV（インプライド・ボラティリティ）は、オプションの価格に織り込まれた、これからの値動きの見込みの大きさ（年率）です。HVが「過去に実際に動いた大きさ」なのに対し、IVは「市場がこれから動くと見込んでいる大きさ」で、実際の値動きではありません。IVが高いほど、オプションの価格（プレミアム）も高くなります。\n${source === "input" ? "売り建て側の権利行使価格のIVとして入力した値を使っています。" : "IVが未入力のため、入力した受取プレミアム額に合うIVを、Black-Scholesの式（金利0・配当なし）で逆算しています。スプレッドの場合は、売り脚と買い脚が同じIVだと仮定した目安です（実際は、遠い権利行使価格ほどIVが高いことが多いため、売り脚のIVとはずれます）。"}`,
     },
     {
-      label: `HV（直近${days}営業日）`, value: pct(hv),
+      name: "HV", value: pct(hv), suffix: `（直近${days}営業日）`,
       sub: pos ? `満期と同じ長さ・ふだん（中央値）${pct(pos.median, 0)}` : "満期と同じ長さ",
       note: `満期（${days}営業日）と同じ長さの期間で測った、過去の実際の値動きの大きさ（HV、年率）です。上のHVのエリアと同じ値です。`,
     },
     {
-      label: "IV÷HV（倍率）", value: `${ratio.toFixed(2)}倍`,
+      name: "IV÷HV", value: `${ratio.toFixed(2)}倍`,
       sub: `${judge.phrase}／${meaningShort}`,
       note: `IVがHVの何倍かを見て、市場のこれからの見込み（IV）が、過去の実際の値動き（HV）より高めか低めかを判断する目安です。IVが高いほど、オプションの価格（プレミアム）も高くなります。\n1.2倍以上＝高め（受け取るプレミアムは多め。ただし、市場は大きな動きを見込んでいるので、リスクも高め）／0.8倍以下＝低め（受け取るプレミアムは少なめ。ただし、市場は穏やかな動きを見込んでいる）／その間＝同程度。この基準は、このツールの簡易的なものです。
 「受け取る額が多い」ことと「取引が得になる」ことは別です。実際の値動きが、IVの見込みより小さく収まれば、売りは得になります。\n一般に、IVはHVより少し高めになりやすいため、「同程度」の幅を広めに取っています。`,
     },
   ];
+  // 理論プレミアム価格(HV計算。売り脚・買い脚ともHVを一律のIVとみなして計算)。受取額(未入力なら、入力したIVで計算した理論値)と比べる。
+  // IV÷HVと同じ関係(受取が理論価格より少ない=IVがHVより低め)を、金額で見たもの。
+  const fairStrikeBuy = isSp && t.rrSpreadWidth > 0 ? (kind === "put" ? strikeSell - t.rrSpreadWidth : strikeSell + t.rrSpreadWidth) : null;
+  if ((!isSp || fairStrikeBuy > 0) && days > 0) {
+    const Tfair = days / TRADING_DAYS_PER_YEAR;
+    const hvPrice = positionValue({ kind, S: price, strikeSell, strikeBuy: fairStrikeBuy, T: Tfair, ivSell: hv, ivBuy: hv });
+    const ivBuyIn = t.rrIvBuy !== null && t.rrIvBuy > 0 ? t.rrIvBuy / 100 : iv;
+    const ref = premium !== null ? premium : positionValue({ kind, S: price, strikeSell, strikeBuy: fairStrikeBuy, T: Tfair, ivSell: iv, ivBuy: ivBuyIn });
+    if (hvPrice > 0.005 && ref > 0) {
+      const diff = ref - hvPrice;
+      const sign = diff >= 0 ? "+" : "−";
+      const refLabel = premium !== null ? "受取" : "IVで計算した理論プレミアム価格";
+      items.push({
+        name: "理論プレミアム価格", value: hvPrice.toFixed(2), suffix: "（HV計算）",
+        sub: `${refLabel} ${ref.toFixed(2)}／差 ${sign}${Math.abs(diff).toFixed(2)}（${sign}${Math.abs((diff / hvPrice) * 100).toFixed(0)}%）`,
+        note: `オプションの価格（プレミアム価格。1株あたり）の理論値です。満期（${days}営業日）と同じ長さのHVを、売り脚・買い脚ともに一律のIVとみなして、Black-Scholesの式（金利0・配当なし）で計算しました（スプレッドは、売り脚−買い脚の正味の価格）。過去の実際の値動きから見て妥当な受取額の目安で、注文を出すときの目安として使えます。\n受取額が、この価格より少ないとき＝IVがHVより低め（IV÷HVが1倍未満）、多いとき＝IVがHVより高め（1倍超）です。IV÷HVと同じ関係を、金額で見たものです。\n${premium === null ? "受取プレミアム額が未入力のため、入力したIVで計算した理論価格と比べています。\\n" : ""}HVは過去の値動きなので、市場の価格（IV）とは、ずれて当然です。決算発表などをまたぐ場合は、市場の価格のほうが高いのは自然です。目安であり、断定的な判定には使えません。`,
+      });
+    }
+  }
   if (thIv && thHv) {
     items.push({
-      label: "IV換算の理論上の確率（満期時にITM）", value: pct(thIv.probItmAtExpiry),
-      sub: `HV換算 ${pct(thHv.probItmAtExpiry)}／期間中に一度でも届く目安 約${pct(thIv.probTouch, 0)}`,
+      name: "満期時ITM率", value: pct(thIv.probItmAtExpiry), suffix: "（IV換算）",
+      sub: `理論上の確率。HV換算 ${pct(thHv.probItmAtExpiry)}／期間中に一度でも届く目安 約${pct(thIv.probTouch, 0)}`,
       note: `上のHV換算の理論上の確率と同じ計算で、HVの代わりにIVを使ったものです（1σ＝IV×√(営業日数÷252)、株価の平均的な上昇・下落はないと仮定した単純な近似）。\nIVはHVより高いことが多いので、IV換算のほうが、ITMになりやすい（売りには厳しい）見積もりになります。HV換算との差は、市場が織り込んでいる「余分な変動」の大きさです。\n将来を保証するものではありません。`,
     });
   }
-  els.ivHvSummary.innerHTML = items.map((it) =>
-    `<div class="stat" data-target="orderExplain" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span><span class="stat-sub">${it.sub}</span></div>`
-  ).join("");
+  els.ivHvSummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
   els.ivHvCompare.innerHTML = thIv && thHv ? ivHvCompareHtml(t, thIv, thHv, days, itmWhen) : "";
 
   const meaning = judge.level === "rich"
@@ -1789,11 +1809,11 @@ function renderBreakEvenPrice(t, closes, todayStrike) {
 
   const items = [
     {
-      label: "現在の権利行使価格", value: todayStrike.toFixed(2), sub: "終値×比率",
+      name: "現在の権利行使価格", value: todayStrike.toFixed(2), sub: "終値×比率",
       note: "本日の終値×権利行使価格の比率です。\nスプレッドの場合は、売り系は売り建てる側、買い系は買い建てる側の権利行使価格にあたります(もう一方の権利行使価格との差額は損益分岐点に影響しません)。",
     },
     {
-      label: "損益分岐点(満期時の株価)", value: breakEven === null ? "―" : breakEven.toFixed(2),
+      name: "損益分岐点（満期時の株価）", value: breakEven === null ? "―" : breakEven.toFixed(2),
       sub: breakEven === null ? `${premiumName}を入力すると表示` : formula,
       note: `満期時にこの株価であれば、損益がちょうどゼロになる価格です(${formula})。\n`
         + (group === "sell"
@@ -1802,15 +1822,12 @@ function renderBreakEvenPrice(t, closes, todayStrike) {
         + "\nスプレッドの場合は、プレミアムに差し引き後の正味の額(受取−支払い)を入力してください。\nプレミアムは1株あたりの額で、手数料は含みません。",
     },
     {
-      label: "現在の株価との差", value: diffPct === null ? "―" : (diffPct >= 0 ? "+" : "") + (diffPct * 100).toFixed(2) + "%",
+      name: "現在の株価との差", value: diffPct === null ? "―" : (diffPct >= 0 ? "+" : "") + (diffPct * 100).toFixed(2) + "%",
       sub: `現在の株価${latest.toFixed(2)}`,
       note: "損益分岐点が、現在の株価(最新の終値)から見て何%離れているかです。\n例えばプット売りで-8%なら、株価が現在より8%下がるまでは(満期時に)損失にならない、という余裕の目安になります。",
     },
   ];
-  els.rrBreakEvenSummary.innerHTML = items.map((it) =>
-    `<div class="stat" data-target="${T}" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span>`
-    + (it.sub ? `<span class="stat-sub">${it.sub}</span>` : "") + `</div>`
-  ).join("");
+  els.rrBreakEvenSummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: `data-target="${T}"` })).join("");
 }
 
 // badgeLevel(0=最も有利〜6=最も不利)をヒートマップ同様の色クラスに変換する

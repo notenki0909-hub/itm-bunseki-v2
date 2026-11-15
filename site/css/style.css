@@ -389,3 +389,17 @@ button:disabled{opacity:.6;cursor:default}
 
 /* IVの変化×時間の経過の表: 利確の目安に届いたセル */
 .stress-table td.stress-profit{background:color-mix(in srgb,var(--gA) 24%,transparent)}
+
+/* 数字のカード: 「何の数字か」を数字の前に目立たせる(例: HV：53.2%、満期時ITM率：11.7%（HV換算）) */
+.stat .stat-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 3px}
+.stat .stat-head b{display:inline;font-size:20px}
+.stat .stat-name{font-size:13px;font-weight:700;color:var(--fg)}
+.stat .stat-suffix{font-size:12px;font-weight:700;color:var(--fg)}
+.stat .stat-line{display:block;font-size:12px;color:var(--fg);margin-top:2px}
+/* 一番上のパネル: 「最新の終値：390.22ドル」 */
+.latest-price .lp-main{display:inline-flex;align-items:baseline}
+.latest-price .lp-label{font-weight:700;color:var(--fg)}
+.latest-price .lp-unit{margin-left:0}
+
+/* 分析結果のカード: 判定する深さの表記(ITM（◯ドル）)は、名前と同じ見た目にする */
+.stat .stat-name .dep-sfx{font-size:inherit;color:inherit;font-weight:inherit}
