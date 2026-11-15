@@ -58,6 +58,19 @@ export function solveFlatIv({ kind, S, strikeSell, strikeBuy, T, premium }) {
 }
 
 /**
+ * 計算に使うIV(売り脚・買い脚)を決める。売り脚のIVの入力があればそれ(買い脚は入力があればそれ、なければ売り脚と同じ)、
+ * なければ入力した受取プレミアムに合う全体のIVを逆算する。決められないときはnull。
+ * @returns {null|{source:'input'|'calibrated', sellIv:number, buyIv:number}}
+ */
+export function resolveIvs({ kind, price, strikeSell, strikeBuy, T, premium, ivSell, ivBuy }) {
+  if (ivSell !== null && ivSell > 0) {
+    return { source: "input", sellIv: ivSell, buyIv: ivBuy !== null && ivBuy > 0 ? ivBuy : ivSell };
+  }
+  const iv = solveFlatIv({ kind, S: price, strikeSell, strikeBuy, T, premium });
+  return iv === null ? null : { source: "calibrated", sellIv: iv, buyIv: iv };
+}
+
+/**
  * ストレステスト: 株価がshockPctだけ動き、IVがivUpだけ上がったときの現在値と損益を、表にして返す。
  *
  * @param {object} p
@@ -76,19 +89,9 @@ export function solveFlatIv({ kind, S, strikeSell, strikeBuy, T, premium }) {
 export function stressTest({ kind, price, strikeSell, strikeBuy, days, premium, ivSell, ivBuy, shocks, ivUps }) {
   const T = days / TRADING_DAYS_PER_YEAR;
   if (!(price > 0) || !(strikeSell > 0) || !(T > 0)) return null;
-  let source;
-  let sellIv;
-  let buyIv;
-  if (ivSell !== null && ivSell > 0) {
-    source = "input";
-    sellIv = ivSell;
-    buyIv = ivBuy !== null && ivBuy > 0 ? ivBuy : ivSell;
-  } else {
-    sellIv = solveFlatIv({ kind, S: price, strikeSell, strikeBuy, T, premium });
-    if (sellIv === null) return null;
-    buyIv = sellIv;
-    source = "calibrated";
-  }
+  const ivs = resolveIvs({ kind, price, strikeSell, strikeBuy, T, premium, ivSell, ivBuy });
+  if (!ivs) return null;
+  const { source, sellIv, buyIv } = ivs;
   const value = (S, up) => positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell: sellIv + up, ivBuy: buyIv + up });
   const v0 = value(price, 0);
   const received = premium !== null && premium > 0 ? premium : v0;
@@ -123,4 +126,48 @@ export function judgeIvHv(ratio) {
   if (ratio >= IV_HV_RICH) return { level: "rich", word: "高め", phrase: "過去の値動き(HV)より、市場の見込み(IV)が高め（プレミアム価格も高めになります）" };
   if (ratio <= IV_HV_CHEAP) return { level: "cheap", word: "低め", phrase: "過去の値動き(HV)より、市場の見込み(IV)が低め（プレミアム価格も低めになります）" };
   return { level: "fair", word: "同程度", phrase: "過去の値動き(HV)と、市場の見込み(IV)は同程度（プレミアム価格も標準的です）" };
+}
+
+/**
+ * IVの変化×時間の経過の表(株価は今の水準のまま動かない場合)。
+ * 縦=IVの変化(全体を一律に動かす。単位は割合の絶対値。-0.1=−10ポイント)、横=満期までの残り営業日数(いま、2週間前、3日前など)。
+ * 各マスは、いまのポジションを買い戻すのに必要な価格(現在値)と、損益(受取額−現在値)。
+ * 売り脚IVが下がって0以下になるような行は出さない(最小でIV 2%を下回る行は除く)。
+ *
+ * @param {object} p
+ * @param {'put'|'call'} p.kind
+ * @param {number} p.price 現在の株価(動かないものとする)
+ * @param {number} p.strikeSell 売り建て側の権利行使価格
+ * @param {number|null} p.strikeBuy 買い建て側の権利行使価格(単体はnull)
+ * @param {number} p.days いまの満期までの営業日数
+ * @param {number|null} p.premium 入力した受取プレミアム(未入力ならnull)
+ * @param {number|null} p.ivSell 入力した売り脚のIV(割合。未入力ならnull)
+ * @param {number|null} p.ivBuy 入力した買い脚のIV(未入力ならnull)
+ * @param {number[]} p.ivChanges IVの変化(割合の絶対値。例: [-0.1, 0, 0.1])
+ * @param {number[]} p.remains 満期までの残り営業日数(例: [30, 10, 3])
+ * @returns {null|{rows:object[], meta:object}} 計算できないときはnull
+ */
+export function ivTimeTable({ kind, price, strikeSell, strikeBuy, days, premium, ivSell, ivBuy, ivChanges, remains }) {
+  const T = days / TRADING_DAYS_PER_YEAR;
+  if (!(price > 0) || !(strikeSell > 0) || !(T > 0)) return null;
+  const ivs = resolveIvs({ kind, price, strikeSell, strikeBuy, T, premium, ivSell, ivBuy });
+  if (!ivs) return null;
+  const { source, sellIv, buyIv } = ivs;
+  const value = (rem, up) => positionValue({
+    kind, S: price, strikeSell, strikeBuy, T: rem / TRADING_DAYS_PER_YEAR, ivSell: sellIv + up, ivBuy: buyIv + up,
+  });
+  const v0 = value(days, 0);
+  const received = premium !== null && premium > 0 ? premium : v0;
+  const rows = ivChanges
+    .filter((up) => Math.min(sellIv + up, buyIv + up) >= 0.02)
+    .map((up) => ({
+      ivUp: up,
+      ivSell: sellIv + up,
+      cells: remains.map((rem) => {
+        const v = value(rem, up);
+        return { remain: rem, value: v, pnl: received - v };
+      }),
+    }));
+  const width = strikeBuy === null ? null : Math.abs(strikeSell - strikeBuy);
+  return { rows, meta: { source, ivSell: sellIv, ivBuy: buyIv, v0, received, premiumInput: premium, width } };
 }

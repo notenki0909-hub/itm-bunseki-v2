@@ -13,7 +13,7 @@ import { renderDayProbChart, DAY_PROB_BANDS, renderConeChart, renderHvHistoryCha
 import { renderEntryHeatmap, ENTRY_HEATMAP_BANDS, renderDepthHeatmap, DEPTH_HEATMAP_BANDS, renderOtmHeatmap, OTM_HEATMAP_BANDS, OTM_RATE_BANDS } from "./heatmap.js";
 import { initThemeBar } from "./theme.js";
 import { isPriceDataStale } from "./marketTime.js";
-import { stressTest, solveFlatIv, judgeIvHv, TRADING_DAYS_PER_YEAR } from "./optionModel.js";
+import { stressTest, ivTimeTable, solveFlatIv, judgeIvHv, TRADING_DAYS_PER_YEAR } from "./optionModel.js";
 import { WEEKDAY_JA, weekday, parseYmd, isTradingDay, previousTradingDay, shiftTradingDays, tradingDaysBetween, expiryKind, EXPIRY_KIND_LABEL, EXPIRY_KIND_NOTE } from "./usMarket.js";
 import { addTickerToHistory, setupTickerHistoryDropdown, loadTickerHistory, mergeTickerHistory } from "./tickerHistory.js";
 
@@ -336,6 +336,10 @@ const els = {
   ivHvSummary: document.getElementById("ivHvSummary"),
   ivHvNote: document.getElementById("ivHvNote"),
   ivHvCompare: document.getElementById("ivHvCompare"),
+  ivTimeIntro: document.getElementById("ivTimeIntro"),
+  ivTimeHead: document.getElementById("ivTimeHead"),
+  ivTimeBody: document.getElementById("ivTimeBody"),
+  ivTimeNote: document.getElementById("ivTimeNote"),
   rrIvSellInput: document.getElementById("rrIvSellInput"),
   rrIvBuyInput: document.getElementById("rrIvBuyInput"),
   stressIntro: document.getElementById("stressIntro"),
@@ -1316,6 +1320,7 @@ function renderOrderCard(t) {
     renderIvHv(t, latest, type.itmWhen);
     renderOrderExit(t, dates[dates.length - 1]);
     renderStressTest(t, latest, type.itmWhen);
+    renderIvTime(t, latest, type.itmWhen, dates[dates.length - 1]);
   }
   renderBreakEvenPrice(t, closes, todayStrike);
   els.orderCard.hidden = false;
@@ -1561,6 +1566,85 @@ function renderIvHv(t, price, itmWhen) {
   els.ivHvNote.textContent = `IV${pct(iv)}は、満期と同じ長さのHV${pct(hv)}の${ratio.toFixed(2)}倍です。${judge.phrase}。${meaning}${probText}`
     + `※IVは、これからの値動きの見込みです（実際の値動きではありません）。HVは、過去に実際に動いた大きさです。決算発表などの予定された出来事をまたぐ場合は、IVが高いのは自然で、売り手に得とは限りません。判定の基準（1.2倍以上＝高め、0.8倍以下＝低め）は、このツールの簡易的なものです。`;
   setupStatExplain();
+}
+
+// 「IVの変化と時間の経過の影響(株価が変わらない場合)」の表を描画する(売り系のみ)。
+// 株価は今の水準のまま動かないとして、IVが変わり(縦)、時間が経った(横)ときに、いまのポジションを買い戻すのに必要な価格(現在値)と損益を、
+// Black-Scholes(金利0・配当なし、IVは全体が一律に動く)で再計算した目安。横は、講座の判断日に合わせて「いま」「2週間前(残り10営業日)」「3日前(残り3営業日)」。
+// 緑=利確の目安(受取額×(1−利確割合))以下に届いたマス、橙=ロスカットの逆指値の水準(受取額の1.9倍)以上、濃い色=スプレッド幅の上限に近い水準。
+const IVTIME_CHANGES = [-0.10, -0.05, 0, 0.10, 0.20, 0.30];
+
+function renderIvTime(t, price, itmWhen, asOfDate) {
+  const kind = itmWhen === "below" ? "put" : "call";
+  const isSp = t.rrVariant === "spread";
+  const days = t.windowDays;
+  const clear = (msg) => {
+    els.ivTimeIntro.textContent = "";
+    els.ivTimeHead.innerHTML = "";
+    els.ivTimeBody.innerHTML = "";
+    els.ivTimeNote.textContent = msg;
+  };
+  const premium = t.rrPremium !== null && t.rrPremium > 0 ? t.rrPremium : null;
+  const ivSell = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
+  const ivBuy = t.rrIvBuy !== null && t.rrIvBuy > 0 ? t.rrIvBuy / 100 : null;
+  if (isSp && !(t.rrSpreadWidth > 0)) { clear("権利行使価格の差額を入力すると表示します。"); return; }
+  if (premium === null && ivSell === null) { clear("受取プレミアム額、またはIV（売り建て側）を入力すると表示します。"); return; }
+  const strikeSell = price * t.ratio;
+  const strikeBuy = isSp ? (kind === "put" ? strikeSell - t.rrSpreadWidth : strikeSell + t.rrSpreadWidth) : null;
+  if (strikeBuy !== null && !(strikeBuy > 0)) { clear("権利行使価格の差額が大きすぎます（買い建て側の権利行使価格が0以下になります）。"); return; }
+
+  // 横: いま / 2週間前(残り10営業日) / 3日前(残り3営業日)。いまの満期がそれより短い列は出さない
+  const cols = [{ remain: days, name: "いま" }];
+  if (days > 10) cols.push({ remain: 10, name: "2週間前" });
+  if (days > 3) cols.push({ remain: 3, name: "3日前" });
+  const res = ivTimeTable({
+    kind, price, strikeSell, strikeBuy, days, premium, ivSell, ivBuy,
+    ivChanges: IVTIME_CHANGES, remains: cols.map((c) => c.remain),
+  });
+  if (!res) { clear("受取プレミアム額に合うIVが見つかりませんでした。受取プレミアム額（スプレッドは差し引き後の正味の額）や権利行使価格の差額を、確認してください。"); return; }
+  const { rows, meta } = res;
+  if (meta.source === "input" && meta.v0 <= 0) {
+    clear(`入力したIV（売り建て側 ${(meta.ivSell * 100).toFixed(1)}%、買い建て側 ${(meta.ivBuy * 100).toFixed(1)}%）の組み合わせでは、スプレッドの価格が0以下になります（買い建て側のほうが高くなる）。IVの差が大きすぎないか、確認してください。`);
+    return;
+  }
+
+  const received = meta.received;
+  const stopMin = received * 1.9;
+  const profitMax = received * (1 - profitPercentOf(t) / 100);
+  const maxValue = meta.width === null ? null : meta.width * 0.98;
+  const money = (v) => v.toFixed(2);
+  const pnlText = (pnl) => `${pnl >= 0 ? "+" : "−"}${Math.abs(pnl).toFixed(2)}（100株で${pnl >= 0 ? "+" : "−"}${Math.abs(pnl * 100).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}ドル）`;
+  const dateOf = (remain) => shiftTradingDays(asOfDate, -(days - remain)).slice(5);
+
+  els.ivTimeIntro.textContent = `株価は今の水準（${money(price)}）のまま動かず、IVだけが変わり、時間が経った場合に、いまのポジションを買い戻すのに必要な価格（現在値）と、そのときの損益の目安です。満期まで${days}営業日の状態を基準にしています。`;
+  els.ivTimeHead.innerHTML = `<tr><th>IVの変化</th>${cols.map((c) =>
+    `<th>${c.name}<br><span class="stress-sub">残り${c.remain}営業日（${dateOf(c.remain)}）</span></th>`).join("")}</tr>`;
+  els.ivTimeBody.innerHTML = rows.map((r) => {
+    const label = r.ivUp === 0 ? "変わらない" : `${r.ivUp > 0 ? "＋" : "−"}${Math.abs(Math.round(r.ivUp * 100))}ポイント`;
+    return `<tr><td>${label}<br><span class="stress-sub">IV ${(r.ivSell * 100).toFixed(1)}%</span></td>${r.cells.map((c) => {
+      const nearMax = maxValue !== null && c.value >= maxValue;
+      const stop = c.value >= stopMin;
+      const profit = c.value <= profitMax;
+      const cls = nearMax ? "stress-max" : stop ? "stress-stop" : profit ? "stress-profit" : "";
+      return `<td class="${cls}"><b>${money(c.value)}</b><br><span class="stress-pnl ${c.pnl < 0 ? "neg" : ""}">${pnlText(c.pnl)}</span></td>`;
+    }).join("")}</tr>`;
+  }).join("");
+
+  const ivText = meta.source === "input"
+    ? `IVは入力値を使っています（売り建て側 ${(meta.ivSell * 100).toFixed(1)}%${isSp ? `、買い建て側 ${(meta.ivBuy * 100).toFixed(1)}%${ivBuy === null ? "（売り建て側と同じ）" : ""}` : ""}）。`
+    : `IVは、受取プレミアム額${money(premium)}に合うように逆算した ${(meta.ivSell * 100).toFixed(1)}%（売り脚・買い脚とも同じ）を使っています。`;
+  const receivedText = premium === null
+    ? `受取プレミアム額が未入力のため、IVから計算した理論値 ${money(meta.v0)} を受取額の代わりにしています。`
+    : (meta.source === "input" && Math.abs(meta.v0 - premium) > Math.max(0.05, premium * 0.15)
+      ? `※入力したIVから計算した現在値（理論値 ${money(meta.v0)}）と、入力した受取プレミアム額 ${money(premium)} が離れています。損益は、入力した受取プレミアム額を基準にしています。`
+      : "");
+  els.ivTimeNote.textContent = [
+    ivText,
+    receivedText,
+    `緑のセルは、現在値が利確の目安（受取額×（1−利確割合${profitPercentOf(t)}%）＝${money(profitMax)}）以下になり、利確の条件に届いています。橙のセルは、現在値が${money(stopMin)}以上（受取額の1.9倍以上＝ロスカットの逆指値の水準）です${maxValue !== null ? "。さらに濃い色は、スプレッド幅の上限（最大損失）に近い水準です" : ""}。`,
+    "時間が経つと、株価が動かなくても現在値は下がります（時間の経過による価値の減り）。IVが上がると現在値は上がり、IVが下がると下がります（決算発表のあとは、IVが下がりやすい傾向があります）。株価も動く場合は、上のストレステストを見てください。",
+    "金利0・配当なし、IVは全体が一律に動くとして計算した目安です。実際の価格とは、スキュー・流動性などでずれます。",
+  ].filter(Boolean).join(" ");
 }
 
 // 「株価が動いたときの現在値の目安(ストレステスト)」を描画する(売り系のみ)。

@@ -386,3 +386,6 @@ button:disabled{opacity:.6;cursor:default}
 .cmp3-act{background:var(--muted)}
 .cmp3-val{flex:0 0 3.8em;text-align:right;font-size:13px}
 .cmp3-verdict{font-weight:700;color:var(--fg)}
+
+/* IVの変化×時間の経過の表: 利確の目安に届いたセル */
+.stress-table td.stress-profit{background:color-mix(in srgb,var(--gA) 24%,transparent)}
