@@ -335,6 +335,7 @@ const els = {
   rrSpreadWidthInput: document.getElementById("rrSpreadWidthInput"),
   ivHvSummary: document.getElementById("ivHvSummary"),
   ivHvNote: document.getElementById("ivHvNote"),
+  ivHvCompare: document.getElementById("ivHvCompare"),
   rrIvSellInput: document.getElementById("rrIvSellInput"),
   rrIvBuyInput: document.getElementById("rrIvBuyInput"),
   stressIntro: document.getElementById("stressIntro"),
@@ -921,7 +922,7 @@ function renderHvCard(t) {
     {
       label: `HV換算の理論上の確率（満期時にITM）`, value: pct(theory.probItmAtExpiry),
       sub: `期間中に一度でも届く目安 約${pct(theory.probTouch, 0)}`,
-      note: `HVから、満期時にITMの水準を超えている（プット系は下回る、コール系は上回る）確率を、正規分布の近似で求めたものです。\n「期間中に一度でも届く」目安は、満期時の確率の2倍（上限100%）で、毎日の終値だけを見る実績よりやや多めに出ます。\n株価の平均的な上昇・下落はないと仮定した単純な近似です。将来を保証するものではありません。`,
+      note: `HVから、満期時にITMの水準を超えている（プット系は下回る、コール系は上回る）確率を、正規分布の近似で求めたものです。\n「期間中に一度でも届く」目安は、毎日の終値だけを見る実績よりやや多めに出ます。\n株価の平均的な上昇・下落はないと仮定した単純な近似です。将来を保証するものではありません。`,
     },
     {
       label: `過去の実績（ITM発生率）`, value: actual === null ? "―" : pct(actual),
@@ -1408,9 +1409,70 @@ function renderOrderExit(t, asOfDate) {
     + " 休場日は、毎年決まっている祝日のみ反映しています（臨時の休場は反映されません）。";
 }
 
+// 「ITMになる確率の3点比較(IV換算・HV換算・過去の実績)」のHTMLを作る(売り系のIVとHVの比較セクション用)。
+//  ・IV換算: 市場の見込み(IV)から求めた理論上の確率 ・HV換算: 過去の実際の値動き(HV)から求めた理論上の確率 ・過去の実績: 同じ条件で過去にITMになった割合(分析結果と同じ)
+// 2つの見方で並べる: 「満期時にITM」(理論は正規分布の近似、実績は判定期間の最終日にITMだった割合。同じ条件で比べられる)と、
+// 「期間中に一度でもITMに届く」(理論は満期時の2倍・上限100%の目安、実績は毎日の終値で一度でも届いた割合。理論のほうが多めに出やすい)。
+// 結論の一文は、同じ条件で比べられる「満期時」で、IV換算と実績の差から作る。
+function ivHvCompareHtml(t, thIv, thHv, days, itmWhen) {
+  const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
+  const pc = periodClosesOf(t);
+  const pd = periodDatesOf(t);
+  const { depthPct } = depthInfo(t, pc);
+  const an = computeItmAnalysis(pc, { ratio: t.ratio, itmWhen, window: days, group: "sell", depthPct }, pd);
+  if (!an.entryCount) return "";
+  const actExp = an.dayProb[days - 1] ?? null;
+  const actTouch = an.overallItmProb;
+  const rowsOf = (vals) => {
+    const max = Math.max(...vals.map((x) => x.v ?? 0), 0.01);
+    return vals.map((x) =>
+      `<div class="cmp3-row"><span class="cmp3-lab">${x.lab}</span><span class="cmp3-track">${x.v === null ? "" : `<span class="cmp3-bar ${x.cls}" style="width:${Math.max(1, (x.v / max) * 100).toFixed(1)}%"></span>`}</span><b class="cmp3-val">${x.v === null ? "―" : pct(x.v)}</b></div>`).join("");
+  };
+  const grp = (title, vals) => `<div class="cmp3-group"><div class="cmp3-gtitle">${title}</div>${rowsOf(vals)}</div>`;
+  const html = grp("満期時にITMになる確率", [
+      { lab: "IV換算", cls: "cmp3-iv", v: thIv.probItmAtExpiry },
+      { lab: "HV換算", cls: "cmp3-hv", v: thHv.probItmAtExpiry },
+      { lab: "過去の実績", cls: "cmp3-act", v: actExp },
+    ])
+    + grp("期間中に一度でもITMに届く確率", [
+      { lab: "IV換算", cls: "cmp3-iv", v: thIv.probTouch },
+      { lab: "HV換算", cls: "cmp3-hv", v: thHv.probTouch },
+      { lab: "過去の実績", cls: "cmp3-act", v: actTouch },
+    ]);
+
+  // 結論の一文(満期時。IV換算と実績の比較)
+  let verdict = "";
+  if (actExp !== null) {
+    const ivP = thIv.probItmAtExpiry;
+    if (actExp === 0 && ivP > 0) {
+      verdict = `過去の実績では、満期時にITMだったことは一度もありません。市場の見込み(IV換算)は${pct(ivP)}で、過去の実績より、ITMになりやすいと見ています。過去と同じ値動きなら、受け取るプレミアムが、過去の実績のリスクを上回る側です（ただし、市場は、過去の実績より大きな動きを見込んでいるので、リスクも高めです）。ただし、調べた期間の値動きが穏やかだっただけの可能性もあります。`;
+    } else if (actExp > 0) {
+      const r = ivP / actExp;
+      if (r >= 1.25) verdict = `市場の見込み(IV換算 ${pct(ivP)})は、過去の実績(${pct(actExp)})より、満期時にITMになりやすいと見ています。過去と同じ値動きなら、受け取るプレミアムが、過去の実績のリスクを上回る側です（ただし、市場は、過去の実績より大きな動きを見込んでいるので、リスクも高めです）。ただし、調べた期間の値動きが穏やかだっただけの可能性もあります。`;
+      else if (r <= 0.8) verdict = `市場の見込み(IV換算 ${pct(ivP)})は、過去の実績(${pct(actExp)})より、満期時にITMになりにくいと見ています。過去と同じ値動きなら、受け取るプレミアムが、過去の実績のリスクに見合わない側です（市場は、過去の実績より穏やかな動きを見込んでいます）。ただし、調べた期間が荒れていただけの可能性もあります。`;
+      else verdict = `市場の見込み(IV換算 ${pct(ivP)})は、過去の実績(${pct(actExp)})と、ほぼ同じ水準です。`;
+    }
+  }
+  const trials = Math.max(1, Math.round(an.entryCount / days));
+  const expCount = actExp === null ? null : Math.round(actExp * an.entryCount);
+  const period = pd && pd.length ? `${pd[0]}〜${pd[pd.length - 1]}` : "";
+  const note = `過去の実績は、${period ? `${period}の` : ""}${an.entryCount}件のエントリーから求めています（判定期間が重なるため、独立した試行は約${trials}回分です）。`
+    + (expCount === null ? "" : `満期時にITMだったのは${expCount}件、期間中に一度でも届いたのは${an.itmEntryCount}件です。`)
+    + "「期間中に一度でも届く」の理論値は、毎日の終値だけを見る実績より、多めに出やすい点に注意してください。";
+  const explain = "同じ権利行使価格（判定する深さ込み）について、ITMになる確率を3つの見方で並べます。\n"
+    + "IV換算＝市場のこれからの見込み（IV）から求めた理論上の確率。HV換算＝過去に実際に動いた大きさ（HV）から求めた理論上の確率。過去の実績＝同じ条件で、過去にITMになった割合（分析結果と同じ）。\n"
+    + "「満期時」は、判定期間の最終日にITMだった割合で、理論と実績を同じ条件で比べられます。「期間中に一度でも」の理論値は、毎日の終値だけを見る実績より、多めに出やすいです。\n"
+    + "棒の長さは、それぞれの段の中での比較です。将来を保証するものではありません。";
+  return `<div class="chart-title" data-note="${explain}">ITMになる確率の3点比較（IV換算・HV換算・過去の実績）</div>`
+    + html
+    + (verdict ? `<p class="sub cmp3-verdict">${verdict}</p>` : "")
+    + `<p class="sub">${note}</p>`;
+}
+
 // 「IVとHVの比較」を描画する(売り系のみ)。
 // IV(オプション価格に織り込まれた将来の変動の大きさ)が、HV(過去の実際の値動きの大きさ。満期と同じ長さ)の何倍かを見て、
-// 市場の見込み(IV)が、過去の値動き(HV)より高め(プレミアム価格も高め。売りに有利)か低め(プレミアム価格も低め。売りに不利)かの目安にする。
+// 市場の見込み(IV)が、過去の値動き(HV)より高め(受け取るプレミアムは多め。ただし市場は大きな動きを見込んでいるのでリスクも高め)か低め(プレミアムは少なめ)かの目安にする。
+// 「有利/不利」とは書かない(プレミアムの多さだけを指すのか、取引全体の損得かが紛らわしいため)。
 // あわせて、HVの代わりにIVを使った理論上の確率(満期時にITM)を、HV換算の確率と並べて見せる(IVが高いほど、ITMになりやすい見積もりになる)。
 // IVは、売り建て側のIVの入力があればそれを使い、なければ受取プレミアム額から逆算した全体のIVを使う。
 function renderIvHv(t, price, itmWhen) {
@@ -1419,6 +1481,7 @@ function renderIvHv(t, price, itmWhen) {
   const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
   const clear = (msg) => {
     els.ivHvSummary.innerHTML = "";
+    els.ivHvCompare.innerHTML = "";
     els.ivHvNote.textContent = msg;
   };
   const premium = t.rrPremium !== null && t.rrPremium > 0 ? t.rrPremium : null;
@@ -1455,7 +1518,9 @@ function renderIvHv(t, price, itmWhen) {
   const ivSub = source === "input"
     ? "証券会社のオプションチェーンの値"
     : `受取プレミアム額${premium.toFixed(2)}に合うIV（${isSp ? "売り脚・買い脚を同じIVとみなした目安" : "売り脚のIV"}）`;
-  const meaningShort = judge.level === "rich" ? "売りに有利な側" : judge.level === "cheap" ? "売りに不利な側" : "標準的な水準";
+  const meaningShort = judge.level === "rich" ? "受け取るプレミアムは多め。ただし、市場は大きな動きを見込んでいるので、リスクも高め"
+    : judge.level === "cheap" ? "受け取るプレミアムは少なめ。ただし、市場は穏やかな動きを見込んでいる"
+      : "標準的な水準";
   const items = [
     {
       label: ivLabel, value: pct(iv), sub: ivSub,
@@ -1469,7 +1534,8 @@ function renderIvHv(t, price, itmWhen) {
     {
       label: "IV÷HV（倍率）", value: `${ratio.toFixed(2)}倍`,
       sub: `${judge.phrase}／${meaningShort}`,
-      note: `IVがHVの何倍かを見て、市場のこれからの見込み（IV）が、過去の実際の値動き（HV）より高めか低めかを判断する目安です。IVが高いほど、オプションの価格（プレミアム）も高くなります。\n1.2倍以上＝高め（プレミアム価格も高め。売り手に有利）／0.8倍以下＝低め（プレミアム価格も低め。売り手に不利）／その間＝同程度。この基準は、このツールの簡易的なものです。\n一般に、IVはHVより少し高めになりやすいため、「同程度」の幅を広めに取っています。`,
+      note: `IVがHVの何倍かを見て、市場のこれからの見込み（IV）が、過去の実際の値動き（HV）より高めか低めかを判断する目安です。IVが高いほど、オプションの価格（プレミアム）も高くなります。\n1.2倍以上＝高め（受け取るプレミアムは多め。ただし、市場は大きな動きを見込んでいるので、リスクも高め）／0.8倍以下＝低め（受け取るプレミアムは少なめ。ただし、市場は穏やかな動きを見込んでいる）／その間＝同程度。この基準は、このツールの簡易的なものです。
+「受け取る額が多い」ことと「取引が得になる」ことは別です。実際の値動きが、IVの見込みより小さく収まれば、売りは得になります。\n一般に、IVはHVより少し高めになりやすいため、「同程度」の幅を広めに取っています。`,
     },
   ];
   if (thIv && thHv) {
@@ -1482,11 +1548,12 @@ function renderIvHv(t, price, itmWhen) {
   els.ivHvSummary.innerHTML = items.map((it) =>
     `<div class="stat" data-target="orderExplain" data-note="${it.note}"><b>${it.value}</b><span>${it.label}</span><span class="stat-sub">${it.sub}</span></div>`
   ).join("");
+  els.ivHvCompare.innerHTML = thIv && thHv ? ivHvCompareHtml(t, thIv, thHv, days, itmWhen) : "";
 
   const meaning = judge.level === "rich"
-    ? "売り手にとっては、高い価格で売れるので有利な側です。ただし、市場が今後の大きな動き（決算発表など）を見込んでいるためで、実際に大きく動けば不利になります。"
+    ? "売り手にとっては、受け取るプレミアムは多めです。ただし、市場が今後の大きな動き（決算発表など）を見込んでいるためで、ITMになる確率の見積もりも高く、リスクも高めです。実際の値動きがIVの見込みより小さく収まれば、売りは得になります。"
     : judge.level === "cheap"
-      ? "売り手にとっては、受け取る額が少ない割に、動いたときのリスクが大きい側なので、不利です。"
+      ? "売り手にとっては、受け取るプレミアムは少なめです。ただし、市場は穏やかな動きを見込んでいます。実際に大きく動くと、受け取る額に対して損失が大きくなります。"
       : "売り手にとっては、標準的な条件です。";
   const probText = thIv && thHv
     ? `IV換算で見ると、満期時にITMになる理論上の確率は${pct(thIv.probItmAtExpiry)}（HV換算は${pct(thHv.probItmAtExpiry)}）です。`

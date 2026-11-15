@@ -371,3 +371,18 @@ button:disabled{opacity:.6;cursor:default}
 
 /* IVとHVの比較: 説明文が長いので、折り返す */
 #ivHvSummary .stat .stat-sub{white-space:normal;max-width:300px}
+
+/* IVとHVの比較: ITMになる確率の3点比較(IV換算・HV換算・過去の実績)の棒 */
+.cmp3{margin-top:12px;max-width:560px}
+.cmp3 .chart-title{margin:0 0 6px}
+.cmp3-group{margin:8px 0 12px}
+.cmp3-gtitle{font-size:12.5px;font-weight:700;margin-bottom:4px}
+.cmp3-row{display:flex;align-items:center;gap:8px;margin:3px 0}
+.cmp3-lab{flex:0 0 5.6em;font-size:12.5px}
+.cmp3-track{flex:1;min-width:0;height:14px;border-radius:7px;background:color-mix(in srgb,var(--muted) 14%,transparent);overflow:hidden}
+.cmp3-bar{display:block;height:100%;border-radius:7px}
+.cmp3-iv{background:var(--gradOrange)}
+.cmp3-hv{background:var(--gradLightBlue)}
+.cmp3-act{background:var(--muted)}
+.cmp3-val{flex:0 0 3.8em;text-align:right;font-size:13px}
+.cmp3-verdict{font-weight:700;color:var(--fg)}

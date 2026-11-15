@@ -112,7 +112,7 @@ export function stressTest({ kind, price, strikeSell, strikeBuy, days, premium, 
 
 /**
  * IV÷HVの倍率から、市場の見込み(IV)が、過去の値動き(HV)より高めか低めかを判定する(売り手の目線)。
- * IVが高いほど、オプションの価格(プレミアム)も高くなる(売り手には有利な側)。
+ * IVが高いほど、オプションの価格(プレミアム)も高くなる(受け取る額は多いが、市場が大きな動きを見込んでいるのでリスクも高い)。
  * 目安の基準(このツールの簡易的な基準): 1.2倍以上=高め、0.8倍以下=低め、その間=同程度。
  * 一般にIVはHVより少し高めになりやすいため、「同程度」の幅を持たせている。
  * @returns {{level:'rich'|'fair'|'cheap', word:string, phrase:string}}
