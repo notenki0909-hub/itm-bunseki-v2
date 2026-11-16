@@ -1,0 +1,82 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script>try{var t=JSON.parse(localStorage.getItem("pp_theme")||"{}");if(t.pal&&t.pal!=="genko")document.documentElement.setAttribute("data-pal",t.pal);if(t.mode==="dark"||t.mode==="light")document.documentElement.setAttribute("data-mode",t.mode);}catch(e){}</script>
+<title>ロールオーバー計算機（ブルプット） - ITM分析ツール Ver2</title>
+<link rel="stylesheet" href="css/style.css">
+</head><body>
+<div class="wrap">
+  <div class="topbar"><h1>ロールオーバー計算機（ブルプット）</h1><span class="pagenav"><a href="index.html">← 分析ページへ戻る</a><a href="guide.html#g-roll">使い方・見方</a></span></div>
+  <div id="theme-bar"></div>
+  <p class="sub">ブルプットのローリング（既存のブルプットを反対売買で決済し、新しいブルプットを新規に建てる）の損益を、注文を出す前に確認します。証券会社（サクソバンク）のローリング注文の表示に合わせて、<b>ローリング価格（新規の受取−既存の反対売買の支払い）に、既存建玉の当初の受取を加えた価格</b>で、利確・損益0・損切を判断します。金額はすべて1株あたりで、100株（1契約）あたりの金額も併記します。</p>
+  <p class="sub" style="margin-top:-14px">入力内容は自動的にブラウザに保存されます。損切りと新規の注文を同時に出すかどうかは、計算には関係しません。</p>
+
+  <div class="card">
+    <div class="order-head roll-modebar" style="margin-bottom:12px">
+      <button type="button" class="sp-btn active" id="modeSimple">簡易版</button>
+      <button type="button" class="sp-btn" id="modeDetail">詳細版</button>
+      <span class="field-hint" id="modeHint"></span>
+    </div>
+
+    <div class="roll-group">
+      <h3>既存建玉（損切りするブルプット）</h3>
+      <div class="form-row">
+        <div class="field roll-detail" hidden><label for="rollOldSell">売りの権利行使価格</label><input id="rollOldSell" type="number" step="0.01" min="0" placeholder="例: 525"></div>
+        <div class="field roll-detail" hidden><label for="rollOldBuy">買いの権利行使価格</label><input id="rollOldBuy" type="number" step="0.01" min="0" placeholder="例: 515"></div>
+        <div class="field"><label for="rollQ0">枚数</label><input id="rollQ0" type="number" step="1" min="1" value="1"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label class="roll-key" for="rollP0">既存建玉の当初の受取プレミアム額<span class="roll-unit">（1枚分）</span></label><input id="rollP0" type="number" step="0.01" min="0" placeholder="例: 1.20"></div>
+        <div class="field"><label class="roll-key" for="rollB">既存建玉の反対売買時の支払い額<span class="roll-unit">（1枚分）</span></label><input id="rollB" type="number" step="0.01" min="0" placeholder="例: 2.00"></div>
+      </div>
+    </div>
+
+    <div class="roll-group">
+      <h3>新規建玉（新しいブルプット）</h3>
+      <div class="form-row">
+        <div class="field roll-detail" hidden><label for="rollNewSell">売りの権利行使価格</label><input id="rollNewSell" type="number" step="0.01" min="0" placeholder="例: 520"></div>
+        <div class="field roll-detail" hidden><label for="rollNewBuy">買いの権利行使価格</label><input id="rollNewBuy" type="number" step="0.01" min="0" placeholder="例: 510"></div>
+        <div class="field"><label for="rollQ1">枚数</label><input id="rollQ1" type="number" step="1" min="1" value="1"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label class="roll-key" for="rollN" id="rollNLabel">新規発注の受取プレミアム額<span class="roll-unit">（1枚分）</span></label><input id="rollN" type="number" step="0.01" min="0" placeholder="例: 0.75"></div>
+        <div class="field"><label class="roll-key" for="rollX">新規の利確割合(%)</label><input id="rollX" type="number" step="1" min="0" max="100" placeholder="80"></div>
+      </div>
+    </div>
+    <p class="sub" id="rollInputNote" style="margin:0"></p>
+    <p class="sub" style="margin:6px 0 0">受取・支払いは、すべて<b>1枚分（1組・1株あたり）の価格</b>を入れます。入力した枚数をかけた合計で計算します。</p>
+  </div>
+
+  <div id="rollResultCard" class="card" hidden>
+    <h2 style="margin:0 0 8px;font-size:16px">計算結果</h2>
+    <div class="summary" id="rollSummary"></div>
+    <p class="sub" id="rollResultNote" style="margin:8px 0 0"></p>
+  </div>
+
+  <div id="rollChartCard" class="card" hidden>
+    <h2 style="margin:0 0 4px;font-size:16px">満期時の通算損益（新規を満期まで持った場合）</h2>
+    <p class="sub" style="margin:0 0 8px">既存建玉の決済損益と、新規ブルプットの満期時の損益を合わせた、100株あたりのドルです。</p>
+    <div id="rollChart" class="roll-chart"></div>
+    <p class="sub" id="rollChartNote" style="margin:8px 0 0"></p>
+  </div>
+
+  <div id="rollItmCard" class="card roll-detail" hidden>
+    <h2 style="margin:0 0 4px;font-size:16px">新しい売りの権利行使価格が、ITMになる確率の目安</h2>
+    <p class="sub" style="margin:0 0 10px">銘柄と新規の満期日を入力すると、新規の売りの権利行使価格が、満期時にITM（株価がそれを下回る）になる確率の目安を、HV換算と過去の実績で表示します。銘柄の入力は任意で、空欄でも、上の損益の計算は使えます。</p>
+    <div class="form-row">
+      <div class="field"><label for="rollTicker">ティッカー</label><input id="rollTicker" type="text" placeholder="AAPL" autocomplete="off"></div>
+      <div class="field"><label for="rollExpiry">新規の満期日</label><input id="rollExpiry" type="date"></div>
+      <button id="rollItmBtn" type="button">ITM確率を表示</button>
+    </div>
+    <div id="rollItmStatus" class="sub" style="margin:0 0 8px"></div>
+    <div class="summary" id="rollItmSummary"></div>
+    <p class="sub" id="rollItmNote" style="margin:8px 0 0"></p>
+  </div>
+
+  <div class="disc">
+    ・計算は、満期時の価値を基準にした目安です。時間価値は見ないので、満期前の実際の価格とは、ずれます。手数料は含みません。<br>
+    ・必要証拠金の増減は計算しません（枚数が増えると、証拠金も増えます）。証券会社の画面で確認してください。<br>
+    ・ローリングをするかどうか、いつ行うかの判断は、講座のルールとご自身の判断で行ってください。
+  </div>
+</div>
+<script type="module" src="js/roll.js"></script>
+</body></html>

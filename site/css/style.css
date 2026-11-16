@@ -403,3 +403,20 @@ button:disabled{opacity:.6;cursor:default}
 
 /* 分析結果のカード: 判定する深さの表記(ITM（◯ドル）)は、名前と同じ見た目にする */
 .stat .stat-name .dep-sfx{font-size:inherit;color:inherit;font-weight:inherit}
+
+/* ロールオーバー計算機 */
+.roll-detail[hidden]{display:none}
+.stat .stat-suffix.roll-profit{color:var(--gA)}
+.stat .stat-suffix.roll-loss{color:var(--gC)}
+.roll-chart{max-width:680px}
+.roll-chart-svg{width:100%;height:auto;display:block}
+.roll-modebar{flex-wrap:wrap;gap:8px 10px}
+.roll-modebar .sp-btn{white-space:nowrap;flex:0 0 auto}
+.roll-modebar .field-hint{flex:1 1 100%}
+/* ロールオーバー計算機: 主要な入力(受取・支払い・利確割合)の見出しを目立たせる */
+.field label.roll-key{font-size:14.5px;font-weight:700;color:var(--fg);padding-left:8px;border-left:4px solid var(--accent);line-height:1.4}
+#rollSummary .stat .stat-sub,#rollItmSummary .stat .stat-sub{white-space:normal;max-width:300px}
+#rollSummary .stat,#rollItmSummary .stat{max-width:100%;min-width:0}
+.roll-group{border:1px solid var(--line);border-radius:10px;padding:12px 14px 4px;margin-bottom:14px;background:color-mix(in srgb,var(--field) 55%,transparent)}
+.roll-group h3{margin:0 0 10px;font-size:14px}
+.field label.roll-key .roll-unit{font-size:12px;font-weight:400;color:var(--muted);margin-left:2px}
