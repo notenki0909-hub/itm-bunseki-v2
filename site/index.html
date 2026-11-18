@@ -473,12 +473,14 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
 このツールは終値だけから計算します。オプション価格に織り込まれた将来の変動の大きさ（IV）とは別のもので、IVはここでは取得できません。
 取得済みの全データ（最大800営業日）のうち、基準日（最新の終値の日。日付を指定したときはその日）までを使います。">HV（歴史的ボラティリティ）</h2>
     <p class="basis basis-hv"><i></i><b>根拠：HV</b>　過去の実績の「ふだんの荒れ具合」と比べて、いまがどうかを見ます。HVから計算した理論値で、実際に起きたことそのものではありません。</p>
-    <p class="sub" style="margin:0 0 10px">過去の値動きの大きさを、年率換算の%で表します。まず、<b>満期と同じ長さのHV</b>（下のグラフと「1σの値動き」の計算に使う値）を表示します。カードをクリックすると、過去1年のHVの推移グラフが出ます。</p>
+    <p class="sub" style="margin:0 0 10px">過去の値動きの大きさを、年率換算の%で表します。まず、<b>満期と同じ長さのHV</b>（グラフと「1σの値動き」の計算に使う値）を表示します。カードをクリックすると、過去1年のHVの推移グラフが出ます。</p>
     <div class="chart-title" id="hvMatchTitle" style="margin-top:4px">満期と同じ長さのHV（年率）</div>
     <div class="summary" id="hvMatchSummary"></div>
+    <div data-only="buy">
     <div class="chart-title" id="hvTheoryTitle">満期までの値動きの目安と、権利行使価格の位置</div>
     <div id="hvConeWrap" class="hv-cone"></div>
     <p class="sub" id="hvConeLegend" style="margin:4px 0 10px"></p>
+    </div>
     <div class="summary" id="hvTheorySummary"></div>
     <p class="sub" id="hvTheoryNote" style="margin:8px 0 0"></p>
   </div>
@@ -495,6 +497,10 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
         <h3 style="margin:0 0 8px;font-size:14px" id="ivHvTitle">IVとHVの比較（市場の見込みは、過去の値動きより高めか低めか）</h3>
         <div class="summary" id="ivHvSummary"></div>
         <p class="sub" id="ivHvNote" style="margin:8px 0 0"></p>
+
+        <div class="chart-title" id="ivConeTitle" style="margin-top:14px">満期までの値動きの目安（HVとIV）と、権利行使価格の位置</div>
+        <div id="ivConeWrap" class="hv-cone"></div>
+        <p class="sub" id="ivConeLegend" style="margin:4px 0 0"></p>
 
       </div>
     </div>

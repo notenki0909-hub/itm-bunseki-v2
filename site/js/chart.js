@@ -95,8 +95,9 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
  * @param {string} p.barrierLabel ITMの水準に添える文字
  * @param {number|null} p.markBefore 満期のこの営業日数前に縦線を引く(満期までの日数より小さいときだけ。例: 10＝満期の10営業日前)。その位置の±1σの株価も出す
  * @param {string} p.markLabel 縦線の下に出す文字(日付など)
+ * @param {number|null} p.ivSigmaPct IV基準の満期までの1σ(割合)。あれば、HV基準の帯(青)にIV基準の±1σの帯(オレンジ)を重ねる
  */
-export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "" }) {
+export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", ivSigmaPct = null }) {
   const w = 640;
   const h = 300;
   const padL = 50;
@@ -109,8 +110,10 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   const xPast = (k) => padL + (xNow - padL) * (k / nPast);
   const xFut = (t) => xNow + (xEnd - xNow) * (t / days);
 
-  const lo = Math.min(...pastCloses, price * (1 - 2 * sigmaPct), barrier);
-  const hi = Math.max(...pastCloses, price * (1 + 2 * sigmaPct), barrier);
+  const hasIv = ivSigmaPct !== null && ivSigmaPct > 0;
+  const spanSig = Math.max(2 * sigmaPct, hasIv ? ivSigmaPct : 0);
+  const lo = Math.min(...pastCloses, price * (1 - spanSig), barrier);
+  const hi = Math.max(...pastCloses, price * (1 + spanSig), barrier);
   const pad = (hi - lo) * 0.06;
   const yMin = lo - pad;
   const yMax = hi + pad;
@@ -127,19 +130,20 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
 
   // コーン(±1σ・±2σ)
   const steps = 24;
-  const band = (mult) => {
+  const band = (mult, sig = sigmaPct) => {
     const up = [];
     const dn = [];
     for (let s = 0; s <= steps; s++) {
       const t = (days * s) / steps;
-      const spread = price * sigmaPct * mult * Math.sqrt(t / days);
+      const spread = price * sig * mult * Math.sqrt(t / days);
       up.push(`${f(xFut(t))},${f(y(price + spread))}`);
       dn.push(`${f(xFut(t))},${f(y(price - spread))}`);
     }
     return `${up.join(" ")} ${dn.reverse().join(" ")}`;
   };
   const cone = `<polygon points="${band(2)}" fill="color-mix(in srgb, var(--accent) 10%, transparent)" stroke="none"/>`
-    + `<polygon points="${band(1)}" fill="color-mix(in srgb, var(--accent) 24%, transparent)" stroke="var(--accent)" stroke-width="1"/>`;
+    + `<polygon points="${band(1)}" fill="color-mix(in srgb, var(--accent) 24%, transparent)" stroke="var(--accent)" stroke-width="1"/>`
+    + (hasIv ? `<polygon points="${band(1, ivSigmaPct)}" fill="color-mix(in srgb, var(--gradOrange) 10%, transparent)" stroke="var(--gradOrange)" stroke-width="1.8" stroke-dasharray="6 3"/>` : "");
 
   // ITM側の領域(赤い薄い帯)と、ITMの水準の線
   const yb = y(barrier);
@@ -159,29 +163,48 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   const expiryLine = `<line x1="${f(xNow)}" y1="${padT}" x2="${f(xNow)}" y2="${h - padB}" stroke="var(--line)" stroke-width="1"/>`
     + `<line x1="${f(xEnd)}" y1="${padT}" x2="${f(xEnd)}" y2="${h - padB}" stroke="var(--muted)" stroke-width="1"/>`;
 
-  // 右端の価格ラベル(+1σ・いま・−1σ)。ITMの水準のラベルと重ならないよう、右端には出さない
-  const lab = (v, text, color) => `<text x="${f(xEnd + 6)}" y="${f(y(v) + 3)}" font-size="10.5" fill="${color}">${text}</text>`;
-  const rightLabels = lab(price * (1 + sigmaPct), `+1σ ${(price * (1 + sigmaPct)).toFixed(1)}`, "var(--accent)")
-    + lab(price, `いま ${price.toFixed(1)}`, "var(--fg)")
-    + lab(price * (1 - sigmaPct), `−1σ ${(price * (1 - sigmaPct)).toFixed(1)}`, "var(--accent)");
+  // 右端の価格ラベル(+1σ・いま・−1σ。IVがあれば、HV・IVの両方)。縦に近いものは、重ならないよう下へずらす
+  const labItems = hasIv
+    ? [
+      { v: price * (1 + sigmaPct), text: `HV +1σ ${(price * (1 + sigmaPct)).toFixed(1)}`, color: "var(--accent)" },
+      { v: price * (1 + ivSigmaPct), text: `IV +1σ ${(price * (1 + ivSigmaPct)).toFixed(1)}`, color: "var(--gradOrange)" },
+      { v: price, text: `いま ${price.toFixed(1)}`, color: "var(--fg)" },
+      { v: price * (1 - sigmaPct), text: `HV −1σ ${(price * (1 - sigmaPct)).toFixed(1)}`, color: "var(--accent)" },
+      { v: price * (1 - ivSigmaPct), text: `IV −1σ ${(price * (1 - ivSigmaPct)).toFixed(1)}`, color: "var(--gradOrange)" },
+    ]
+    : [
+      { v: price * (1 + sigmaPct), text: `+1σ ${(price * (1 + sigmaPct)).toFixed(1)}`, color: "var(--accent)" },
+      { v: price, text: `いま ${price.toFixed(1)}`, color: "var(--fg)" },
+      { v: price * (1 - sigmaPct), text: `−1σ ${(price * (1 - sigmaPct)).toFixed(1)}`, color: "var(--accent)" },
+    ];
+  const nudge = (items) => {
+    const sorted = items.map((it) => ({ ...it, yy: y(it.v) + 3 })).sort((p, q) => p.yy - q.yy);
+    for (let i = 1; i < sorted.length; i++) if (sorted[i].yy - sorted[i - 1].yy < 12) sorted[i].yy = sorted[i - 1].yy + 12;
+    return sorted;
+  };
+  const rightLabels = nudge(labItems).map((it) => `<text x="${f(xEnd + 6)}" y="${f(it.yy)}" font-size="10.5" fill="${it.color}">${it.text}</text>`).join("");
   const bottomLabels = `<text x="${f(xNow)}" y="${h - 20}" font-size="10.5" text-anchor="middle" fill="var(--muted)">${nowLabel}</text>`
     + `<text x="${f(xEnd)}" y="${h - 20}" font-size="10.5" text-anchor="middle" fill="var(--muted)">${expiryLabel}</text>`
     + `<text x="${f(padL)}" y="${h - 20}" font-size="10.5" text-anchor="start" fill="var(--muted)">直近${nPast}営業日</text>`;
 
-  // 満期のN営業日前の縦線と、その位置(いまからの経過日数＝days−N)の±1σの株価
+  // 満期のN営業日前の縦線と、その位置(いまからの経過日数＝days−N)の±1σの株価(IVがあれば、HV・IVの両方)
   let mark = "";
   if (markBefore !== null && markBefore > 0 && markBefore < days) {
     const t = days - markBefore;
     const x = xFut(t);
-    const spread = price * sigmaPct * Math.sqrt(t / days);
-    const vUp = price + spread;
-    const vDn = price - spread;
-    const col = "var(--gradOrange)";
-    mark = `<line x1="${f(x)}" y1="${padT}" x2="${f(x)}" y2="${h - padB}" stroke="${col}" stroke-width="1.8" stroke-dasharray="5 3"/>`
-      + `<circle cx="${f(x)}" cy="${f(y(vUp))}" r="3.5" fill="${col}"/><circle cx="${f(x)}" cy="${f(y(vDn))}" r="3.5" fill="${col}"/>`
-      + `<text x="${f(x + 6)}" y="${f(y(vUp) - 5)}" font-size="10.5" font-weight="700" fill="${col}">+1σ ${vUp.toFixed(1)}</text>`
-      + `<text x="${f(x + 6)}" y="${f(y(vDn) + 13)}" font-size="10.5" font-weight="700" fill="${col}">−1σ ${vDn.toFixed(1)}</text>`
-      + `<text x="${f(x)}" y="${h - 6}" font-size="10.5" font-weight="700" text-anchor="middle" fill="${col}">${markLabel}</text>`;
+    const line = "var(--muted)";
+    const one = (sig, col, pre) => {
+      const spread = price * sig * Math.sqrt(t / days);
+      const vUp = price + spread;
+      const vDn = price - spread;
+      return `<circle cx="${f(x)}" cy="${f(y(vUp))}" r="3.5" fill="${col}"/><circle cx="${f(x)}" cy="${f(y(vDn))}" r="3.5" fill="${col}"/>`
+        + `<text x="${f(x + 6)}" y="${f(y(vUp) - 5)}" font-size="10.5" font-weight="700" fill="${col}">${pre}+1σ ${vUp.toFixed(1)}</text>`
+        + `<text x="${f(x + 6)}" y="${f(y(vDn) + 13)}" font-size="10.5" font-weight="700" fill="${col}">${pre}−1σ ${vDn.toFixed(1)}</text>`;
+    };
+    mark = `<line x1="${f(x)}" y1="${padT}" x2="${f(x)}" y2="${h - padB}" stroke="${line}" stroke-width="1.8" stroke-dasharray="5 3"/>`
+      + one(sigmaPct, "var(--accent)", hasIv ? "HV " : "")
+      + (hasIv ? one(ivSigmaPct, "var(--gradOrange)", "IV ") : "")
+      + `<text x="${f(x)}" y="${h - 6}" font-size="10.5" font-weight="700" text-anchor="middle" fill="${line}">${markLabel}</text>`;
   }
 
   return `<svg viewBox="0 0 ${w} ${h}" class="chart cone-chart" role="img" aria-label="満期までの値動きの目安とITMの水準">`
