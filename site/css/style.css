@@ -506,3 +506,17 @@ details.mini>summary{cursor:pointer;font-size:12.5px;color:var(--accent)}
 .guide li{margin:4px 0}
 .risk-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
 #stressWrap[hidden],#ivTimeWrap[hidden]{display:none}
+
+/* ---- 根拠の表示(過去の実績／HV／IV)・まとめの表 ---- */
+.basis{margin:0 0 10px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;line-height:1.6}
+.basis i,.basis-tag i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:baseline}
+.basis-act i{background:var(--muted)}
+.basis-hv i{background:var(--gradLightBlue)}
+.basis-iv i{background:var(--gradOrange)}
+.basis-none i{background:transparent;border:1px solid var(--muted)}
+.basis-tag{display:inline-block;white-space:nowrap;font-size:12px;font-weight:600}
+.concl-table td{vertical-align:top;text-align:left;font-size:13px;line-height:1.6}
+.concl-table td.cc-n{width:1.5em;text-align:center;color:var(--muted)}
+.concl-table td.cc-res{font-weight:600}
+details.mini#volDetails{margin-top:14px}
+details.mini#volDetails[hidden]{display:none}

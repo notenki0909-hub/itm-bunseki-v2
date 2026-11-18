@@ -18,17 +18,18 @@
     <nav class="c2-nav" id="bandNav" aria-label="セクションへ移動">
       <a href="#s1"><span class="n">1</span>最低条件</a>
       <a href="#s2"><span class="n">2</span>注文プラン</a>
-      <a href="#s3" hidden><span class="n">3</span>結論</a>
-      <a href="#s4" hidden><span class="n">4</span>見比べ</a>
-      <a href="#s5" hidden><span class="n">5</span>見直し</a>
-      <a href="#s6" hidden><span class="n">6</span>リスク確認</a>
-      <a href="#s7" hidden><span class="n">7</span>注文まとめ</a>
-      <a href="#s8" hidden><span class="n">8</span>値動きの背景</a>
+      <a href="#s3" hidden><span class="n">3</span>過去の実績</a>
+      <a href="#s4" hidden><span class="n">4</span>HV</a>
+      <a href="#s5" hidden><span class="n">5</span>IV</a>
+      <a href="#s6" hidden><span class="n">6</span>まとめ</a>
+      <a href="#s7" hidden><span class="n">7</span>見直し</a>
+      <a href="#s8" hidden><span class="n">8</span>リスク確認</a>
+      <a href="#s9" hidden><span class="n">9</span>注文まとめ</a>
     </nav>
   </div>
 
   <div class="flow">
-    <b>使い方の流れ</b>：①まず、<b>最低条件</b>（直近7営業日の値動き）を確認する → ②いま考えている<b>注文プラン</b>を入れる → ③そのプランの分析結果を見る（3・4） → ④分析結果から、よりよい内容を探して<b>採用</b>する（5。採用すると、②の注文プランに反映される） → ⑤リスクを確認して（6）、<b>注文まとめ</b>にする（7）
+    <b>使い方の流れ</b>：①<b>最低条件</b>（直近7営業日の値動き）を確認する → ②いま考えている<b>注文プラン</b>を入れる → 次の3つを、この順に見る：③<b>過去の実績</b>（実際に起きたこと。判断の土台）→ ④<b>HV</b>（過去の値動きの大きさ。いまは実績の頃より荒れているか）→ ⑤<b>IV</b>（これからの市場の見込み）→ ⑥<b>まとめ</b>で3つの見方がそろっているかを確認 → ⑦分析結果から、よりよい内容を探して<b>採用</b>する（採用すると、②の注文プランに反映される）→ ⑧リスクを確認して、⑨<b>注文まとめ</b>にする
   </div>
 
   <details class="sec" id="s1" open>
@@ -48,8 +49,8 @@
       </div>
 
   <div id="conditionCard" class="card in-sec" hidden>
-    <h2 style="margin:0 0 10px;font-size:16px">エントリー条件で絞り込み</h2>
-    <p class="sub" style="margin:0 0 10px"><b>判定基準：</b>「分析結果」と同じ権利行使価格の基準に加えて、<b>指定した値動き条件に当てはまった日だけ</b>に絞ってエントリーした場合を判定します（分析結果の対象日を、値動き条件でさらに絞り込んだものです）。</p>
+    <h2 style="margin:0 0 10px;font-size:16px">エントリー条件（最低条件）と、直近7営業日の値動き</h2>
+    <p class="sub" style="margin:0 0 10px">いまが、エントリーの前提になる値動きかを、直近の値動きで確認します。一番上の「本日」の行が、本日が何%変動したか（過去N営業日比較）です。この条件で絞り込んだ過去の結果は、「3 過去の実績」に出します。</p>
     <div class="form-row">
       <div class="field">
         <label for="conditionModeSelect" data-target="conditionExplain"
@@ -94,24 +95,7 @@
     </div>
     <p class="sub" id="conditionModeNote" style="margin:-6px 0 10px"></p>
     <div class="gate" id="condGate" hidden></div>
-    <div class="summary">
-      <div class="stat" data-target="conditionExplain" data-note="集計期間（− 判定期間など）の中で、指定した値動き条件に当てはまった日数です。">
-        <div class="stat-head"><span class="stat-name">該当日数：</span><b id="matchedCount">―</b></div></div>
-      <div class="stat" data-target="conditionExplain" data-note="該当日数のうち、判定期間内に1日でもITMになった日の実数です。
-（「判定する深さ」を入力した場合は、その深さ以上のITMで数えます。ラベルにも「ITM（◯ドル）」と表示されます）">
-        <div class="stat-head"><span class="stat-name">ITM<span class="dep-sfx"></span>発生エントリー数：</span><b id="matchedItmCount">―</b></div></div>
-      <div class="stat" data-target="conditionExplain" data-note="該当日について、判定期間内でITMだった日数を合計したものです。
-（「判定する深さ」を入力した場合は、その深さ以上のITMで数えます。ラベルにも「ITM（◯ドル）」と表示されます）
-1つのエントリーが何日もITMのままだと大きくなるため、ITM発生エントリー数とは異なる指標です。">
-        <div class="stat-head"><span class="stat-name">ITM<span class="dep-sfx"></span>発生延べ日数：</span><b id="matchedTotalItmDays">―</b></div></div>
-      <div class="stat" data-target="conditionExplain" data-note="ITM発生エントリー数 ÷ 該当日数。
-（「判定する深さ」を入力した場合は、その深さ以上のITMで数えます。ラベルにも「ITM（◯ドル）」と表示されます）
-条件に当てはまった日だけで見た割合です。">
-        <div class="stat-head"><span class="stat-name">ITM<span class="dep-sfx"></span>発生エントリー数の割合：</span><b id="matchedProb">―</b></div></div>
-      <div class="stat" data-target="conditionExplain" data-note="今の値動きが、上で指定した条件に当てはまるかどうかです。">
-        <div class="stat-head"><span class="stat-name">本日はこの条件に：</span><span class="badge" id="todayMatchBadge">―</span></div></div>
-    </div>
-    <div class="chart-title" style="margin-top:14px">直近7営業日の詳細マトリクス（各日の終値と、1〜7営業日前との比較）</div>
+    <div class="chart-title" style="margin-top:14px">直近7営業日の詳細マトリクス（各日の終値と、1〜7営業日前との比較。「本日」の行＝過去N営業日比較）</div>
     <div class="volatility-wrap"><table class="volatility-table cond-matrix" id="condMatrix"></table></div>
     <p class="sub" id="condMatrixNote" style="margin:8px 0 0"></p>
   </div>
@@ -253,7 +237,7 @@
         </div>
         </div>
         <details class="mini">
-          <summary>分析の詳しい設定（集計期間・判定する深さ）</summary>
+          <summary>分析の詳しい設定（集計期間・判定する深さ・状況を見る日付）</summary>
           <div class="form-row" style="margin-top:8px">
           <div class="field">
             <label for="periodSelect">集計期間</label>
@@ -271,6 +255,21 @@
               <span class="field-hint" id="rrDepthPct"></span>
             </div>
           </div>
+          </div>
+          <div class="form-row">
+      <div class="field">
+        <label for="statusDateInput" data-target="todayExplain"
+          data-note="過去の日付を入力すると、その日(当時)の状況に切り替わります。終値・現在の比率での権利行使価格・直近7営業日の値動きが、その日を基準にした値になります。
+集計期間の営業日日数と期間は、その日を終点とした集計期間になります。
+変動幅の統計・分析結果・注文内容・エントリー条件で絞り込みも、その日までのデータだけで再計算します(その日が最新だったつもりの結果です。その日以降の値動きは使いません)。
+休場日(土日・祝日)を入力した場合は、その直前の営業日を基準にします。
+空欄=本日(最新の営業日)です。">状況を見る日付</label>
+        <div class="field-inline">
+          <input id="statusDateInput" type="date">
+          <button type="button" id="statusDateReset" class="sp-btn" hidden>本日に戻す</button>
+          <span class="field-hint" id="statusDateHint"></span>
+        </div>
+      </div>
           </div>
         </details>
       </div>
@@ -297,25 +296,10 @@
   </details>
 
   <details class="sec" id="s3" open hidden>
-    <summary><span class="t"><span class="n">3</span>結論：この注文プランは、過去のデータでどうか</span><span class="d">本日の状況と、分析結果（総合判定・ITM発生率）</span></summary>
+    <summary><span class="t"><span class="n">3</span>過去の実績：この条件で、過去に実際どうだったか</span><span class="d">根拠＝過去の実績。ここがすべての土台です（本日の状況・ITM発生率・総合判定・ヒートマップ）</span></summary>
     <div class="body">
   <div id="todayCard" class="card in-sec" hidden>
-    <div class="result-head">
-      <h2 style="margin:0;font-size:16px" id="todayTitle">本日の状況</h2>
-      <div class="field result-depth">
-        <label for="statusDateInput" data-target="todayExplain"
-          data-note="過去の日付を入力すると、その日(当時)の状況に切り替わります。終値・現在の比率での権利行使価格・過去N営業日比較が、その日を基準にした値になります。
-集計期間の営業日日数と期間は、その日を終点とした集計期間になります。
-変動幅の統計・分析結果・注文内容・エントリー条件で絞り込みも、その日までのデータだけで再計算します(その日が最新だったつもりの結果です。その日以降の値動きは使いません)。
-休場日(土日・祝日)を入力した場合は、その直前の営業日を基準にします。
-空欄=本日(最新の営業日)です。">状況を見る日付</label>
-        <div class="field-inline">
-          <input id="statusDateInput" type="date">
-          <button type="button" id="statusDateReset" class="sp-btn" hidden>本日に戻す</button>
-          <span class="field-hint" id="statusDateHint"></span>
-        </div>
-      </div>
-    </div>
+    <h3 style="margin:0 0 8px;font-size:14px" id="todayTitle">この実績の前提（本日の状況）</h3>
     <div class="summary">
       <div class="stat" data-target="todayExplain" data-note="集計期間として使われているデータの営業日日数です。">
         <div class="stat-head"><span class="stat-name">集計期間の営業日日数：</span><b id="todayDate">―</b></div><span class="stat-sub" id="todayRange"></span></div>
@@ -326,14 +310,13 @@
 今エントリーする場合の権利行使価格の目安です。">
         <div class="stat-head"><span class="stat-name">現在の比率での権利行使価格：</span><b id="todayStrike">―</b></div></div>
     </div>
-    <div class="chart-title">過去N営業日比較（本日が何%変動したか）</div>
-    <div id="momentumStrip" class="momentum-strip"></div>
   </div>
 
   <div id="result" class="card in-sec" hidden>
     <div class="result-head">
-      <h2 style="margin:0;font-size:16px"><span id="symbolLabel"></span> の分析結果<span id="resultTypeLabel" style="font-size:14px;font-weight:400;color:var(--muted)"></span></h2>
+      <h2 style="margin:0;font-size:16px"><span id="symbolLabel"></span> の過去の実績（分析結果）<span id="resultTypeLabel" style="font-size:14px;font-weight:400;color:var(--muted)"></span></h2>
     </div>
+    <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　集計期間のデータを使い、「同じ条件でエントリーしていたら、実際にどうなったか」を数えたものです。将来の予測ではありません。</p>
     <p class="sub" style="margin:0 0 10px"><b>判定基準：</b>権利行使価格（各エントリー日の終値 × 比率）だけを基準に、集計期間内の<b>全エントリー日</b>でITMになったかを判定します。「注文プラン」の「判定する深さ」を入力した場合は、権利行使価格から◯ドル以上深いITMになったかを判定します（空欄＝一度でもITM）。</p>
     <div class="summary">
       <div class="stat" data-target="resultExplain" data-note="集計期間の営業日日数から、判定期間の分を差し引いた日数です。
@@ -402,18 +385,97 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
     <p style="margin:14px 0 0"><button id="openDetailBtn" type="button" class="btn-outline">詳細マトリクスを別ページで見る（元Excel形式）</button></p>
   </div>
 
+  <div id="condResultCard" class="card in-sec" hidden>
+    <h3 style="margin:0 0 8px;font-size:14px">同じ値動き条件に当てはまった日だけで見た、過去の実績</h3>
+    <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　上の実績（全エントリー日）のうち、1の「エントリー条件」に当てはまった日だけに絞って数えたものです。</p>
+    <div class="summary">
+      <div class="stat" data-target="conditionExplain" data-note="集計期間（− 判定期間など）の中で、指定した値動き条件に当てはまった日数です。">
+        <div class="stat-head"><span class="stat-name">該当日数：</span><b id="matchedCount">―</b></div></div>
+      <div class="stat" data-target="conditionExplain" data-note="該当日数のうち、判定期間内に1日でもITMになった日の実数です。
+（「判定する深さ」を入力した場合は、その深さ以上のITMで数えます。ラベルにも「ITM（◯ドル）」と表示されます）">
+        <div class="stat-head"><span class="stat-name">ITM<span class="dep-sfx"></span>発生エントリー数：</span><b id="matchedItmCount">―</b></div></div>
+      <div class="stat" data-target="conditionExplain" data-note="該当日について、判定期間内でITMだった日数を合計したものです。
+（「判定する深さ」を入力した場合は、その深さ以上のITMで数えます。ラベルにも「ITM（◯ドル）」と表示されます）
+1つのエントリーが何日もITMのままだと大きくなるため、ITM発生エントリー数とは異なる指標です。">
+        <div class="stat-head"><span class="stat-name">ITM<span class="dep-sfx"></span>発生延べ日数：</span><b id="matchedTotalItmDays">―</b></div></div>
+      <div class="stat" data-target="conditionExplain" data-note="ITM発生エントリー数 ÷ 該当日数。
+（「判定する深さ」を入力した場合は、その深さ以上のITMで数えます。ラベルにも「ITM（◯ドル）」と表示されます）
+条件に当てはまった日だけで見た割合です。">
+        <div class="stat-head"><span class="stat-name">ITM<span class="dep-sfx"></span>発生エントリー数の割合：</span><b id="matchedProb">―</b></div></div>
+      <div class="stat" data-target="conditionExplain" data-note="今の値動きが、上で指定した条件に当てはまるかどうかです。">
+        <div class="stat-head"><span class="stat-name">本日はこの条件に：</span><span class="badge" id="todayMatchBadge">―</span></div></div>
+    </div>
+  </div>
+
+  <details class="mini" id="volDetails" hidden>
+    <summary>参考：過去の値動きの大きさ（変動幅の統計）を見る</summary>
+  <div id="volatilityCard" class="card in-sec" hidden>
+    <h2 class="card-title-toggle" style="margin:0 0 10px;font-size:16px" data-note="取得済みの全データ（最大800営業日）を使い、期間ごとに「どれくらい値が動きやすいか」を集計したものです。
+平均変動幅・各最大値は上昇/下落を問わず全データから算出し、「直近1年の変動幅(額)」のみ直近1年のデータに限定して金額で算出します（株価水準が過去と大きく変わっている場合、金額は直近のデータの方が実態に近いため）。
+「直近1年の変動幅(額)」も平均額です。その期間だけ離れた2点間の価格差(絶対値)を、直近1年のデータの中ですべて求めて平均しています。
+「最大上昇率・最大下落率(始点→終点)」は、ちょうどその期間だけ離れた2点間の騰落率の最大値です。途中でいったん動いて戻った分は反映されません。
+「期間内最大上昇率(安値→高値)・期間内最大下落率(高値→安値)」は、その期間の窓の途中の最安値から最高値への上昇、最高値から最安値への下落(ドローダウン)を、すべての窓で求めた最大値です。
+ドローダウンは、窓の途中のどこが最高値・最安値でもよく、売りで「保有中に最大どこまで含み損になり得たか」を見る目安になります。">変動幅の統計</h2>
+    <div class="volatility-wrap">
+    <table class="volatility-table">
+      <thead>
+        <tr><th>期間</th><th>平均変動幅(%)</th><th>最大上昇率<br>(始点→終点)</th><th>最大下落率<br>(始点→終点)</th><th>期間内最大上昇率<br>(安値→高値)</th><th>期間内最大下落率<br>(高値→安値)</th><th>直近1年の変動幅(額)</th></tr>
+      </thead>
+      <tbody id="volatilityTableBody"></tbody>
+    </table>
+    </div>
+  </div>
+
+  </details>
+
     </div>
   </details>
 
-  <details class="sec" id="s4" data-only="sell" open hidden>
-    <summary><span class="t"><span class="n">4</span>見比べ：IV・HV・過去の実績</span><span class="d">ITMになる確率を3つの見方で比べ、どう読むかを確認します</span></summary>
+  <details class="sec" id="s4" open hidden>
+    <summary><span class="t"><span class="n">4</span>HV：過去の値動きの大きさ（実績の背景）</span><span class="d">根拠＝HV。いまは、実績を調べた期間より荒れているか。権利行使価格は、満期までの値動きの何σ先か</span></summary>
+    <div class="body">
+  <div id="hvCard" class="card in-sec" hidden>
+    <h2 class="card-title-toggle" style="margin:0 0 10px;font-size:16px" data-note="HV（歴史的ボラティリティ）は、過去の日々の値動き（終値の騰落率）のばらつきを、1年あたりの%に換算した値です。大きいほど、株価が大きく動いていたことを表します。
+このツールは終値だけから計算します。オプション価格に織り込まれた将来の変動の大きさ（IV）とは別のもので、IVはここでは取得できません。
+取得済みの全データ（最大800営業日）のうち、基準日（最新の終値の日。日付を指定したときはその日）までを使います。">HV（歴史的ボラティリティ）</h2>
+    <p class="basis basis-hv"><i></i><b>根拠：HV</b>　過去の実績の「ふだんの荒れ具合」と比べて、いまがどうかを見ます。HVから計算した理論値で、実際に起きたことそのものではありません。</p>
+    <p class="sub" style="margin:0 0 10px">過去の値動きの大きさを、年率換算の%で表します。まず、<b>満期と同じ長さのHV</b>（下のグラフと「1σの値動き」の計算に使う値）を表示します。カードをクリックすると、過去1年のHVの推移グラフが出ます。</p>
+    <div class="chart-title" id="hvMatchTitle" style="margin-top:4px">満期と同じ長さのHV（年率）</div>
+    <div class="summary" id="hvMatchSummary"></div>
+    <div class="chart-title" id="hvTheoryTitle">満期までの値動きの目安と、権利行使価格の位置</div>
+    <div id="hvConeWrap" class="hv-cone"></div>
+    <p class="sub" id="hvConeLegend" style="margin:4px 0 10px"></p>
+    <div class="summary" id="hvTheorySummary"></div>
+    <p class="sub" id="hvTheoryNote" style="margin:8px 0 0"></p>
+  </div>
+
+
+    </div>
+  </details>
+
+  <details class="sec" id="s5" data-only="sell" open hidden>
+    <summary><span class="t"><span class="n">5</span>IV：市場のこれからの見込み</span><span class="d">根拠＝IV。市場は、過去（HV）より大きな動きを見込んでいるか。受け取るプレミアムは見合うか</span></summary>
     <div class="body">
       <div class="card in-sec" id="compareCard">
+        <p class="basis basis-iv"><i></i><b>根拠：IV</b>　オプション価格に織り込まれた、市場のこれからの見込みです。実際に起きたこと（実績）ではなく、将来への見方です。</p>
         <h3 style="margin:0 0 8px;font-size:14px" id="ivHvTitle">IVとHVの比較（市場の見込みは、過去の値動きより高めか低めか）</h3>
         <div class="summary" id="ivHvSummary"></div>
-        <div class="cmp3" id="ivHvCompare"></div>
         <p class="sub" id="ivHvNote" style="margin:8px 0 0"></p>
 
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="s6" open hidden>
+    <summary><span class="t"><span class="n">6</span>まとめ：3つの見方を並べて、納得できるか確認する</span><span class="d">最低条件・実績・HV・IVを1枚に並べ、ITM確率の3点比較で、見方がそろっているかを見ます</span></summary>
+    <div class="body">
+      <div class="card in-sec" id="conclusionCard">
+        <h3 style="margin:0 0 8px;font-size:14px">ここまでの見方を、1枚にまとめる</h3>
+        <p class="sub" style="margin:0 0 8px">1〜5で見たことを、順に並べました。上から「前提の値動き」→「過去の実績（土台）」→「HV（いまの荒れ具合）」→「IV（これからの見込み）」の順です。</p>
+        <div class="volatility-wrap"><table class="volatility-table concl-table"><thead><tr><th>順</th><th>根拠</th><th>結果</th><th>読み方</th></tr></thead><tbody id="conclBody"></tbody></table></div>
+        <div data-only="sell">
+        <h3 style="margin:16px 0 8px;font-size:14px" id="cmp3Title">ITMになる確率を、3つの見方で並べる</h3>
+        <div class="cmp3" id="ivHvCompare"></div>
         <div class="guide">
           <h4>この3つの見比べ方と、わかること</h4>
           <ol>
@@ -425,15 +487,17 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
           </ol>
           <p class="sub" style="margin:8px 0 0">※IV・HV換算は「満期時に」ITMになる理論上の確率、実績は「期間中に一度でも」ITMに届いた割合です。定義が違うため、数字をそのまま同じものとして比べないでください。いずれも将来を保証するものではありません。</p>
         </div>
+        </div>
       </div>
     </div>
   </details>
 
-  <details class="sec" id="s5" data-only="sell" open hidden>
-    <summary><span class="t"><span class="n">5</span>見直し：分析結果から選んで、プランに採用する</span><span class="d">「ITM発生率を◯%以下にしたい」などの条件で、よりよい権利行使価格を探します。「採用」を押すと、2の注文プランに反映され、分析がやり直されます</span></summary>
+  <details class="sec" id="s7" data-only="sell" open hidden>
+    <summary><span class="t"><span class="n">7</span>見直し：過去の実績をもとに、権利行使価格を選び直す</span><span class="d">基準＝過去の実績。「ITM発生率を◯%以下にしたい」から、よりよい権利行使価格を探します。「採用」を押すと、2の注文プランに反映され、分析がやり直されます</span></summary>
     <div class="body">
   <div id="ratioCard" class="card in-sec" hidden>
     <h2 style="margin:0 0 6px;font-size:16px">推奨比率の逆算</h2>
+    <p class="basis basis-act"><i></i><b>基準：過去の実績</b>　この逆算で使う「ITM発生率」は、3の過去の実績（分析結果）と同じ計算です。<b>IV・HVは基準に使っていません</b>（右の列に、参考として並べています）。</p>
     <p class="sub" style="margin:0 0 10px">「ITM発生率を◯%以下にしたい」から、<b>条件に合う権利行使価格（整数）</b>を探します。1%刻みの比率に当たる整数の権利行使価格を、現在値に近い側から並べ、過去の実績（分析結果と同じ計算）でITM発生率を求めて、条件を満たす<b>最も現在値に近い権利行使価格</b>（受取が多くなる側）を選びます。満期日・判定する深さ・集計期間は、いまの入力のままです。</p>
     <div class="form-row">
       <div class="field">
@@ -458,18 +522,19 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
     </div>
     <div class="volatility-wrap ratio-table-wrap">
       <table class="volatility-table ratio-table">
-        <thead><tr><th>権利行使価格<br>（比率）</th><th>ITM発生率<br>（実績）と判定</th><th>満期時ITM率<br>(HV換算)<br>受取(理論：IV計算)</th><th></th></tr></thead>
+        <thead><tr><th>権利行使価格<br>（比率）</th><th>ITM発生率<br>（実績）と判定</th><th>参考（基準外）<br>満期時ITM率(HV換算)<br>受取(理論：IV計算)</th><th></th></tr></thead>
         <tbody id="ratioBody"></tbody>
       </table>
     </div>
     <p class="sub" id="ratioNote" style="margin:8px 0 0"></p>
   </div>
 
+
     </div>
   </details>
 
-  <details class="sec" id="s6" data-only="sell" open hidden>
-    <summary><span class="t"><span class="n">6</span>リスク確認と、損切りの目安</span><span class="d">採用したプランについて、ストレステストと、IV×時間の表をタブで切り替えて見ます。損切りは、資金の2%まで</span></summary>
+  <details class="sec" id="s8" data-only="sell" open hidden>
+    <summary><span class="t"><span class="n">8</span>リスク確認と、損切りの目安</span><span class="d">採用したプランについて、ストレステストと、IV×時間の表をタブで切り替えて見ます。損切りは、資金の2%まで</span></summary>
     <div class="body">
       <div class="card in-sec" id="riskCard">
         <div class="risk-tabs" role="tablist">
@@ -509,51 +574,14 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
     </div>
   </details>
 
-  <details class="sec" id="s7" data-only="sell" open hidden>
-    <summary><span class="t"><span class="n">7</span>注文まとめ</span><span class="d">最終的な注文（売りの指値・利確・損切り・枚数）。ここまでの入力と選択が、すべて反映されます</span></summary>
+  <details class="sec" id="s9" data-only="sell" open hidden>
+    <summary><span class="t"><span class="n">9</span>注文まとめ</span><span class="d">最終的な注文（売りの指値・利確・損切り・枚数）。ここまでの入力と選択が、すべて反映されます</span></summary>
     <div class="body">
   <div id="planCard" class="card in-sec" hidden>
     <h2 style="margin:0 0 6px;font-size:16px">注文まとめ（P売り注文・利確・損切り）</h2>
     <p class="sub" style="margin:0 0 10px">分析結果をもとに、最終的にどのような注文を出すかを、1か所にまとめます。受取プレミアム・損切りの場面（ストレステストの表で選択）・トータル資金額を入力すると、利確・損切りの指値、枚数、リスクリワードが埋まります。</p>
     <div class="volatility-wrap"><table class="volatility-table plan-table"><tbody id="planBody"></tbody></table></div>
     <div style="margin-top:10px"><button type="button" class="sp-btn" id="planCopyBtn">まとめをコピー</button> <span class="field-hint" id="planCopyHint"></span></div>
-  </div>
-
-    </div>
-  </details>
-
-  <details class="sec" id="s8" hidden>
-    <summary><span class="t"><span class="n">8</span>値動きの背景（参考）</span><span class="d">変動幅の統計・HV・満期までの値動きのグラフ。初期は閉じています</span></summary>
-    <div class="body">
-  <div id="volatilityCard" class="card in-sec" hidden>
-    <h2 class="card-title-toggle" style="margin:0 0 10px;font-size:16px" data-note="取得済みの全データ（最大800営業日）を使い、期間ごとに「どれくらい値が動きやすいか」を集計したものです。
-平均変動幅・各最大値は上昇/下落を問わず全データから算出し、「直近1年の変動幅(額)」のみ直近1年のデータに限定して金額で算出します（株価水準が過去と大きく変わっている場合、金額は直近のデータの方が実態に近いため）。
-「直近1年の変動幅(額)」も平均額です。その期間だけ離れた2点間の価格差(絶対値)を、直近1年のデータの中ですべて求めて平均しています。
-「最大上昇率・最大下落率(始点→終点)」は、ちょうどその期間だけ離れた2点間の騰落率の最大値です。途中でいったん動いて戻った分は反映されません。
-「期間内最大上昇率(安値→高値)・期間内最大下落率(高値→安値)」は、その期間の窓の途中の最安値から最高値への上昇、最高値から最安値への下落(ドローダウン)を、すべての窓で求めた最大値です。
-ドローダウンは、窓の途中のどこが最高値・最安値でもよく、売りで「保有中に最大どこまで含み損になり得たか」を見る目安になります。">変動幅の統計</h2>
-    <div class="volatility-wrap">
-    <table class="volatility-table">
-      <thead>
-        <tr><th>期間</th><th>平均変動幅(%)</th><th>最大上昇率<br>(始点→終点)</th><th>最大下落率<br>(始点→終点)</th><th>期間内最大上昇率<br>(安値→高値)</th><th>期間内最大下落率<br>(高値→安値)</th><th>直近1年の変動幅(額)</th></tr>
-      </thead>
-      <tbody id="volatilityTableBody"></tbody>
-    </table>
-    </div>
-  </div>
-
-  <div id="hvCard" class="card in-sec" hidden>
-    <h2 class="card-title-toggle" style="margin:0 0 10px;font-size:16px" data-note="HV（歴史的ボラティリティ）は、過去の日々の値動き（終値の騰落率）のばらつきを、1年あたりの%に換算した値です。大きいほど、株価が大きく動いていたことを表します。
-このツールは終値だけから計算します。オプション価格に織り込まれた将来の変動の大きさ（IV）とは別のもので、IVはここでは取得できません。
-取得済みの全データ（最大800営業日）のうち、基準日（最新の終値の日。日付を指定したときはその日）までを使います。">HV（歴史的ボラティリティ）</h2>
-    <p class="sub" style="margin:0 0 10px">過去の値動きの大きさを、年率換算の%で表します。まず、<b>満期と同じ長さのHV</b>（下のグラフと「1σの値動き」の計算に使う値）を表示します。カードをクリックすると、過去1年のHVの推移グラフが出ます。</p>
-    <div class="chart-title" id="hvMatchTitle" style="margin-top:4px">満期と同じ長さのHV（年率）</div>
-    <div class="summary" id="hvMatchSummary"></div>
-    <div class="chart-title" id="hvTheoryTitle">満期までの値動きの目安と、権利行使価格の位置</div>
-    <div id="hvConeWrap" class="hv-cone"></div>
-    <p class="sub" id="hvConeLegend" style="margin:4px 0 10px"></p>
-    <div class="summary" id="hvTheorySummary"></div>
-    <p class="sub" id="hvTheoryNote" style="margin:8px 0 0"></p>
   </div>
 
     </div>

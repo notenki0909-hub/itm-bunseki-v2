@@ -288,7 +288,9 @@ const els = {
   statusDateReset: document.getElementById("statusDateReset"),
   statusDateHint: document.getElementById("statusDateHint"),
   todayStrike: document.getElementById("todayStrike"),
-  momentumStrip: document.getElementById("momentumStrip"),
+  condResultCard: document.getElementById("condResultCard"),
+  volDetails: document.getElementById("volDetails"),
+  conclBody: document.getElementById("conclBody"),
 
   result: document.getElementById("result"),
   badge: document.getElementById("badge"),
@@ -503,6 +505,7 @@ function switchTab(id) {
     els.orderCard.hidden = true;
     els.conditionCard.hidden = true;
     els.planCard.hidden = true;
+    renderConclusion(null);
     renderTopBand(null);
     syncSections();
   }
@@ -704,7 +707,8 @@ async function onAnalyze() {
   els.orderCard.hidden = true;
   els.conditionCard.hidden = true;
   els.planCard.hidden = true;
-  renderTopBand(null);
+  renderConclusion(null);
+    renderTopBand(null);
   syncSections();
   try {
     const data = await fetchHistory(symbol);
@@ -819,6 +823,8 @@ function renderAll(t) {
   band.hvItm = null;
   band.ivhv = null;
   band.cond = null;
+  band.hvSigma = null;
+  band.hvPos = null;
   syncOrderDerived(t);
   syncWindowInputs(t);
   renderLatestPrice(t);
@@ -831,6 +837,7 @@ function renderAll(t) {
   renderPlanCard(t);
   setupStatExplain();
   renderConditionCard(t);
+  renderConclusion(t);
   renderTopBand(t);
   syncSections();
 }
@@ -1017,15 +1024,6 @@ function renderHvCard(t) {
     return;
   }
 
-  // 実績(分析結果と同じ: 判定期間内に毎日の終値で一度でもITM(判定する深さ以上)に届いた割合)
-  const pc = periodClosesOf(t);
-  const pd = periodDatesOf(t);
-  const { depthPct } = depthInfo(t, pc);
-  const analysis = computeItmAnalysis(pc, {
-    ratio: effRatioOf(t, price), itmWhen: type.itmWhen, window: days, group, depthPct,
-  }, pd);
-  const actual = analysis.overallItmProb;
-
   const depthText = depthDollar > 0 ? `権利行使価格${type.itmWhen === "below" ? "−" : "＋"}${depthDollar}ドル` : "権利行使価格";
   const dist = theory.distancePct;
   const sideText = theory.zScore >= 0 ? "OTM側" : "ITM側";
@@ -1039,16 +1037,6 @@ function renderHvCard(t) {
       name: "権利行使価格", value: `${dist >= 0 ? "+" : ""}${pct(dist)}`,
       sub: `ITMの水準の、現在値からの位置。${depthText}＝${fmtStrike(Math.round(theory.barrier * 100) / 100)}・${Math.abs(theory.zScore).toFixed(2)}σ（${sideText}）`,
       note: `ITMとみなす水準（${depthText}）が、現在値から何%離れているか、またそれがHVから見て何σ分の距離かを表します。\nσの値が大きいほど、HVから見てITMになりにくい水準です。「OTM側」は現在値よりITMの反対側、「ITM側」はすでにITMの側にあることを表します。\n水準は、現在値×権利行使価格の比率（上の入力欄の比率）から求めています。`,
-    },
-    {
-      name: "満期時ITM率", value: pct(theory.probItmAtExpiry), suffix: "（HV換算）",
-      sub: `理論上の確率。期間中に一度でも届く目安 約${pct(theory.probTouch, 0)}`,
-      note: `HVから、満期時にITMの水準を超えている（プット系は下回る、コール系は上回る）確率を、正規分布の近似で求めたものです。\n「期間中に一度でも届く」目安は、毎日の終値だけを見る実績よりやや多めに出ます。\n株価の平均的な上昇・下落はないと仮定した単純な近似です。将来を保証するものではありません。`,
-    },
-    {
-      name: "ITM発生率", value: actual === null ? "―" : pct(actual), suffix: "（過去の実績）",
-      sub: `分析結果と同じ値（判定期間内に一度でも届いた割合）`,
-      note: `「分析結果」のITM発生エントリー数の割合と同じ値です。判定期間${days}営業日のあいだに、毎日の終値で一度でもITMの水準に届いたエントリー日の割合です。`,
     },
   ];
   // グラフ: 直近の株価の推移 + いまから満期まで広がる±1σ・±2σの範囲 + ITMの水準
@@ -1064,25 +1052,16 @@ function renderHvCard(t) {
   els.hvConeLegend.textContent = `${days > MARK_BEFORE_EXPIRY ? `オレンジの縦線＝満期の${MARK_BEFORE_EXPIRY}営業日前（その日の日付と、そのときの±1σの株価）。` : ""}濃い帯＝±1σ（満期時に約68%がこの範囲）、薄い帯＝±2σ（約95%）。赤い破線＝ITMの水準、その先の薄い赤＝ITM側。帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
   els.hvTheorySummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: 'data-target="hvExplain"' })).join("");
 
-  let compare = "";
-  if (actual !== null && theory.probTouch > 0) {
-    const ratio = actual / theory.probTouch;
-    const word = ratio < 0.8 ? "少なく" : ratio > 1.25 ? "多く" : "同じくらいに";
-    const meaning = ratio < 0.8
-      ? (group === "sell" ? "過去は、HVから見た理論より穏やかな値動きで、売りには有利な側にずれていました。" : "過去は、HVから見た理論より届きにくく、買いには不利な側にずれていました。")
-      : ratio > 1.25
-        ? (group === "sell" ? "過去は、HVから見た理論より届きやすく、売りには不利な側にずれていました。" : "過去は、HVから見た理論より届きやすく、買いには有利な側にずれていました。")
-        : "過去の実績は、HVから見た理論と、ほぼ合っていました。";
-    compare = `過去の実績（${pct(actual)}）は、理論上の「期間中に一度でも届く目安」（約${pct(theory.probTouch, 0)}）より${word}なっています。${meaning}`;
-  }
   // いまのHVが過去1年の中で高い/低い位置にあるときは、実績との差の理由として添える
   let regime = "";
   const posN = hvPosition(closes, days);
+  band.hvSigma = { z: theory.zScore, dist, sideText, sigmaPct: theory.sigmaPct, days };
+  band.hvPos = posN ? { text: hvPositionText(posN), hv: hvN, percentile: posN.percentile } : { text: "", hv: hvN, percentile: null };
   if (posN) {
-    if (posN.percentile >= 0.8) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より荒れている時期です。理論と実績の差には、この影響が考えられます。`;
-    else if (posN.percentile <= 0.2) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より穏やかな時期です。理論と実績の差には、この影響が考えられます。`;
+    if (posN.percentile >= 0.8) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より荒れている時期です。実績を調べた期間とは、荒れ具合が違う可能性があります。`;
+    else if (posN.percentile <= 0.2) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より穏やかな時期です。実績を調べた期間とは、荒れ具合が違う可能性があります。`;
   }
-  els.hvTheoryNote.textContent = `${compare}${compare ? " " : ""}${regime}${regime ? " " : ""}※HVは過去の値動きの大きさで、IV（オプション価格に織り込まれた将来の変動の大きさ）ではありません。理論上の確率は単純な近似の目安です。`;
+  els.hvTheoryNote.textContent = `${regime}${regime ? " " : ""}ITMになる確率（HV換算）は、「6 まとめ」で、IV換算・過去の実績と並べて見ます。※HVは過去の値動きの大きさで、IV（オプション価格に織り込まれた将来の変動の大きさ）ではありません。`;
   els.hvCard.hidden = false;
   setupStatExplain();
 }
@@ -1114,7 +1093,7 @@ function renderTodayCard(t) {
   const uptoDates = t.datesFull.slice(0, endIdx + 1);
   const closes = upto.slice(-t.periodDays);
   const dates = uptoDates.slice(-t.periodDays);
-  els.todayTitle.textContent = asOf ? `${asOf} 時点の状況` : "本日の状況";
+  els.todayTitle.textContent = asOf ? `この実績の前提（${asOf} 時点の状況）` : "この実績の前提（本日の状況）";
   els.statusDateInput.min = t.datesFull[0];
   els.statusDateInput.max = t.datesFull[t.datesFull.length - 1];
   els.statusDateReset.hidden = !t.statusDate;
@@ -1128,13 +1107,6 @@ function renderTodayCard(t) {
   els.todayClose.textContent = latestClose.toFixed(2);
   els.todayCloseDate.textContent = dates[latestIdx];
   els.todayStrike.textContent = fmtStrike(strike);
-
-  const strip = computeRecentMomentumStrip(closes, 7);
-  els.momentumStrip.innerHTML = strip.map(({ daysAgo, change }) => {
-    const cls = change === null ? "" : change >= 0 ? "up" : "down";
-    const text = change === null ? "―" : (change >= 0 ? "+" : "") + (change * 100).toFixed(1) + "%";
-    return `<div class="momentum-cell"><span class="m-label">${daysAgo}営業日前比</span><span class="m-value ${cls}">${text}</span></div>`;
-  }).join("");
 
   els.todayCard.hidden = false;
 }
@@ -1981,7 +1953,6 @@ function renderIvHv(t, price, itmWhen) {
 
   const ratio = iv / hv;
   const judge = judgeIvHv(ratio);
-  band.ivhv = { ratio, word: judge.word };
   const depthDollar = t.rrDepth ?? 0;
   const thIv = hvTheory({ price, strike: strikeSell, depthDollar, itmWhen, days, hv: iv });
   const thHv = hvTheory({ price, strike: strikeSell, depthDollar, itmWhen, days, hv });
@@ -1994,19 +1965,15 @@ function renderIvHv(t, price, itmWhen) {
   const meaningShort = judge.level === "rich" ? "受け取るプレミアムは多め。ただし、市場は大きな動きを見込んでいるので、リスクも高め"
     : judge.level === "cheap" ? "受け取るプレミアムは少なめ。ただし、市場は穏やかな動きを見込んでいる"
       : "標準的な水準";
+  band.ivhv = { ratio, word: judge.word, phrase: judge.phrase, meaning: meaningShort, iv, hv };
   const items = [
     {
       name: "IV", value: pct(iv), suffix: ivSuffix, sub: ivSub,
       note: `IV（インプライド・ボラティリティ）は、オプションの価格に織り込まれた、これからの値動きの見込みの大きさ（年率）です。HVが「過去に実際に動いた大きさ」なのに対し、IVは「市場がこれから動くと見込んでいる大きさ」で、実際の値動きではありません。IVが高いほど、オプションの価格（プレミアム）も高くなります。\n${source === "input" ? "売り建て側の権利行使価格のIVとして入力した値を使っています。" : "IVが未入力のため、入力した受取プレミアム額に合うIVを、Black-Scholesの式（金利0・配当なし）で逆算しています。スプレッドの場合は、売り脚と買い脚が同じIVだと仮定した目安です（実際は、遠い権利行使価格ほどIVが高いことが多いため、売り脚のIVとはずれます）。"}`,
     },
     {
-      name: "HV", value: pct(hv), suffix: `（直近${days}営業日）`,
-      sub: pos ? `満期と同じ長さ・ふだん（中央値）${pct(pos.median, 0)}` : "満期と同じ長さ",
-      note: `満期（${days}営業日）と同じ長さの期間で測った、過去の実際の値動きの大きさ（HV、年率）です。「値動きの背景」のHVのエリアと同じ値です。`,
-    },
-    {
       name: "IV÷HV", value: `${ratio.toFixed(2)}倍`,
-      sub: `${judge.phrase}／${meaningShort}`,
+      sub: `HV ${pct(hv)}（「4 HV」と同じ値）で割った倍率。${judge.phrase}／${meaningShort}`,
       note: `IVがHVの何倍かを見て、市場のこれからの見込み（IV）が、過去の実際の値動き（HV）より高めか低めかを判断する目安です。IVが高いほど、オプションの価格（プレミアム）も高くなります。\n1.2倍以上＝高め（受け取るプレミアムは多め。ただし、市場は大きな動きを見込んでいるので、リスクも高め）／0.8倍以下＝低め（受け取るプレミアムは少なめ。ただし、市場は穏やかな動きを見込んでいる）／その間＝同程度。この基準は、このツールの簡易的なものです。
 「受け取る額が多い」ことと「取引が得になる」ことは別です。実際の値動きが、IVの見込みより小さく収まれば、売りは得になります。\n一般に、IVはHVより少し高めになりやすいため、「同程度」の幅を広めに取っています。`,
     },
@@ -2030,13 +1997,6 @@ function renderIvHv(t, price, itmWhen) {
       });
     }
   }
-  if (thIv && thHv) {
-    items.push({
-      name: "満期時ITM率", value: pct(thIv.probItmAtExpiry), suffix: "（IV換算）",
-      sub: `理論上の確率。HV換算 ${pct(thHv.probItmAtExpiry)}／期間中に一度でも届く目安 約${pct(thIv.probTouch, 0)}`,
-      note: `「値動きの背景」のHV換算の理論上の確率と同じ計算で、HVの代わりにIVを使ったものです（1σ＝IV×√(営業日数÷252)、株価の平均的な上昇・下落はないと仮定した単純な近似）。\nIVはHVより高いことが多いので、IV換算のほうが、ITMになりやすい（売りには厳しい）見積もりになります。HV換算との差は、市場が織り込んでいる「余分な変動」の大きさです。\n将来を保証するものではありません。`,
-    });
-  }
   els.ivHvSummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
   els.ivHvCompare.innerHTML = thIv && thHv ? ivHvCompareHtml(t, thIv, thHv, days, itmWhen) : "";
 
@@ -2045,10 +2005,7 @@ function renderIvHv(t, price, itmWhen) {
     : judge.level === "cheap"
       ? "売り手にとっては、受け取るプレミアムは少なめです。ただし、市場は穏やかな動きを見込んでいます。実際に大きく動くと、受け取る額に対して損失が大きくなります。"
       : "売り手にとっては、標準的な条件です。";
-  const probText = thIv && thHv
-    ? `IV換算で見ると、満期時にITMになる理論上の確率は${pct(thIv.probItmAtExpiry)}（HV換算は${pct(thHv.probItmAtExpiry)}）です。`
-    : "";
-  els.ivHvNote.textContent = `IV${pct(iv)}は、満期と同じ長さのHV${pct(hv)}の${ratio.toFixed(2)}倍です。${judge.phrase}。${meaning}${probText}`
+  els.ivHvNote.textContent = `IV${pct(iv)}は、満期と同じ長さのHV${pct(hv)}の${ratio.toFixed(2)}倍です。${judge.phrase}。${meaning}`
     + `※IVは、これからの値動きの見込みです（実際の値動きではありません）。HVは、過去に実際に動いた大きさです。決算発表などの予定された出来事をまたぐ場合は、IVが高いのは自然で、売り手に得とは限りません。判定の基準（1.2倍以上＝高め、0.8倍以下＝低め）は、このツールの簡易的なものです。`;
   setupStatExplain();
 }
@@ -2665,9 +2622,9 @@ function setupCellTip() {
 
 // ---- 画面の構成: 上に固定する帯・セクション・最低条件の表示・リスクのタブ ----
 // 帯に出す値。各描画関数が、計算のついでに置いていく(renderAllの最初にリセットする)
-const band = { hvItm: null, ivhv: null, cond: null };
+const band = { hvItm: null, ivhv: null, cond: null, hvSigma: null, hvPos: null };
 
-// セクション(3〜8)の表示を、中のカードの表示状態に合わせる。ナビの項目も同じ。
+// セクション(3〜9)の表示を、中のカードの表示状態に合わせる。ナビの項目も同じ。
 // 売り系だけのセクション(data-only="sell")は、買い系のときは出さない。
 function syncSections() {
   const shown = (...cards) => cards.some((c) => !c.hidden);
@@ -2679,12 +2636,15 @@ function syncSections() {
     const a = els.bandNav.querySelector(`a[href="#${id}"]`);
     if (a) a.hidden = !on;
   };
+  els.condResultCard.hidden = els.conditionCard.hidden;
+  els.volDetails.hidden = els.volatilityCard.hidden;
   set("s3", shown(els.todayCard, els.result));
-  set("s4", shown(els.orderCard));
-  set("s5", shown(els.ratioCard));
-  set("s6", shown(els.orderCard));
-  set("s7", shown(els.planCard));
-  set("s8", shown(els.volatilityCard, els.hvCard));
+  set("s4", shown(els.hvCard));
+  set("s5", shown(els.orderCard));
+  set("s6", shown(els.result));
+  set("s7", shown(els.ratioCard));
+  set("s8", shown(els.orderCard));
+  set("s9", shown(els.planCard));
 }
 
 // 上に固定する帯(銘柄・終値・取引・満期／最低条件・総合判定・ITM発生率・満期時ITM率・IV÷HV)。t=nullなら、未選択の表示
@@ -2728,6 +2688,53 @@ function renderTopBand(t) {
   if (band.hvItm !== null) parts.push(kv("満期時ITM率（HV換算）", pct(band.hvItm)));
   if (group === "sell" && band.ivhv) parts.push(kv("IV÷HV", `${band.ivhv.ratio.toFixed(2)}倍（${band.ivhv.word}）`));
   els.bandRow2.innerHTML = parts.join("");
+}
+
+// 「6 まとめ」の表。1〜5で見たことを、思考の順(前提の値動き → 過去の実績 → HV → IV)に1行ずつ並べる。
+// 数字は、各カードが計算したものをそのまま使う(ここでは再計算しない)。確率の比較(IV換算・HV換算・実績)は、同じ節の「3点比較」に任せる。
+function renderConclusion(t) {
+  const body = els.conclBody;
+  if (!t || !t.closesFull || !t.symbol || els.result.hidden) { body.innerHTML = ""; return; }
+  const group = typeGroup(t.typeKey);
+  const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
+  const tag = (cls, name) => `<span class="basis-tag ${cls}"><i></i>${name}</span>`;
+  const row = (n, cls, name, result, reading) =>
+    `<tr><td class="cc-n">${n}</td><td>${tag(cls, name)}</td><td class="cc-res">${result}</td><td>${reading}</td></tr>`;
+  const rows = [];
+
+  const c = band.cond;
+  if (c) {
+    const word = c.down ? "下落" : "上昇";
+    const ok = c.hitDays >= 1;
+    rows.push(row(1, "basis-none", "直近の値動き",
+      `${ok ? "最低条件：満たしています" : "最低条件：満たしていません"}`,
+      `1〜7営業日前との比較のうち、設定した変化率以上の${word}が${c.hitDays}/7日（最低条件は1日以上、推奨は${c.rec}日以上）。`));
+  }
+
+  const dep = depthSuffixOf(t);
+  const goodWord = group === "sell" ? "低いほど有利" : "高いほど有利";
+  rows.push(row(2, "basis-act", "過去の実績",
+    `ITM${dep}発生率 ${els.overallProb.textContent}（総合判定：${els.badge.textContent}）`,
+    `過去のエントリー${els.entryCount.textContent}件のうち、${els.itmCount.textContent}件で、判定期間内に一度はITM${dep}に届きました（${goodWord}）。`));
+
+  const hs = band.hvSigma;
+  const hp = band.hvPos;
+  if (hs) {
+    const pctl = hp ? hp.percentile : null;
+    const regimeNote = pctl === null ? "" : pctl >= 0.8 ? "過去1年の中では荒れている時期なので、実績を調べた期間より、動きが大きくなりやすい点に注意します。"
+      : pctl <= 0.2 ? "過去1年の中では穏やかな時期です。" : "過去1年の中では、ふだんに近い水準です。";
+    rows.push(row(3, "basis-hv", "HV",
+      `権利行使価格は、満期までの値動き（1σ ±${pct(hs.sigmaPct)}）の ${Math.abs(hs.z).toFixed(2)}σ ${hs.z >= 0 ? "外側" : "内側"}`,
+      `直近${hs.days}営業日のHVは${pct(hp ? hp.hv : 0)}。${regimeNote}`));
+  }
+
+  const iv = band.ivhv;
+  if (group === "sell" && iv) {
+    rows.push(row(4, "basis-iv", "IV",
+      `IV ${pct(iv.iv)}（HVの${iv.ratio.toFixed(2)}倍・${iv.word}）`,
+      `${iv.phrase}。${iv.meaning}。`));
+  }
+  body.innerHTML = rows.join("");
 }
 
 // 「最低条件」の判定の表示。最低条件＝1〜7営業日前との比較のうち、設定した変化率以上の値動きが1日以上。推奨＝該当日数の設定値以上。
