@@ -93,8 +93,10 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
  * @param {string} p.nowLabel 「いま」の下に出す文字(日付など)
  * @param {string} p.expiryLabel 満期の下に出す文字
  * @param {string} p.barrierLabel ITMの水準に添える文字
+ * @param {number|null} p.markBefore 満期のこの営業日数前に縦線を引く(満期までの日数より小さいときだけ。例: 10＝満期の10営業日前)。その位置の±1σの株価も出す
+ * @param {string} p.markLabel 縦線の下に出す文字(日付など)
  */
-export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準" }) {
+export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "" }) {
   const w = 640;
   const h = 300;
   const padL = 50;
@@ -166,8 +168,24 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
     + `<text x="${f(xEnd)}" y="${h - 20}" font-size="10.5" text-anchor="middle" fill="var(--muted)">${expiryLabel}</text>`
     + `<text x="${f(padL)}" y="${h - 20}" font-size="10.5" text-anchor="start" fill="var(--muted)">直近${nPast}営業日</text>`;
 
+  // 満期のN営業日前の縦線と、その位置(いまからの経過日数＝days−N)の±1σの株価
+  let mark = "";
+  if (markBefore !== null && markBefore > 0 && markBefore < days) {
+    const t = days - markBefore;
+    const x = xFut(t);
+    const spread = price * sigmaPct * Math.sqrt(t / days);
+    const vUp = price + spread;
+    const vDn = price - spread;
+    const col = "var(--gradOrange)";
+    mark = `<line x1="${f(x)}" y1="${padT}" x2="${f(x)}" y2="${h - padB}" stroke="${col}" stroke-width="1.8" stroke-dasharray="5 3"/>`
+      + `<circle cx="${f(x)}" cy="${f(y(vUp))}" r="3.5" fill="${col}"/><circle cx="${f(x)}" cy="${f(y(vDn))}" r="3.5" fill="${col}"/>`
+      + `<text x="${f(x + 6)}" y="${f(y(vUp) - 5)}" font-size="10.5" font-weight="700" fill="${col}">+1σ ${vUp.toFixed(1)}</text>`
+      + `<text x="${f(x + 6)}" y="${f(y(vDn) + 13)}" font-size="10.5" font-weight="700" fill="${col}">−1σ ${vDn.toFixed(1)}</text>`
+      + `<text x="${f(x)}" y="${h - 6}" font-size="10.5" font-weight="700" text-anchor="middle" fill="${col}">${markLabel}</text>`;
+  }
+
   return `<svg viewBox="0 0 ${w} ${h}" class="chart cone-chart" role="img" aria-label="満期までの値動きの目安とITMの水準">`
-    + grid + zone + cone + past + expiryLine + nowDot + barrierLine + barrierText + rightLabels + bottomLabels
+    + grid + zone + cone + past + expiryLine + nowDot + barrierLine + barrierText + mark + rightLabels + bottomLabels
     + `</svg>`;
 }
 
