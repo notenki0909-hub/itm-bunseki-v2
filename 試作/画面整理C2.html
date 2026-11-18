@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>画面整理の試作（C2）</title>
+<title>画面整理の試作（C2・注文プラン先行）</title>
 <style>
 /* site/css/style.css をそのまま取り込み(試作を1ファイルで表示するため) */
 :root{
@@ -520,15 +520,20 @@ body[data-mode="naked"] .ord-premmode{display:none}
   table.map{border-collapse:collapse;width:100%;font-size:12.5px}
   table.map th,table.map td{border:1px solid var(--line);padding:5px 7px;text-align:left;vertical-align:top}
   table.map th{background:var(--th)}
+  .flow{background:var(--field);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12.5px;margin:0 0 12px}
+  details.mini{margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--field)}
+  details.mini>summary{cursor:pointer;font-size:12.5px;color:var(--accent)}
+  .btn-fake{display:inline-block;border:1px solid var(--accent);border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--card)}
+  .actions{margin:6px 0}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="proto-banner"><b>これは見た目だけの試作です（数字はダミー）。</b>本番の画面・計算は変えていません。上の帯とナビは、スクロールしても上に残ります。各セクションは、タイトルをクリックして開閉できます。</div>
 
-  <h1>ITM分析ツール Ver2<span style="font-size:13px;font-weight:400;color:var(--muted)">　画面整理C2の試作</span></h1>
+  <h1>ITM分析ツール Ver2<span style="font-size:13px;font-weight:400;color:var(--muted)">　画面整理C2の試作（注文プラン先行版）</span></h1>
 
-  <!-- 1. 上に固定する帯＋ナビ -->
+  <!-- 上に固定する帯＋ナビ -->
   <div class="c2-top">
     <div class="c2-band">
       <span class="sym">QQQ</span>
@@ -543,32 +548,47 @@ body[data-mode="naked"] .ord-premmode{display:none}
       <span class="kv">IV÷HV <b>0.96倍</b>（同程度）</span>
     </div>
     <nav class="c2-nav" aria-label="セクションへ移動">
-      <a href="#s1"><span class="n">1</span>入力</a>
+      <a href="#s1"><span class="n">1</span>注文プラン</a>
       <a href="#s2"><span class="n">2</span>結論</a>
       <a href="#s3"><span class="n">3</span>見比べ</a>
-      <a href="#s4"><span class="n">4</span>値動きの背景</a>
-      <a href="#s5"><span class="n">5</span>注文プラン</a>
-      <a href="#s6"><span class="n">6</span>リスク確認</a>
-      <a href="#s7"><span class="n">7</span>注文まとめ</a>
+      <a href="#s4"><span class="n">4</span>見直し</a>
+      <a href="#s5"><span class="n">5</span>リスク確認</a>
+      <a href="#s6"><span class="n">6</span>注文まとめ</a>
+      <a href="#s7"><span class="n">7</span>値動きの背景</a>
       <a href="#s8"><span class="n">8</span>絞り込み</a>
     </nav>
   </div>
 
-  <!-- 1 入力 -->
+  <div class="flow">
+    <b>使い方の流れ</b>：①いま考えている注文プランを入れる → ②その注文だと、分析結果はどうか見る（2・3） → ③分析結果から、よりよい内容を探して採用する（4。採用すると、①の注文プランに反映される） → ④リスクを確認して（5）、注文まとめにする（6）
+  </div>
+
+  <!-- 1 注文プラン -->
   <details class="sec" id="s1" open>
-    <summary><span class="t"><span class="n">1</span>入力</span><span class="d">銘柄・取引タイプ・比率・満期日・集計期間を、ここだけで入力します（いまは「入力」と「注文内容」の2か所にあります）</span></summary>
+    <summary><span class="t"><span class="n">1</span>注文プラン</span><span class="d">「こう注文したい」という内容を、ここに入れます。入力欄は、ここだけです（いまは「入力」と「注文内容」の2か所）。分析は、このプランについて行います</span></summary>
     <div class="body">
+      <div class="sub-h">注文の内容</div>
       <div class="chips">
-        <span class="chip">ティッカー QQQ</span><span class="chip">取引タイプ ブルプット</span><span class="chip">権利行使価格の比率 0.968</span>
-        <span class="chip">満期日 12-31</span><span class="chip">集計期間 1年</span><span class="chip">判定する深さ 0</span>
+        <span class="chip">ティッカー QQQ</span><span class="chip">取引タイプ ブルプット</span>
+        <span class="chip">売りの権利行使価格 636</span><span class="chip">買いの権利行使価格 626</span>
+        <span class="chip">満期日 12-31</span><span class="chip">受取プレミアム 1.20</span>
+        <span class="chip">IV（売り建て側）30%</span><span class="chip">利確割合 80%</span>
+        <span class="chip">トータル資金額 50,000ドル</span><span class="chip">発注する枚数 2枚</span>
       </div>
-      <p class="sub" style="margin:8px 0 0">銘柄タブ（QQQ／SPY／…）はここの上に残します。「分析する」を押すと、下のすべてが更新されます。</p>
+      <p class="sub" style="margin:6px 0 0">権利行使価格の比率は、権利行使価格を入れると自動で決まります（比率から入れることもできます）。権利行使価格を空欄にして、比率だけ入れる使い方も残します。</p>
+      <div class="sub-h">このプランの確認（計算結果）</div>
+      <div class="ph">決済の目安（利確・ロスカット）／満期日の候補と判断日／損益分岐点／最大損失額 —— 注文内容の入力から決まる数字を、入力のすぐ下に出します</div>
+      <details class="mini">
+        <summary>分析の詳しい設定（集計期間・判定する深さ）　▼</summary>
+        <div class="chips" style="margin-top:6px"><span class="chip">集計期間 1年</span><span class="chip">判定する深さ 0</span></div>
+        <p class="sub" style="margin:4px 0 0">ふだんは触らない設定なので、折りたたんでおきます。</p>
+      </details>
     </div>
   </details>
 
   <!-- 2 結論 -->
   <details class="sec" id="s2" open>
-    <summary><span class="t"><span class="n">2</span>結論：過去のデータで、有利か不利か</span><span class="d">総合判定・ITM発生率・本日の状況。いまは4番目のカードにある結論を、2番目に出します</span></summary>
+    <summary><span class="t"><span class="n">2</span>結論：この注文プランは、過去のデータでどうか</span><span class="d">総合判定・ITM発生率・本日の状況。いまは4番目のカードにある結論を、プランの直後に出します</span></summary>
     <div class="body">
       <div class="sub-h">分析結果</div>
       <div class="summary">
@@ -612,44 +632,45 @@ body[data-mode="naked"] .ord-premmode{display:none}
     </div>
   </details>
 
-  <!-- 4 値動きの背景 -->
-  <details class="sec" id="s4">
-    <summary><span class="t"><span class="n">4</span>値動きの背景（参考）</span><span class="d">変動幅の統計・HV・満期までの値動きのグラフ。初期は閉じています</span></summary>
-    <div class="body">
-      <div class="ph">変動幅の統計（表）／HV（歴史的ボラティリティ）カード／満期までの値動きの目安と、権利行使価格の位置（満期10営業日前の縦線つき）</div>
-    </div>
-  </details>
-
-  <!-- 5 注文プラン -->
-  <details class="sec" id="s5" open>
-    <summary><span class="t"><span class="n">5</span>注文プラン</span><span class="d">権利行使価格を決め、受取・利確・満期日を整えます（売り系）</span></summary>
+  <!-- 4 見直し -->
+  <details class="sec" id="s4" open>
+    <summary><span class="t"><span class="n">4</span>見直し：分析結果から選んで、プランに採用する</span><span class="d">「ITM発生率を◯%以下にしたい」などの条件で、よりよい権利行使価格を探します。「採用」を押すと、1の注文プランに反映され、分析がやり直されます（売り系）</span></summary>
     <div class="body">
       <div class="sub-h">推奨比率の逆算</div>
-      <div class="ph">目標のITM発生率（%以下）→ 推奨の権利行使価格／比率ごとの一覧（1・5・10ドル刻み）</div>
-      <div class="sub-h">注文内容</div>
-      <div class="chips"><span class="chip">売りの権利行使価格 636</span><span class="chip">買いの権利行使価格 626</span><span class="chip">受取プレミアム 1.20</span><span class="chip">IV（売り建て側）30%</span><span class="chip">利確割合 80%</span></div>
-      <p class="sub" style="margin:4px 0 0">（入力欄は、ここにある売買の権利行使価格・プレミアム・IV・利確割合だけにします。ティッカー・比率・満期日は、1の入力に集約）</p>
-      <div class="sub-h">決済の目安・満期日と判断日・損益分岐点</div>
-      <div class="ph">利確（買い戻しの指値）／ロスカットの逆指値／満期日の候補と判断日／損益分岐点</div>
+      <div class="chips"><span class="chip">目標 ITM発生率 5%以下</span><span class="chip">受取の下限 0.45</span></div>
+      <div class="summary">
+        <div class="stat"><div class="stat-head"><span class="stat-name">推奨の権利行使価格：</span><b>596</b><span class="stat-suffix">（ITM発生率 4.8%）</span></div><span class="stat-sub">受取（理論）0.52</span></div>
+      </div>
+      <div class="actions"><span class="btn-fake">この権利行使価格（596）を採用 → 1の注文プランへ</span></div>
+      <div class="ph" style="margin-top:8px">比率ごとの一覧（1・5・10ドル刻み）。各行の「採用」ボタンで、その権利行使価格を、1の注文プランに入れられます</div>
     </div>
   </details>
 
-  <!-- 6 リスク確認 -->
-  <details class="sec" id="s6" open>
-    <summary><span class="t"><span class="n">6</span>リスク確認と、損切りの目安</span><span class="d">ストレステストと、IV×時間の表を切り替えて見ます。損切りは、資金の2%まで（売り系）</span></summary>
+  <!-- 5 リスク確認 -->
+  <details class="sec" id="s5" open>
+    <summary><span class="t"><span class="n">5</span>リスク確認と、損切りの目安</span><span class="d">採用したプランについて、ストレステストと、IV×時間の表を切り替えて見ます。損切りは、資金の2%まで（売り系）</span></summary>
     <div class="body">
       <div class="tabs"><span class="on">株価が動いた場合（ストレステスト）</span><span>株価が変わらず時間が経った場合</span></div>
       <div class="ph">表（どちらの表でも、「資金2%超」の赤枠とセルの選択は、いまと同じ）。IVの注意文は、2つの表で1回だけにします</div>
       <div class="sub-h">損切りの目安（資金の2%まで）とリスクリワード</div>
-      <div class="chips"><span class="chip">トータル資金額 50,000ドル</span><span class="chip">発注する枚数 2枚</span><span class="chip moved">買い戻し価格の上限 6.20</span><span class="chip moved">リスクリワード 1：0.19</span></div>
+      <div class="chips"><span class="chip moved">買い戻し価格の上限 6.20</span><span class="chip moved">リスクリワード 1：0.19</span></div>
+      <p class="sub" style="margin:4px 0 0">資金と枚数は、1の注文プランで入れた値を使います（ここには入力欄を置きません）。</p>
     </div>
   </details>
 
-  <!-- 7 注文まとめ -->
-  <details class="sec" id="s7" open>
-    <summary><span class="t"><span class="n">7</span>注文まとめ</span><span class="d">最終的な注文（売りの指値・利確・損切り・枚数）。ここまでの入力と選択が、すべて反映されます</span></summary>
+  <!-- 6 注文まとめ -->
+  <details class="sec" id="s6" open>
+    <summary><span class="t"><span class="n">6</span>注文まとめ</span><span class="d">最終的な注文（売りの指値・利確・損切り・枚数）。ここまでの入力と選択が、すべて反映されます</span></summary>
     <div class="body">
       <div class="ph">注文まとめの表（12項目）＋「まとめをコピー」</div>
+    </div>
+  </details>
+
+  <!-- 7 値動きの背景 -->
+  <details class="sec" id="s7">
+    <summary><span class="t"><span class="n">7</span>値動きの背景（参考）</span><span class="d">変動幅の統計・HV・満期までの値動きのグラフ。初期は閉じています</span></summary>
+    <div class="body">
+      <div class="ph">変動幅の統計（表）／HV（歴史的ボラティリティ）カード／満期までの値動きの目安と、権利行使価格の位置（満期10営業日前の縦線つき）</div>
     </div>
   </details>
 
@@ -667,14 +688,15 @@ body[data-mode="naked"] .ord-premmode{display:none}
     <div class="body">
       <table class="map">
         <tr><th>いまの場所</th><th>試作での場所</th></tr>
-        <tr><td>入力パネル／注文内容の入力欄（ティッカー・取引タイプ・比率・満期日・判定する深さ）</td><td>1 入力（1か所に集約。連動の2重管理がなくなる）</td></tr>
-        <tr><td>本日の状況／終値（4か所）</td><td>上の固定帯（銘柄・終値・取引・満期・判定）＋2 結論</td></tr>
-        <tr><td>分析結果（総合判定バッジ）</td><td>上の固定帯と、2 結論</td></tr>
+        <tr><td>入力パネル／注文内容の入力欄（ティッカー・取引タイプ・比率・満期日・権利行使価格・プレミアム・IV・利確割合）／リスクの資金・枚数</td><td><b>1 注文プラン</b>（入力欄を1か所に集約。連動の2重管理がなくなる）</td></tr>
+        <tr><td>決済の目安・満期日と判断日・損益分岐点</td><td>1 注文プランの「このプランの確認」（入力のすぐ下）</td></tr>
+        <tr><td>集計期間・判定する深さ</td><td>1 注文プランの中の「分析の詳しい設定」（折りたたみ）</td></tr>
+        <tr><td>本日の状況／終値（4か所）／分析結果（総合判定バッジ）</td><td>上の固定帯と、2 結論</td></tr>
         <tr><td>IVとHVの比較／3点比較／HVカードの確率2項目</td><td><b>3 見比べ</b>に統合（重なる説明を1つにして、見比べ方のガイドを追加）</td></tr>
-        <tr><td>変動幅の統計・HVカード</td><td>4 値動きの背景（初期は閉じる）</td></tr>
-        <tr><td>推奨比率の逆算・注文内容・決済の目安・満期日・損益分岐点</td><td>5 注文プラン</td></tr>
-        <tr><td>ストレステスト・IV×時間の表・損切りの目安</td><td>6 リスク確認（2つの表はタブ切替）</td></tr>
-        <tr><td>注文まとめ</td><td>7 注文まとめ</td></tr>
+        <tr><td>推奨比率の逆算</td><td><b>4 見直し</b>（「採用」ボタンで、1の注文プランに反映）</td></tr>
+        <tr><td>ストレステスト・IV×時間の表・損切りの目安</td><td>5 リスク確認（2つの表はタブ切替）</td></tr>
+        <tr><td>注文まとめ</td><td>6 注文まとめ</td></tr>
+        <tr><td>変動幅の統計・HVカード</td><td>7 値動きの背景（初期は閉じる）</td></tr>
         <tr><td>エントリー条件で絞り込み／詳細マトリクス</td><td>8（初期は閉じる）</td></tr>
       </table>
     </div>
