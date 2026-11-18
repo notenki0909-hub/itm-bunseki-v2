@@ -22,14 +22,13 @@
       <a href="#s4" hidden><span class="n">4</span>HV</a>
       <a href="#s5" hidden><span class="n">5</span>IV</a>
       <a href="#s6" hidden><span class="n">6</span>まとめ</a>
-      <a href="#s7" hidden><span class="n">7</span>見直し</a>
-      <a href="#s8" hidden><span class="n">8</span>リスク確認</a>
-      <a href="#s9" hidden><span class="n">9</span>注文まとめ</a>
+      <a href="#s7" hidden><span class="n">7</span>リスク確認</a>
+      <a href="#s8" hidden><span class="n">8</span>注文まとめ</a>
     </nav>
   </div>
 
   <div class="flow">
-    <b>使い方の流れ</b>：①<b>最低条件</b>（直近7営業日の値動き）を確認する → ②いま考えている<b>注文プラン</b>を入れる → 次の3つを、この順に見る：③<b>過去の実績</b>（実際に起きたこと。判断の土台）→ ④<b>HV</b>（過去の値動きの大きさ。いまは実績の頃より荒れているか）→ ⑤<b>IV</b>（これからの市場の見込み）→ ⑥<b>まとめ</b>で3つの見方がそろっているかを確認 → ⑦分析結果から、よりよい内容を探して<b>採用</b>する（採用すると、②の注文プランに反映される）→ ⑧リスクを確認して、⑨<b>注文まとめ</b>にする
+    <b>使い方の流れ</b>：①<b>最低条件</b>（直近7営業日の値動き）を確認する → ②いま考えている<b>注文プラン</b>を入れる → 次の3つを、この順に見る：③<b>過去の実績</b>（実際に起きたこと。判断の土台。他の権利行使価格の実績を見て、よりよい内容を<b>採用</b>することもここでできる。採用すると②の注文プランに反映され、分析がやり直される）→ ④<b>HV</b>（過去の値動きの大きさ。いまは実績の頃より荒れているか）→ ⑤<b>IV</b>（これからの市場の見込み）→ ⑥<b>まとめ</b>で3つの見方がそろっているかを確認 → ⑦リスクを確認して、⑧<b>注文まとめ</b>にする
   </div>
 
   <details class="sec" id="s1" open>
@@ -296,7 +295,7 @@
   </details>
 
   <details class="sec" id="s3" open hidden>
-    <summary><span class="t"><span class="n">3</span>過去の実績：この条件で、過去に実際どうだったか</span><span class="d">根拠＝過去の実績。ここがすべての土台です（本日の状況・ITM発生率・総合判定・ヒートマップ）</span></summary>
+    <summary><span class="t"><span class="n">3</span>過去の実績：この条件で、過去に実際どうだったか</span><span class="d">根拠＝過去の実績。ここがすべての土台です（ITM発生率・総合判定・ヒートマップ。他の権利行使価格の実績を見て「採用」もここで）</span></summary>
     <div class="body">
   <div id="todayCard" class="card in-sec" hidden>
     <h3 style="margin:0 0 8px;font-size:14px" id="todayTitle">この実績の前提（本日の状況）</h3>
@@ -407,6 +406,41 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
     </div>
   </div>
 
+  <div id="ratioCard" class="card in-sec" hidden>
+    <h2 style="margin:0 0 6px;font-size:16px">他の権利行使価格なら、実績はどうか（推奨比率の逆算・採用）</h2>
+    <p class="basis basis-act"><i></i><b>基準：過去の実績</b>　この逆算で使う「ITM発生率」は、上の実績（分析結果）と同じ計算です。<b>IV・HVは基準に使っていません</b>（右の列に、参考として並べています）。</p>
+    <p class="sub" style="margin:0 0 10px">「ITM発生率を◯%以下にしたい」から、<b>条件に合う権利行使価格（整数）</b>を探します。1%刻みの比率に当たる整数の権利行使価格を、現在値に近い側から並べ、過去の実績（分析結果と同じ計算）でITM発生率を求めて、条件を満たす<b>最も現在値に近い権利行使価格</b>（受取が多くなる側）を選びます。満期日・判定する深さ・集計期間は、いまの入力のままです。</p>
+    <div class="form-row">
+      <div class="field">
+        <label for="ratioTargetInput">目標：ITM発生率（%以下：過去データから算出）</label>
+        <input id="ratioTargetInput" type="number" step="0.5" min="0" max="100" value="5">
+      </div>
+      <div class="field">
+        <label for="ratioMinPremInput">受取プレミアムの下限（講座は0.45）</label>
+        <input id="ratioMinPremInput" type="number" step="0.01" min="0" value="0.45">
+      </div>
+    </div>
+    <p class="sub" id="ratioPremHint" style="margin:-4px 0 10px"></p>
+    <div class="summary" id="ratioSummary"></div>
+    <div id="ratioActions" style="margin:0 0 12px"></div>
+    <div class="chart-title">比率ごとの一覧</div>
+    <div class="ratio-step" id="ratioStepBtns" role="group" aria-label="一覧の権利行使価格の刻み">
+      <span class="field-hint">表示する権利行使価格の刻み：</span>
+      <button type="button" class="sp-btn" data-step="ratio">比率1%ごと</button>
+      <button type="button" class="sp-btn" data-step="1">1ドル</button>
+      <button type="button" class="sp-btn" data-step="5">5ドル</button>
+      <button type="button" class="sp-btn" data-step="10">10ドル</button>
+    </div>
+    <div class="volatility-wrap ratio-table-wrap">
+      <table class="volatility-table ratio-table">
+        <thead><tr><th>権利行使価格<br>（比率）</th><th>ITM発生率<br>（実績）と判定</th><th>参考（基準外）<br>満期時ITM率(HV換算)<br>受取(理論：IV計算)</th><th></th></tr></thead>
+        <tbody id="ratioBody"></tbody>
+      </table>
+    </div>
+    <p class="sub" id="ratioNote" style="margin:8px 0 0"></p>
+  </div>
+
+
   <details class="mini" id="volDetails" hidden>
     <summary>参考：過去の値動きの大きさ（変動幅の統計）を見る</summary>
   <div id="volatilityCard" class="card in-sec" hidden>
@@ -493,48 +527,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </details>
 
   <details class="sec" id="s7" data-only="sell" open hidden>
-    <summary><span class="t"><span class="n">7</span>見直し：過去の実績をもとに、権利行使価格を選び直す</span><span class="d">基準＝過去の実績。「ITM発生率を◯%以下にしたい」から、よりよい権利行使価格を探します。「採用」を押すと、2の注文プランに反映され、分析がやり直されます</span></summary>
-    <div class="body">
-  <div id="ratioCard" class="card in-sec" hidden>
-    <h2 style="margin:0 0 6px;font-size:16px">推奨比率の逆算</h2>
-    <p class="basis basis-act"><i></i><b>基準：過去の実績</b>　この逆算で使う「ITM発生率」は、3の過去の実績（分析結果）と同じ計算です。<b>IV・HVは基準に使っていません</b>（右の列に、参考として並べています）。</p>
-    <p class="sub" style="margin:0 0 10px">「ITM発生率を◯%以下にしたい」から、<b>条件に合う権利行使価格（整数）</b>を探します。1%刻みの比率に当たる整数の権利行使価格を、現在値に近い側から並べ、過去の実績（分析結果と同じ計算）でITM発生率を求めて、条件を満たす<b>最も現在値に近い権利行使価格</b>（受取が多くなる側）を選びます。満期日・判定する深さ・集計期間は、いまの入力のままです。</p>
-    <div class="form-row">
-      <div class="field">
-        <label for="ratioTargetInput">目標：ITM発生率（%以下：過去データから算出）</label>
-        <input id="ratioTargetInput" type="number" step="0.5" min="0" max="100" value="5">
-      </div>
-      <div class="field">
-        <label for="ratioMinPremInput">受取プレミアムの下限（講座は0.45）</label>
-        <input id="ratioMinPremInput" type="number" step="0.01" min="0" value="0.45">
-      </div>
-    </div>
-    <p class="sub" id="ratioPremHint" style="margin:-4px 0 10px"></p>
-    <div class="summary" id="ratioSummary"></div>
-    <div id="ratioActions" style="margin:0 0 12px"></div>
-    <div class="chart-title">比率ごとの一覧</div>
-    <div class="ratio-step" id="ratioStepBtns" role="group" aria-label="一覧の権利行使価格の刻み">
-      <span class="field-hint">表示する権利行使価格の刻み：</span>
-      <button type="button" class="sp-btn" data-step="ratio">比率1%ごと</button>
-      <button type="button" class="sp-btn" data-step="1">1ドル</button>
-      <button type="button" class="sp-btn" data-step="5">5ドル</button>
-      <button type="button" class="sp-btn" data-step="10">10ドル</button>
-    </div>
-    <div class="volatility-wrap ratio-table-wrap">
-      <table class="volatility-table ratio-table">
-        <thead><tr><th>権利行使価格<br>（比率）</th><th>ITM発生率<br>（実績）と判定</th><th>参考（基準外）<br>満期時ITM率(HV換算)<br>受取(理論：IV計算)</th><th></th></tr></thead>
-        <tbody id="ratioBody"></tbody>
-      </table>
-    </div>
-    <p class="sub" id="ratioNote" style="margin:8px 0 0"></p>
-  </div>
-
-
-    </div>
-  </details>
-
-  <details class="sec" id="s8" data-only="sell" open hidden>
-    <summary><span class="t"><span class="n">8</span>リスク確認と、損切りの目安</span><span class="d">採用したプランについて、ストレステストと、IV×時間の表をタブで切り替えて見ます。損切りは、資金の2%まで</span></summary>
+    <summary><span class="t"><span class="n">7</span>リスク確認と、損切りの目安</span><span class="d">採用したプランについて、ストレステストと、IV×時間の表をタブで切り替えて見ます。損切りは、資金の2%まで</span></summary>
     <div class="body">
       <div class="card in-sec" id="riskCard">
         <div class="risk-tabs" role="tablist">
@@ -574,8 +567,8 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
     </div>
   </details>
 
-  <details class="sec" id="s9" data-only="sell" open hidden>
-    <summary><span class="t"><span class="n">9</span>注文まとめ</span><span class="d">最終的な注文（売りの指値・利確・損切り・枚数）。ここまでの入力と選択が、すべて反映されます</span></summary>
+  <details class="sec" id="s8" data-only="sell" open hidden>
+    <summary><span class="t"><span class="n">8</span>注文まとめ</span><span class="d">最終的な注文（売りの指値・利確・損切り・枚数）。ここまでの入力と選択が、すべて反映されます</span></summary>
     <div class="body">
   <div id="planCard" class="card in-sec" hidden>
     <h2 style="margin:0 0 6px;font-size:16px">注文まとめ（P売り注文・利確・損切り）</h2>

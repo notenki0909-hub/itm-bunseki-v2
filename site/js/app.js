@@ -2624,7 +2624,7 @@ function setupCellTip() {
 // 帯に出す値。各描画関数が、計算のついでに置いていく(renderAllの最初にリセットする)
 const band = { hvItm: null, ivhv: null, cond: null, hvSigma: null, hvPos: null };
 
-// セクション(3〜9)の表示を、中のカードの表示状態に合わせる。ナビの項目も同じ。
+// セクション(3〜8)の表示を、中のカードの表示状態に合わせる。ナビの項目も同じ。
 // 売り系だけのセクション(data-only="sell")は、買い系のときは出さない。
 function syncSections() {
   const shown = (...cards) => cards.some((c) => !c.hidden);
@@ -2642,9 +2642,8 @@ function syncSections() {
   set("s4", shown(els.hvCard));
   set("s5", shown(els.orderCard));
   set("s6", shown(els.result));
-  set("s7", shown(els.ratioCard));
-  set("s8", shown(els.orderCard));
-  set("s9", shown(els.planCard));
+  set("s7", shown(els.orderCard));
+  set("s8", shown(els.planCard));
 }
 
 // 上に固定する帯(銘柄・終値・取引・満期／最低条件・総合判定・ITM発生率・満期時ITM率・IV÷HV)。t=nullなら、未選択の表示
