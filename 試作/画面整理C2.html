@@ -528,6 +528,11 @@ body[data-mode="naked"] .ord-premmode{display:none}
   .gate{border-radius:8px;padding:8px 12px;font-size:13px;margin:8px 0;border:1px solid var(--line)}
   .gate.ok{background:color-mix(in srgb,var(--gA) 14%,transparent);border-color:var(--gA)}
   .gate.ng{background:color-mix(in srgb,var(--gC) 14%,transparent);border-color:var(--gC)}
+  .gate.mid{background:color-mix(in srgb,var(--gB) 14%,transparent);border-color:var(--gB)}
+  .state-switch{font-size:11.5px;color:var(--muted);padding:2px 0 0}
+  .state-switch button{font:inherit;font-size:11.5px;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:6px;padding:1px 8px;margin-left:4px;cursor:pointer}
+  .state-switch button.on{border-color:var(--accent);color:var(--accent);font-weight:700}
+  [hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -538,6 +543,8 @@ body[data-mode="naked"] .ord-premmode{display:none}
 
   <!-- 上に固定する帯＋ナビ -->
   <div class="c2-top">
+    <div class="state-switch">表示の確認：<button type="button" id="stOn" class="on">ティッカーを選んだ状態</button><button type="button" id="stOff">ティッカーを選んでいない状態</button></div>
+    <div id="bandOn">
     <div class="c2-band">
       <span class="sym">QQQ</span>
       <span class="px">656.95<span class="kv">　11-17の終値</span></span>
@@ -545,10 +552,21 @@ body[data-mode="naked"] .ord-premmode{display:none}
       <span class="kv">満期 <b>12-31</b>（30営業日）</span>
     </div>
     <div class="c2-band" style="padding-top:0">
+      <span class="kv">最低条件 <b style="color:var(--gA)">満たす</b></span>
       <span class="badge b0">大ピンチ</span>
       <span class="kv">ITM発生率（実績） <b>55.2%</b></span>
       <span class="kv">満期時ITM率（HV換算） <b>38%</b></span>
       <span class="kv">IV÷HV <b>0.96倍</b>（同程度）</span>
+    </div>
+    </div>
+    <div id="bandOff" hidden>
+    <div class="c2-band">
+      <span class="sym" style="color:var(--muted)">―</span>
+      <span class="kv"><b>ティッカーを入力して「分析する」を押してください</b></span>
+    </div>
+    <div class="c2-band" style="padding-top:0">
+      <span class="kv">最低条件 <b>―</b></span><span class="kv">総合判定 <b>―</b></span><span class="kv">ITM発生率 <b>―</b></span><span class="kv">IV÷HV <b>―</b></span>
+    </div>
     </div>
     <nav class="c2-nav" aria-label="セクションへ移動">
       <a href="#s1"><span class="n">1</span>最低条件</a>
@@ -563,23 +581,26 @@ body[data-mode="naked"] .ord-premmode{display:none}
   </div>
 
   <div class="flow">
-    <b>使い方の流れ</b>：①まず、<b>最低条件</b>（直近7営業日に−5%下落した日が1日以上あるか）を確認する → ②その条件を満たしたら、いま考えている注文プランを入れる → ③そのプランの分析結果を見る（3・4） → ④分析結果から、よりよい内容を探して採用する（5。採用すると、②の注文プランに反映される） → ⑤リスクを確認して（6）、注文まとめにする（7）
+    <b>使い方の流れ</b>：①まず、<b>最低条件</b>（直近7営業日の1〜7営業日前との比較で、−1%以上の下落が1日以上あるか）を確認する → ②いま考えている注文プランを入れる → ③そのプランの分析結果を見る（3・4） → ④分析結果から、よりよい内容を探して採用する（5。採用すると、②の注文プランに反映される） → ⑤リスクを確認して（6）、注文まとめにする（7）
   </div>
 
   <!-- 1 最低条件 -->
   <details class="sec" id="s1" open>
-    <summary><span class="t"><span class="n">1</span>最低条件：直近7営業日に、−5%下落した日があるか</span><span class="d">エントリーの前提です。これを満たさないときは、下の注文プランに進まない目安にします（いまは一番下の「エントリー条件で絞り込み」にある内容を、一番上に出します）</span></summary>
+    <summary><span class="t"><span class="n">1</span>最低条件：直近7営業日に、−1%以上の下落があるか</span><span class="d">エントリーの前提です。満たさないときは、「最低条件：満たしていません」と表示します（下の画面は、そのまま見られます）。いまは一番下の「エントリー条件で絞り込み」にある内容を、一番上に出します</span></summary>
     <div class="body">
       <div class="sub-h">銘柄</div>
       <div class="chips"><span class="chip">ティッカー QQQ</span><span class="chip">分析する</span></div>
       <p class="sub" style="margin:4px 0 0">ティッカーは、ここで入れます。銘柄タブ（QQQ／SPY／…）も、この上に残します。</p>
       <div class="sub-h">条件</div>
-      <div class="chips"><span class="chip">方向 下落</span><span class="chip">変化率 5%以上</span><span class="chip">方式 直近7営業日中の該当日数</span><span class="chip">該当日数 1日以上</span></div>
-      <div class="gate ok"><b>最低条件：満たしています</b>　直近7営業日のうち、−5%以上下がっている比較が、本日の行で<b>3/7日</b>あります（必要は1日以上）。下の注文プランに進めます。</div>
+      <div class="chips"><span class="chip">方向 下落</span><span class="chip">変化率 1%以上</span><span class="chip">方式 直近7営業日中の該当日数</span><span class="chip">推奨の該当日数 3日以上</span></div>
+      <p class="sub" style="margin:6px 0 2px">判定の表示（本日の行の、1〜7営業日前比のうち、−1%以上の下落の日数で変わります。下の3通りのうち、そのときに当てはまる1つだけを出します）</p>
+      <div class="gate ok"><b>最低条件：満たしています</b>（推奨も満たしています）　1〜7営業日前との比較のうち、−1%以上の下落が<b>4/7日</b>あります（最低条件は1日以上、推奨は3日以上）。</div>
+      <div class="gate mid"><b>最低条件：満たしています</b>（推奨には届きません）　−1%以上の下落が<b>2/7日</b>あります（最低条件は1日以上、推奨は3日以上）。</div>
+      <div class="gate ng"><b>最低条件：満たしていません</b>　−1%以上の下落が<b>0/7日</b>です（最低条件は1日以上）。下の画面は、そのまま見られます。</div>
       <div class="sub-h">直近7営業日の詳細マトリクス</div>
       <div class="ph">日付・終値・権利行使価格・7〜1営業日前比の表（−5%以上の下落のマスに色）。いまの表と同じです</div>
       <details class="mini">
-        <summary>この条件のときの、過去の勝率（ITM発生エントリー数・割合）　▼</summary>
+        <summary>この条件（推奨：3日以上）のときの、過去の勝率（ITM発生エントリー数・割合）　▼</summary>
         <p class="sub" style="margin:6px 0 0">該当日数／ITM発生エントリー数／延べ日数／割合。いまの「エントリー条件で絞り込み」の下半分です。「分析結果」の割合との比較もここで見ます。</p>
       </details>
     </div>
@@ -637,7 +658,7 @@ body[data-mode="naked"] .ord-premmode{display:none}
       <p class="sub" style="margin:2px 0 0">※IV・HV換算は「満期時に」ITMになる理論上の確率、実績は「期間中に一度でも」ITMに届いた割合です。定義が違うため、数字をそのまま同じものとして比べないでください。</p>
 
       <div class="guide">
-        <h4>この3つの見比べ方と、わかること（たたき台）</h4>
+        <h4>この3つの見比べ方と、わかること</h4>
         <ol>
           <li><b>実績を、判断の中心に置く</b>：過去にこの条件で、実際に起きた割合です。</li>
           <li><b>HV換算 − 実績</b>：HV換算が実績より大きいときは、いまが過去の平均より荒れている可能性があります（HVの「ふだん（中央値）」と見比べます）。</li>
@@ -702,7 +723,7 @@ body[data-mode="naked"] .ord-premmode{display:none}
     <div class="body">
       <table class="map">
         <tr><th>いまの場所</th><th>試作での場所</th></tr>
-        <tr><td>エントリー条件で絞り込み（一番下）／直近7営業日の詳細マトリクス</td><td><b>1 最低条件</b>（一番上。条件は、下落5%・直近7営業日・1日以上を初期値にする案）</td></tr>
+        <tr><td>エントリー条件で絞り込み（一番下）／直近7営業日の詳細マトリクス</td><td><b>1 最低条件</b>（一番上。条件の初期値は、下落1%以上・直近7営業日中の該当日数・推奨3日以上。最低条件は1日以上）</td></tr>
         <tr><td>入力パネルのティッカー</td><td>1 最低条件</td></tr>
         <tr><td>入力パネル／注文内容の入力欄（取引タイプ・比率・満期日・権利行使価格・プレミアム・IV・利確割合）／リスクの資金・枚数</td><td><b>2 注文プラン</b>（入力欄を1か所に集約。連動の2重管理がなくなる）</td></tr>
         <tr><td>決済の目安・満期日と判断日・損益分岐点</td><td>2 注文プランの「このプランの確認」（入力のすぐ下）</td></tr>
@@ -717,5 +738,10 @@ body[data-mode="naked"] .ord-premmode{display:none}
     </div>
   </details>
 </div>
+<script>
+  const on=document.getElementById('bandOn'), off=document.getElementById('bandOff'), bOn=document.getElementById('stOn'), bOff=document.getElementById('stOff');
+  bOn.onclick=()=>{on.hidden=false;off.hidden=true;bOn.classList.add('on');bOff.classList.remove('on');};
+  bOff.onclick=()=>{on.hidden=true;off.hidden=false;bOff.classList.add('on');bOn.classList.remove('on');};
+</script>
 </body>
 </html>
