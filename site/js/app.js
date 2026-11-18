@@ -7,7 +7,7 @@ import {
   RISK_VARIANT_LABELS,
   baseEntryIndices, computeDepthEntryResults, summarizeDepthResults,
   VOLATILITY_PERIODS, computeVolatilityStats, computeRecentVolatilityAmount,
-  computeHv, computeHvSeries, hvPosition, hvTheory,
+  computeHv, computeHvSeries, hvPosition, hvTheory, computeEmpiricalCone,
 } from "./calc.js";
 import { renderDayProbChart, DAY_PROB_BANDS, renderConeChart, renderHvHistoryChart } from "./chart.js";
 import { renderEntryHeatmap, ENTRY_HEATMAP_BANDS, renderDepthHeatmap, DEPTH_HEATMAP_BANDS, renderOtmHeatmap, OTM_HEATMAP_BANDS, OTM_RATE_BANDS } from "./heatmap.js";
@@ -276,10 +276,7 @@ const els = {
   hvCard: document.getElementById("hvCard"),
   hvMatchTitle: document.getElementById("hvMatchTitle"),
   hvMatchSummary: document.getElementById("hvMatchSummary"),
-  hvTheoryTitle: document.getElementById("hvTheoryTitle"),
   hvTheorySummary: document.getElementById("hvTheorySummary"),
-  hvConeWrap: document.getElementById("hvConeWrap"),
-  hvConeLegend: document.getElementById("hvConeLegend"),
   ivConeWrap: document.getElementById("ivConeWrap"),
   ivConeLegend: document.getElementById("ivConeLegend"),
   hvTheoryNote: document.getElementById("hvTheoryNote"),
@@ -1015,7 +1012,6 @@ function renderHvCard(t) {
   const hvN = computeHv(closes, days);
   const theory = hvN === null ? null : hvTheory({ price, strike, depthDollar, itmWhen: type.itmWhen, days, hv: hvN });
   band.hvItm = theory ? theory.probItmAtExpiry : null;
-  els.hvTheoryTitle.textContent = `満期（${days}営業日）までの値動きの目安と、権利行使価格の位置`;
   if (!theory) {
     els.hvTheorySummary.innerHTML = "";
     coneBase = null;
@@ -1062,23 +1058,23 @@ function renderHvCard(t) {
   setupStatExplain();
 }
 
-// コーン図(満期までの値動きの目安と、権利行使価格の位置)。HV基準の±1σ・±2σの帯に、IVが分かれば、IV基準の±1σの枠を重ねる。
-// 売り系は「5 IV」の節、買い系(IVの入力がない)は「4 HV」の節に描く。材料(coneBase)は、renderHvCardが置く。
+// コーン図(満期までの値動きの目安と、権利行使価格の位置)。「6 まとめ」に描く。
+// 3つの見方を重ねる: ①HV基準の±1σ・±2σ(青) ②IV基準の±1σ(オレンジの点線の枠。売り系でIVが分かれば) ③過去の実績の約68%の範囲(灰色の帯)と最小・最大(点線)。
+// 材料(coneBase)は、renderHvCardが置く。IVは、renderIvHvが分かったときに渡す。
 let coneBase = null;
 function drawCone(t, iv) {
-  const sell = typeGroup(t.typeKey) === "sell";
-  const wrap = sell ? els.ivConeWrap : els.hvConeWrap;
-  const legend = sell ? els.ivConeLegend : els.hvConeLegend;
-  els.hvConeWrap.innerHTML = "";
-  els.ivConeWrap.innerHTML = "";
-  els.hvConeLegend.textContent = "";
-  els.ivConeLegend.textContent = "";
+  const wrap = els.ivConeWrap;
+  const legend = els.ivConeLegend;
+  wrap.innerHTML = "";
+  legend.textContent = "";
   const cb = coneBase;
   if (!cb) return;
+  const sell = typeGroup(t.typeKey) === "sell";
   const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
   const { theory, dist, days } = cb;
-  els.hvTheoryTitle.textContent = `満期（${days}営業日）までの値動きの目安と、権利行使価格の位置`;
   const ivSigma = iv && iv.thIv ? iv.thIv.sigmaPct : null;
+  const pc = periodClosesOf(t);
+  const emp = computeEmpiricalCone(pc, days);
   const side = theory.zScore >= 0 ? "外" : "内";
   const sigmaText = ivSigma !== null
     ? `HV ${Math.abs(theory.zScore).toFixed(2)}σ／IV ${Math.abs(iv.thIv.zScore).toFixed(2)}σ${side}`
@@ -1090,13 +1086,19 @@ function drawCone(t, iv) {
     markBefore: days > MARK_BEFORE_EXPIRY ? MARK_BEFORE_EXPIRY : null,
     markLabel: `満期${MARK_BEFORE_EXPIRY}営業日前 ${shiftTradingDays(cb.expiryDate, MARK_BEFORE_EXPIRY).slice(5)}`,
     ivSigmaPct: ivSigma,
+    empCone: emp,
   });
-  const markText = days > MARK_BEFORE_EXPIRY ? `灰色の縦線＝満期の${MARK_BEFORE_EXPIRY}営業日前（その日の日付と、そのときの±1σの株価）。` : "";
+  const markText = days > MARK_BEFORE_EXPIRY ? `灰色の縦線＝満期の${MARK_BEFORE_EXPIRY}営業日前（その日の日付と、そのときのHV・IVの±1σの株価）。` : "";
   const ivText = !sell ? ""
     : ivSigma !== null
-      ? "オレンジの点線の枠＝IV基準の±1σ（市場が見込む範囲）。HVの帯（青）より広ければ、市場は、過去の値動き（HV）より大きな動きを見込んでいます。IVは、売り建て側の1つの値を、全体に当てはめた目安です。"
+      ? "オレンジの点線の枠＝IV基準の±1σ（市場が見込む範囲）。IVは、売り建て側の1つの値を全体に当てはめた目安です。"
       : "IV（売り建て側）か受取プレミアム額を入力すると、IV基準の±1σの枠が重なります。";
-  legend.textContent = `${markText}濃い青の帯＝HV基準の±1σ（満期時に約68%がこの範囲）、薄い青＝±2σ（約95%）。${ivText}赤い破線＝ITMの水準、その先の薄い赤＝ITM側。HVの帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
+  let empText = "";
+  if (emp) {
+    const trials = Math.max(1, Math.round(emp.count / days));
+    empText = `灰色の帯＝過去の実績の約68%の範囲（過去の各エントリー日から、同じ営業日数が経ったときの株価の変化の、下位16%〜上位84%）、黒の点線＝過去の最大・最小（過去1回の出来事で、参考）。実績は、集計期間の${emp.count}件のエントリーから求めています（判定期間が重なるため、独立した試行は約${trials}回分）。調べた期間の相場つきに左右されます。`;
+  }
+  legend.textContent = `${markText}青の帯＝HV基準の±1σ（満期時に約68%がこの範囲）、薄い青＝±2σ（約95%）。${ivText}${empText}赤い破線＝ITMの水準、その先の薄い赤＝ITM側。HVの帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
 }
 
 // 「本日の状況」を、入力された過去の日付の時点で見るための基準日を決める。

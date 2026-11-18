@@ -96,8 +96,9 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
  * @param {number|null} p.markBefore 満期のこの営業日数前に縦線を引く(満期までの日数より小さいときだけ。例: 10＝満期の10営業日前)。その位置の±1σの株価も出す
  * @param {string} p.markLabel 縦線の下に出す文字(日付など)
  * @param {number|null} p.ivSigmaPct IV基準の満期までの1σ(割合)。あれば、HV基準の帯(青)にIV基準の±1σの帯(オレンジ)を重ねる
+ * @param {{lo:number[],hi:number[],min:number[],max:number[]}|null} p.empCone 過去の実績の帯(営業日ごとの変化率。k=0〜days)。あれば、約68%の範囲を灰色の帯、最小・最大を点線で重ねる
  */
-export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", ivSigmaPct = null }) {
+export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", ivSigmaPct = null, empCone = null }) {
   const w = 640;
   const h = 300;
   const padL = 50;
@@ -112,8 +113,10 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
 
   const hasIv = ivSigmaPct !== null && ivSigmaPct > 0;
   const spanSig = Math.max(2 * sigmaPct, hasIv ? ivSigmaPct : 0);
-  const lo = Math.min(...pastCloses, price * (1 - spanSig), barrier);
-  const hi = Math.max(...pastCloses, price * (1 + spanSig), barrier);
+  const empMin = empCone ? Math.min(...empCone.min) : 0;
+  const empMax = empCone ? Math.max(...empCone.max) : 0;
+  const lo = Math.min(...pastCloses, price * (1 - spanSig), price * (1 + empMin), barrier);
+  const hi = Math.max(...pastCloses, price * (1 + spanSig), price * (1 + empMax), barrier);
   const pad = (hi - lo) * 0.06;
   const yMin = lo - pad;
   const yMax = hi + pad;
@@ -145,6 +148,16 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
     + `<polygon points="${band(1)}" fill="color-mix(in srgb, var(--accent) 24%, transparent)" stroke="var(--accent)" stroke-width="1"/>`
     + (hasIv ? `<polygon points="${band(1, ivSigmaPct)}" fill="color-mix(in srgb, var(--gradOrange) 10%, transparent)" stroke="var(--gradOrange)" stroke-width="1.8" stroke-dasharray="6 3"/>` : "");
 
+  // 過去の実績の帯(約68%の範囲＝灰色の帯、最小・最大＝点線)
+  let emp = "";
+  if (empCone) {
+    const ptsOf = (arr) => arr.map((r, k) => `${f(xFut(k))},${f(y(price * (1 + r)))}`);
+    const poly = (a, b) => `${ptsOf(a).join(" ")} ${ptsOf(b).reverse().join(" ")}`;
+    emp = `<polygon points="${poly(empCone.hi, empCone.lo)}" fill="color-mix(in srgb, var(--muted) 30%, transparent)" stroke="var(--muted)" stroke-width="1.2"/>`
+      + `<polyline points="${ptsOf(empCone.max).join(" ")}" fill="none" stroke="var(--fg)" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>`
+      + `<polyline points="${ptsOf(empCone.min).join(" ")}" fill="none" stroke="var(--fg)" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>`;
+  }
+
   // ITM側の領域(赤い薄い帯)と、ITMの水準の線
   const yb = y(barrier);
   const zoneTop = itmWhen === "below" ? yb : padT;
@@ -164,19 +177,28 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
     + `<line x1="${f(xEnd)}" y1="${padT}" x2="${f(xEnd)}" y2="${h - padB}" stroke="var(--muted)" stroke-width="1"/>`;
 
   // 右端の価格ラベル(+1σ・いま・−1σ。IVがあれば、HV・IVの両方)。縦に近いものは、重ならないよう下へずらす
-  const labItems = hasIv
+  const labItems = (hasIv || empCone)
     ? [
       { v: price * (1 + sigmaPct), text: `HV +1σ ${(price * (1 + sigmaPct)).toFixed(1)}`, color: "var(--accent)" },
-      { v: price * (1 + ivSigmaPct), text: `IV +1σ ${(price * (1 + ivSigmaPct)).toFixed(1)}`, color: "var(--gradOrange)" },
+      ...(hasIv ? [{ v: price * (1 + ivSigmaPct), text: `IV +1σ ${(price * (1 + ivSigmaPct)).toFixed(1)}`, color: "var(--gradOrange)" }] : []),
       { v: price, text: `いま ${price.toFixed(1)}`, color: "var(--fg)" },
       { v: price * (1 - sigmaPct), text: `HV −1σ ${(price * (1 - sigmaPct)).toFixed(1)}`, color: "var(--accent)" },
-      { v: price * (1 - ivSigmaPct), text: `IV −1σ ${(price * (1 - ivSigmaPct)).toFixed(1)}`, color: "var(--gradOrange)" },
+      ...(hasIv ? [{ v: price * (1 - ivSigmaPct), text: `IV −1σ ${(price * (1 - ivSigmaPct)).toFixed(1)}`, color: "var(--gradOrange)" }] : []),
     ]
     : [
       { v: price * (1 + sigmaPct), text: `+1σ ${(price * (1 + sigmaPct)).toFixed(1)}`, color: "var(--accent)" },
       { v: price, text: `いま ${price.toFixed(1)}`, color: "var(--fg)" },
       { v: price * (1 - sigmaPct), text: `−1σ ${(price * (1 - sigmaPct)).toFixed(1)}`, color: "var(--accent)" },
     ];
+  if (empCone) {
+    const e = (arr) => price * (1 + arr[arr.length - 1]);
+    labItems.push(
+      { v: e(empCone.max), text: `実績最大 ${e(empCone.max).toFixed(1)}`, color: "var(--fg)" },
+      { v: e(empCone.hi), text: `実績84% ${e(empCone.hi).toFixed(1)}`, color: "var(--muted)" },
+      { v: e(empCone.lo), text: `実績16% ${e(empCone.lo).toFixed(1)}`, color: "var(--muted)" },
+      { v: e(empCone.min), text: `実績最小 ${e(empCone.min).toFixed(1)}`, color: "var(--fg)" },
+    );
+  }
   const nudge = (items) => {
     const sorted = items.map((it) => ({ ...it, yy: y(it.v) + 3 })).sort((p, q) => p.yy - q.yy);
     for (let i = 1; i < sorted.length; i++) if (sorted[i].yy - sorted[i - 1].yy < 12) sorted[i].yy = sorted[i - 1].yy + 12;
@@ -202,13 +224,13 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
         + `<text x="${f(x + 6)}" y="${f(y(vDn) + 13)}" font-size="10.5" font-weight="700" fill="${col}">${pre}−1σ ${vDn.toFixed(1)}</text>`;
     };
     mark = `<line x1="${f(x)}" y1="${padT}" x2="${f(x)}" y2="${h - padB}" stroke="${line}" stroke-width="1.8" stroke-dasharray="5 3"/>`
-      + one(sigmaPct, "var(--accent)", hasIv ? "HV " : "")
+      + one(sigmaPct, "var(--accent)", (hasIv || empCone) ? "HV " : "")
       + (hasIv ? one(ivSigmaPct, "var(--gradOrange)", "IV ") : "")
       + `<text x="${f(x)}" y="${h - 6}" font-size="10.5" font-weight="700" text-anchor="middle" fill="${line}">${markLabel}</text>`;
   }
 
   return `<svg viewBox="0 0 ${w} ${h}" class="chart cone-chart" role="img" aria-label="満期までの値動きの目安とITMの水準">`
-    + grid + zone + cone + past + expiryLine + nowDot + barrierLine + barrierText + mark + rightLabels + bottomLabels
+    + grid + zone + cone + emp + past + expiryLine + nowDot + barrierLine + barrierText + mark + rightLabels + bottomLabels
     + `</svg>`;
 }
 

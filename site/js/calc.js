@@ -616,3 +616,38 @@ export function hvTheory({ price, strike, depthDollar, itmWhen, days, hv }) {
     probTouch: Math.min(1, 2 * probItmAtExpiry),
   };
 }
+
+/**
+ * 過去の実績から作る「コーン図」の帯。分析結果と同じエントリー日(集計期間の各日)について、
+ * エントリー日からk営業日後(k=0〜days)までの株価の変化率(終値/エントリー日の終値−1)を集め、
+ * 営業日ごとに、下位16%・上位84%(約68%の範囲)と、最小・最大を求める。
+ * HV・IVの±1σの帯と同じ意味(満期時に約68%がこの範囲)にそろえるため、16%・84%を使う。
+ * 日中の高値・安値は見ず、終値のみ。
+ * @param {number[]} closes 集計期間の終値(古い順)
+ * @param {number} days 満期までの営業日数
+ * @returns {{count:number, lo:number[], hi:number[], min:number[], max:number[]}|null} 各配列は長さdays+1(k=0〜days)、値は変化率
+ */
+export function computeEmpiricalCone(closes, days) {
+  const count = Math.max(0, closes.length - days);
+  if (count < 2 || days < 1) return null;
+  const pctile = (sorted, q) => {
+    const pos = (sorted.length - 1) * q;
+    const lo = Math.floor(pos);
+    const hi = Math.ceil(pos);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+  };
+  const lo = [0];
+  const hi = [0];
+  const min = [0];
+  const max = [0];
+  for (let k = 1; k <= days; k++) {
+    const rs = [];
+    for (let i = 0; i < count; i++) rs.push(closes[i + k] / closes[i] - 1);
+    rs.sort((a, b) => a - b);
+    lo.push(pctile(rs, 0.16));
+    hi.push(pctile(rs, 0.84));
+    min.push(rs[0]);
+    max.push(rs[rs.length - 1]);
+  }
+  return { count, lo, hi, min, max };
+}
