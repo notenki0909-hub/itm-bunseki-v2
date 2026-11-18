@@ -100,7 +100,7 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
  */
 export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", ivSigmaPct = null, empCone = null }) {
   const w = 640;
-  const h = 300;
+  const h = 560; // 線が重ならないよう、縦を広く取る
   const padL = 50;
   const padR = 92;
   const padT = 14;
@@ -125,8 +125,8 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
 
   // 左のグリッド線と価格の目盛り(5本)
   let grid = "";
-  for (let i = 0; i <= 4; i++) {
-    const v = yMin + ((yMax - yMin) * i) / 4;
+  for (let i = 0; i <= 8; i++) {
+    const v = yMin + ((yMax - yMin) * i) / 8;
     grid += `<line x1="${padL}" y1="${f(y(v))}" x2="${xEnd}" y2="${f(y(v))}" stroke="var(--line)" stroke-width="1"/>`
       + `<text x="${padL - 6}" y="${f(y(v) + 3)}" font-size="10" text-anchor="end" fill="var(--muted)">${v.toFixed(v >= 100 ? 0 : 1)}</text>`;
   }
