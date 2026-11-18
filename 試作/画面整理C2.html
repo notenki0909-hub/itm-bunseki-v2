@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>画面整理の試作（C2）</title>
+<style>
+/* site/css/style.css をそのまま取り込み(試作を1ファイルで表示するため) */
+:root{
+  --bg:#fafafa;--card:#ffffff;--line:#e6e6e6;--muted:#666666;--fg:#1a1a1a;
+  --accent:#2563eb;--th:#f3f4f6;--field:#f7f8fa;
+  --gA:#166534;--gB:#854d0e;--gC:#b91c1c;
+  --wbg:#fff7ed;--wbd:#fed7aa;--wfg:#7c2d12;
+  --favA:#1d4ed8;--favB:#b91c1c;
+  --gradRed:#dc2626;--gradOrange:#ea8c0a;--gradYellow:#f2d477;
+  --gradLightBlue:#8ec4f0;--gradBlue:#2f6fed;--gradPurple:#9b3fd4;
+}
+/* 意味色(gA/gB/gC=良い/普通/悪い, wbg/wbd/wfg=警告, favA/favB=前営業日比用の青/赤,
+   gradRed〜gradPurple=詳細マトリクス「先読み」用の7色グラデーション、元Excelの
+   条件付き書式の配色(赤/オレンジ/黄/水色/青/紫)をそのまま踏襲)は
+   アクセント配色プリセットに連動させず、ライト/ダークの2パターンだけ独立に持たせる
+   （プリセットを変えても「緑=有利」「青=有利」等の意味が壊れないように）。*/
+:root[data-mode="dark"]{
+  --bg:#101216;--card:#181b22;--line:#2b303a;--muted:#98a1ad;--fg:#e6e8eb;
+  --accent:#6aa4ff;--th:#1e232c;--field:#161a21;
+  --gA:#4ade80;--gB:#fbbf24;--gC:#f87171;
+  --wbg:#26210f;--wbd:#5a4a1b;--wfg:#e7c06a;
+  --favA:#60a5fa;--favB:#f87171;
+  --gradRed:#f26161;--gradOrange:#f5a83c;--gradYellow:#c9a227;
+  --gradLightBlue:#5b8fc9;--gradBlue:#5a8ef2;--gradPurple:#b06be0;
+}
+@media (prefers-color-scheme: dark){
+  /* JS(head内)が必ずdata-modeを明示設定するため、これはJS無効時のフォールバックとしてのみ働く */
+  :root:not([data-mode]){
+    --bg:#101216;--card:#181b22;--line:#2b303a;--muted:#98a1ad;--fg:#e6e8eb;
+    --accent:#6aa4ff;--th:#1e232c;--field:#161a21;
+    --gA:#4ade80;--gB:#fbbf24;--gC:#f87171;
+    --wbg:#26210f;--wbd:#5a4a1b;--wfg:#e7c06a;
+    --favA:#60a5fa;--favB:#f87171;
+    --gradRed:#f26161;--gradOrange:#f5a83c;--gradYellow:#c9a227;
+    --gradLightBlue:#5b8fc9;--gradBlue:#5a8ef2;--gradPurple:#b06be0;
+  }
+}
+
+/* アクセント配色プリセット。銘柄診断ツールと同じ配色値・同じlocalStorageキー(pp_theme)を使い、
+   ツール間で選んだ配色が引き継がれるようにしている。 */
+:root[data-pal="blueplus"]{--bg:#f7f8fa;--card:#ffffff;--line:#dfe1e6;--muted:#5b6472;--fg:#161a1f;--accent:#2563eb;--th:#eaedf3;--field:#f4f6f9;}
+:root[data-pal="blueplus"][data-mode="dark"]{--bg:#0d0f14;--card:#191d26;--line:#30363f;--muted:#9aa3ae;--fg:#e9ebef;--accent:#7db0ff;--th:#20262f;--field:#161b24;}
+:root[data-pal="teal"]{--bg:#f2f8f6;--card:#ffffff;--line:#d7e6e1;--muted:#556661;--fg:#132019;--accent:#0d7c72;--th:#e4f1ed;--field:#f0f7f5;}
+:root[data-pal="teal"][data-mode="dark"]{--bg:#0b120f;--card:#152019;--line:#28372f;--muted:#8fa39c;--fg:#e2ece7;--accent:#3fd9c8;--th:#1c2b24;--field:#131d17;}
+:root[data-pal="slate"]{--bg:#f5f6f9;--card:#ffffff;--line:#dde1e8;--muted:#5b6577;--fg:#171d28;--accent:#334c86;--th:#e8ebf1;--field:#f3f5f8;}
+:root[data-pal="slate"][data-mode="dark"]{--bg:#0d0f13;--card:#181c23;--line:#2c323d;--muted:#96a0ae;--fg:#e6e8ec;--accent:#8fb0e6;--th:#1e232c;--field:#161a21;}
+:root[data-pal="sand"]{--bg:#f8f4ea;--card:#fffdf8;--line:#e7dcc7;--muted:#6a5f48;--fg:#221c11;--accent:#b1500a;--th:#efe5d1;--field:#f5efe0;}
+:root[data-pal="sand"][data-mode="dark"]{--bg:#131009;--card:#201b11;--line:#372c1b;--muted:#a89d84;--fg:#ece4d3;--accent:#ffab2e;--th:#271f12;--field:#191509;}
+:root[data-pal="violet"]{--bg:#f8f6fd;--card:#ffffff;--line:#e4dcf1;--muted:#635a75;--fg:#1b1626;--accent:#6d28d9;--th:#efe9fa;--field:#f5f2fc;}
+:root[data-pal="violet"][data-mode="dark"]{--bg:#0f0d16;--card:#1c1727;--line:#302742;--muted:#a89fb8;--fg:#ebe5f4;--accent:#b79bff;--th:#231c30;--field:#171223;}
+:root[data-pal="rose"]{--bg:#fdf5f8;--card:#ffffff;--line:#efd9e2;--muted:#7a5a65;--fg:#24171d;--accent:#c2255c;--th:#fbe7ef;--field:#fbf3f6;}
+:root[data-pal="rose"][data-mode="dark"]{--bg:#140f12;--card:#211820;--line:#3a2b33;--muted:#b499a3;--fg:#efe3e9;--accent:#f472b6;--th:#281c24;--field:#1a1318;}
+
+#theme-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:10px 0 4px;font-size:12px}
+#theme-bar .tb-lbl{color:var(--muted)}
+#theme-bar .sw{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);cursor:pointer;padding:0;background:var(--tb-c,#ccc)}
+#theme-bar .sw[data-pal="genko"]{background:linear-gradient(135deg,#fff 48%,#2563eb 52%)}
+#theme-bar .sw[aria-pressed="true"]{outline:2px solid var(--fg);outline-offset:1px}
+#theme-bar .tb-btn{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:7px;padding:3px 9px;font:inherit;font-size:12px;cursor:pointer}
+#theme-bar .tb-reset{color:var(--accent);border:0;background:none;text-decoration:underline;text-underline-offset:2px;cursor:pointer;font:inherit;font-size:12px}
+#theme-bar .tb-sep{width:1px;align-self:stretch;background:var(--line);margin:0 3px}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.6 -apple-system,"Hiragino Kaku Gothic ProN","Meiryo",sans-serif;
+  background:var(--bg);color:var(--fg)}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:12px;margin-bottom:20px}
+
+.topbar{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.topbar h1{margin:0}
+.topbar .pagenav{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.topbar .pagenav a{font-size:12.5px;color:var(--accent);text-decoration:none}
+.topbar .pagenav a:hover{text-decoration:underline}
+.link-btn{border:0;background:none;padding:0;font:inherit;font-size:12.5px;color:var(--accent);
+  text-decoration:none;cursor:pointer}
+.link-btn:hover{text-decoration:underline}
+
+/* 文字リンクだと目立ちにくい操作(別ページを開く、列の展開など)用の、枠線付きの控えめなボタン。 */
+.btn-outline{display:inline-block;padding:6px 14px;border:1px solid var(--accent);border-radius:8px;
+  background:var(--card);color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer}
+.btn-outline:hover{background:var(--field)}
+.btn-outline[hidden]{display:none}
+
+.tab-bar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center}
+.tab{display:flex;align-items:center;gap:6px;padding:6px 8px 6px 12px;border:1px solid var(--line);
+  border-radius:8px 8px 0 0;background:var(--field);color:var(--muted);font-size:12.5px;cursor:pointer;
+  border-bottom:2px solid transparent}
+.tab.active{background:var(--card);color:var(--fg);border-color:var(--line);border-bottom-color:var(--accent)}
+.tab .tab-close{border:0;background:none;color:inherit;opacity:.6;cursor:pointer;font-size:13px;
+  padding:0 2px;line-height:1}
+.tab .tab-close:hover{opacity:1;color:var(--gC)}
+.tab-add{padding:6px 12px;border:1px dashed var(--line);border-radius:8px;background:none;
+  color:var(--muted);font-size:13px;cursor:pointer}
+.tab-add:hover{color:var(--accent);border-color:var(--accent)}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px;position:relative}
+/* 各エリア(カード)の開く/閉じるボタン。閉じているときは見出し行(.card-head)だけを残す。 */
+.card-toggle{position:absolute;top:12px;right:14px;padding:3px 12px;font-size:12px;border-radius:999px;
+  background:var(--field);color:var(--fg);border:1px solid var(--line);cursor:pointer}
+.card-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.card-head{padding-right:72px}
+.card.collapsed > :not(.card-head):not(.card-toggle){display:none}
+.card.collapsed .card-head .explain-box{display:none}
+.card.collapsed > .card-head{margin-bottom:0 !important}
+.form-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field[hidden]{display:none}
+.field label{font-size:12px;color:var(--muted)}
+.field label[data-target]{cursor:pointer;width:fit-content}
+.field label[data-target]:hover{color:var(--accent);text-decoration:underline}
+.field label[data-target].active{color:var(--accent);text-decoration:underline}
+.field input,.field select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;
+  font-size:14px;background:var(--field);color:var(--fg)}
+/* 使わない項目であることがひと目で分かるよう、無効化時ははっきり薄く・斜線調にする */
+.field input:disabled,.field select:disabled{background:repeating-linear-gradient(135deg,var(--line),var(--line) 4px,var(--field) 4px,var(--field) 9px);
+  color:var(--muted);opacity:.55;cursor:not-allowed;border-style:dashed}
+#ticker{width:140px;text-transform:uppercase}
+/* 売り系で「判定する深さ」を入力したときに、総合判定の下に出す損失リスクの表示 */
+.risk-box{margin:10px 0 0;padding:10px 12px;border:1px solid var(--gC);border-radius:8px;
+  background:color-mix(in srgb,var(--gC) 10%,transparent);font-size:13px;line-height:1.7}
+.risk-box[hidden]{display:none}
+.risk-note{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.6}
+.result-head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 18px;margin:0 0 10px}
+.result-head .explain-box{flex:1 1 100%}
+/* 注文内容カード: 売り/買い・単体/SPで使う入力欄を、body属性(updateRiskRewardInputUI)で切り替える。
+   使わない欄は非表示にするだけで、入力済みの値は保持される。 */
+body[data-group="buy"] [data-only="sell"],
+body[data-group="sell"] [data-only="buy"],
+body[data-mode="naked"] [data-only="sp"],
+body[data-mode="sp"] [data-only="naked"]{display:none}
+.order-head{display:flex;align-items:center;gap:12px;margin:0 0 8px}
+.sp-btn{padding:5px 12px;font-size:13px;border-radius:999px;background:var(--field);color:var(--fg);border:1px solid var(--line);cursor:pointer}
+.sp-btn[hidden]{display:none}
+.sp-btn:hover{border-color:var(--accent);color:var(--accent)}
+.sp-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.order-ticker{font-size:16px}
+.order-line{margin:12px 0 4px;padding:10px 12px;background:var(--field);border:1px solid var(--accent);border-radius:8px;font-size:14px;font-weight:600;line-height:1.7;word-break:keep-all;overflow-wrap:anywhere}
+.field-inline{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}
+.field-hint{font-size:12px;color:var(--muted)}
+.field-warn{font-size:11px;color:var(--gC)}
+.ticker-wrap{position:relative}
+.ticker-dropdown{position:absolute;top:calc(100% + 4px);left:0;min-width:140px;max-height:220px;
+  overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);z-index:20}
+.ticker-dropdown[hidden]{display:none}
+.ticker-dropdown-item{padding:8px 12px;font-size:14px;cursor:pointer;text-transform:uppercase}
+.ticker-dropdown-item:hover{background:var(--field);color:var(--accent)}
+#ratioInput,#orderRatioInput{width:90px}
+/* 金額・割合の入力欄は、入力する数値に見合った幅にする(ブラウザ標準の幅は広すぎるため) */
+#rrPremiumInput,#rrPayPremiumInput,#rrSpreadWidthInput,#rrCutLossInput,#rrCutLossInputM,
+#rrExpectedGainInput,#rrExpectedGainInputM{width:100px;box-sizing:border-box}
+#rrDepthInput,#orderDepthInput,#rrProfitRatioInput,#rrProfitRatioInputM{width:120px;box-sizing:border-box}
+#minMatchDaysInput,#momentumThresholdInput{width:70px}
+button{padding:9px 18px;border:1px solid var(--accent);border-radius:8px;
+  background:var(--accent);color:#fff;font-size:14px;cursor:pointer}
+button:disabled{opacity:.6;cursor:default}
+#status{font-size:12px;color:var(--muted);min-height:16px}
+#status.err{color:var(--gC)}
+
+#result[hidden]{display:none}
+.summary{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 16px;align-items:flex-start}
+.stat{background:var(--field);border:1px solid var(--line);border-radius:8px;
+  padding:8px 14px;min-width:100px;text-align:center;cursor:pointer}
+.stat b{display:block;font-size:20px}
+.stat span{font-size:11px;color:var(--muted)}
+.stat .stat-sub{display:block;font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap}
+.stat:hover b{color:var(--accent)}
+.stat.active{border-color:var(--accent)}
+
+/* 項目クリックで表示される説明。対応するカードの直前(上)に表示される */
+.explain-box{background:var(--info,var(--field));border:1px solid var(--accent);border-radius:8px;
+  padding:10px 12px;margin:6px 0 10px;font-size:12px;color:var(--fg);line-height:1.6;white-space:pre-line}
+/* .summary/.form-rowはflex-wrapなので、クリックした項目の直後に挿入した説明欄を
+   常に1行全幅で折り返させ、他の項目の下に押し出さないようにする */
+.summary .explain-box,.form-row .explain-box{flex:1 1 100%}
+
+.badge{display:inline-block;padding:3px 12px;border-radius:14px;font-size:13px;font-weight:700}
+.b-good{background:color-mix(in srgb,var(--gA) 18%,transparent);color:var(--gA)}
+.b-bad{background:color-mix(in srgb,var(--gC) 18%,transparent);color:var(--gC)}
+.b-neutral{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--muted)}
+/* 該当する/しない: 良し悪しではなく「条件に一致したか」という事実を示すのでアクセントカラーを使う */
+.b-match{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent)}
+.b-nomatch{background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted)}
+
+/* 総合判定バッジ: 詳細マトリクス・営業日ごとのITM確率チャート・エントリーヒートマップと
+   共通の7段階配色(赤=有利〜紫=不利)。b0が最も有利、b6が最も不利。 */
+.badge.b0{background:color-mix(in srgb,var(--gradRed) 30%,transparent);color:var(--gradRed)}
+.badge.b1{background:color-mix(in srgb,var(--gradOrange) 30%,transparent);color:var(--gradOrange)}
+.badge.b2{background:color-mix(in srgb,var(--gradYellow) 34%,transparent);color:var(--gradYellow)}
+.badge.b3{background:color-mix(in srgb,var(--muted) 16%,transparent);color:var(--muted)}
+.badge.b4{background:color-mix(in srgb,var(--gradLightBlue) 30%,transparent);color:var(--gradLightBlue)}
+.badge.b5{background:color-mix(in srgb,var(--gradBlue) 30%,transparent);color:var(--gradBlue)}
+.badge.b6{background:color-mix(in srgb,var(--gradPurple) 30%,transparent);color:var(--gradPurple)}
+
+.chart{width:100%;height:auto;display:block}
+.chart-title{font-size:12px;color:var(--muted);margin:14px 0 4px}
+.chart-title[data-target]{cursor:pointer;display:inline-block}
+/* 分析結果の4つのグラフ・ヒートマップの見出しは、1段階大きく太字にする */
+#dayProbTitle,#entryHeatmapTitle,#depthHeatmapTitle,#otmHeatmapTitle{font-size:13px;font-weight:700}
+/* 4つの見出しは文字色を黒(--fg。ライト系は黒に近い色、ダーク系は読める明るい色)にする。クリック(.active)・マウスを乗せたときは従来どおりアクセント色 */
+#dayProbTitle,#entryHeatmapTitle,#depthHeatmapTitle,#otmHeatmapTitle{color:var(--fg)}
+#dayProbTitle:hover,#entryHeatmapTitle:hover,#depthHeatmapTitle:hover,#otmHeatmapTitle:hover,
+#dayProbTitle.active,#entryHeatmapTitle.active,#depthHeatmapTitle.active,#otmHeatmapTitle.active{color:var(--accent)}
+/* ITM確率/OTM確率の表示切替ボタン(過去の営業日ごとのITM確率の見出しの右) */
+.otm-toggle{margin-left:10px;vertical-align:middle}
+.chart-title[data-target]:hover{color:var(--accent);text-decoration:underline}
+.chart-title[data-target].active{color:var(--accent)}
+
+.card-title-toggle{cursor:pointer;display:inline-block}
+.card-title-toggle:hover{color:var(--accent)}
+.card-title-toggle.active{color:var(--accent)}
+
+.momentum-strip{display:flex;gap:8px;flex-wrap:wrap}
+.momentum-cell{flex:1;min-width:64px;background:var(--field);border:1px solid var(--line);
+  border-radius:8px;padding:8px 6px;text-align:center}
+.momentum-cell .m-label{font-size:10.5px;color:var(--muted);display:block}
+.momentum-cell .m-value{display:block;font-size:14px;font-weight:700;margin-top:2px}
+.momentum-cell .m-value.up{color:var(--gA)}
+.momentum-cell .m-value.down{color:var(--gC)}
+#todayCard[hidden]{display:none}
+#conditionCard[hidden]{display:none}
+
+/* エントリー日ごとのヒートマップ: 判定期間内のITM日数(絶対値)を7段階配色で表す
+   (色はjs/heatmap.jsでインラインstyleとして付与)。1ヶ月の最大営業日数は23日程度
+   なので、各月を5×5(25マス)の正方形にまとめ、月ごとの正方形を並べて表示する。 */
+.hm-months{display:flex;flex-wrap:wrap;gap:14px 18px;margin:8px 0}
+.hm-month{width:63px}
+.hm-month-label{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:3px;white-space:nowrap}
+.hm-grid{display:flex;flex-wrap:wrap;gap:2px;margin:0 0 8px}
+.hm-grid-5x5{display:grid;grid-template-columns:repeat(5,11px);gap:2px}
+.hm-cell{width:11px;height:11px;border-radius:2px;cursor:default}
+/* 判定する深さに届いた日の印(最大ITM深さヒートマップ) */
+.hm-cell.hm-mark{box-shadow:inset 0 0 0 2px var(--fg)}
+/* ヒートマップのマスをクリックしたときに出す説明(日付・深さなど)。他の場所をクリックすると消える。 */
+.hm-cell.hm-click{cursor:pointer}
+.hm-cell.hm-click.hm-tip-active{outline:2px solid var(--accent);outline-offset:1px}
+.cell-tip{position:absolute;z-index:60;max-width:300px;padding:8px 10px;background:var(--card);color:var(--fg);
+  border:1px solid var(--accent);border-radius:8px;font-size:12px;line-height:1.6;
+  box-shadow:0 4px 14px rgba(0,0,0,.28);overflow-wrap:anywhere}
+.cell-tip[hidden]{display:none}
+/* 営業日ごとのITM確率チャート: 各営業日の列(透明な領域)をクリックすると説明を出す */
+.chart-hit{cursor:pointer}
+.chart-hit.hm-tip-active{fill:color-mix(in srgb,var(--accent) 12%,transparent)}
+.hm-legend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+.hm-legend .hm-cell{cursor:default;flex:none}
+
+.disc{margin-top:20px;padding:12px;background:var(--wbg);border:1px solid var(--wbd);
+  border-radius:8px;font-size:11.5px;color:var(--wfg)}
+/* サンプル数が非常に少ない場合の強い警告(通常の.discより赤みを強くする) */
+.disc.disc-strong{background:color-mix(in srgb,var(--gC) 14%,var(--card));
+  border-color:var(--gC);color:var(--gC)}
+
+/* 詳細マトリクスページは列数が多いので、通常より広い最大幅を使う */
+.wrap-wide{max-width:none;padding:20px 24px 60px}
+
+/* 「表示する」ボタンは集計期間のすぐ右に配置(通常のform-rowの並び通り)。
+   「← 分析ページへ戻る」の右端は、1段下にある「標準に戻す」の右端に揃えている
+   (見た目上、戻るリンクが標準に戻すの真上に来る)。どちらも幅が固定値ではない
+   ため、揃える処理はjs/detail.js側で実測して行っている。 */
+
+.dm-legend{display:flex;flex-wrap:wrap;gap:16px;margin:10px 0 12px;font-size:11px;color:var(--muted)}
+.dm-lgroup{display:inline-flex;align-items:center;gap:3px}
+.dm-legend-after{gap:10px 14px;align-items:center}
+.dm-lgroup-title{width:100%;font-size:11px;color:var(--muted);margin-bottom:2px}
+.dm-litem{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--fg)}
+.dm-litem .dc{display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid var(--line)}
+/* 表の中だけでスクロールさせると、行数が多い時に横スクロールバーが画面の一番下(表の最後の行の下)
+   まで見に行かないと出てこず使いづらいため、あえて表からはみ出させて、ブラウザウインドウ自体の
+   横スクロールバー(画面下部に常に表示される)でスクロールできるようにしている。 */
+.dm-table-wrap{border:1px solid var(--line);border-radius:8px}
+.dm-table{border-collapse:collapse;font-size:0}
+.dm-table th,.dm-table td{border:1px solid var(--line);padding:0}
+.dm-table th{background:var(--th);color:var(--muted);font-size:10px;font-weight:600;
+  padding:4px 3px;white-space:nowrap;text-align:center}
+.dm-table th.dm-sticky,.dm-table td.dm-sticky{position:sticky;left:0;background:var(--card);
+  z-index:1;box-shadow:1px 0 0 var(--line)}
+.dm-table td.dm-date{font-size:10.5px;color:var(--fg);padding:2px 6px;white-space:nowrap;text-align:left}
+.dm-table td.dm-num{font-size:10.5px;color:var(--fg);padding:2px 6px;white-space:nowrap;text-align:right}
+.dm-table td.dc{width:16px;height:16px;cursor:default}
+
+/* 判定期間31日後以降の列。初期状態では折りたたみ、expandBtnクリックでdm-show-extraが
+   付いたときだけ表示する(判定期間を最大150日まで許容すると列数が多くなるため)。 */
+.dm-table th.dm-extra,.dm-table td.dc.dm-extra{display:none}
+.dm-table.dm-show-extra th.dm-extra,.dm-table.dm-show-extra td.dc.dm-extra{display:table-cell}
+.dm-expand{margin:0 0 10px}
+
+/* 「変動幅の統計」カードの表 */
+.volatility-wrap{overflow-x:auto}
+.volatility-table{width:100%;border-collapse:collapse;font-size:13px}
+.volatility-table th,.volatility-table td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+.volatility-table th{background:var(--th);color:var(--muted);font-size:11.5px;font-weight:700}
+.volatility-table td{color:var(--fg)}
+.volatility-table td:not(:first-child),.volatility-table th:not(:first-child){text-align:right}
+.volatility-table tr:last-child td{border-bottom:none}
+
+/* 先読み(after)7段階。元Excelの条件付き書式の配色(赤→オレンジ→黄→塗りなし→水色→青→紫)を
+   そのまま踏襲。L0が最も有利、L6が最も不利。しきい値自体はタイプごとに異なる(js/detail.js)。 */
+.dc.L0{background:color-mix(in srgb,var(--gradRed) 75%,var(--card))}
+.dc.L1{background:color-mix(in srgb,var(--gradOrange) 68%,var(--card))}
+.dc.L2{background:color-mix(in srgb,var(--gradYellow) 62%,var(--card))}
+.dc.L3{background:var(--card)}
+.dc.L4{background:color-mix(in srgb,var(--gradLightBlue) 55%,var(--card))}
+.dc.L5{background:color-mix(in srgb,var(--gradBlue) 68%,var(--card))}
+.dc.L6{background:color-mix(in srgb,var(--gradPurple) 75%,var(--card))}
+
+/* 前営業日比較(before): 元Excelのしきい値(10/0/-5/-10%)に合わせた5段階。
+   上昇=赤、下落=青（日本の株式チャート慣習：陽線=赤、陰線=青）。 */
+.dc.U1{background:color-mix(in srgb,var(--favB) 55%,var(--card))} /* 上昇 >10% */
+.dc.Z{background:var(--field)} /* 0〜10%: ほぼ変動なし〜小幅上昇(無地) */
+.dc.D0{background:color-mix(in srgb,var(--favA) 22%,var(--card))} /* 下落 -5〜0% */
+.dc.D1{background:color-mix(in srgb,var(--favA) 42%,var(--card))} /* 下落 -10〜-5% */
+.dc.D2{background:color-mix(in srgb,var(--favA) 65%,var(--card))} /* 下落 10%超 */
+
+/* データが無いセル(集計期間の端で前後の日付が足りない)は、L3(条件的に塗りなし)と
+   区別できるよう、はっきりしたグレーで塗る。 */
+.dm-nodata{background:color-mix(in srgb,var(--muted) 30%,var(--card))}
+
+/* Ver2の印(見出し横) */
+.ver-badge{display:inline-block;margin-left:6px;padding:1px 9px;border-radius:999px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;vertical-align:middle}
+
+/* 満期日の候補の表で、判定期間と同じ満期の行 */
+.volatility-table tr.exp-match td{background:color-mix(in srgb,var(--accent) 14%,transparent);font-weight:700}
+#expiryTable td,#expiryTable th{text-align:right}
+#expiryTable td:first-child,#expiryTable th:first-child{text-align:left}
+
+/* ストレステストの表 */
+.stress-table td,.stress-table th{text-align:right;vertical-align:top}
+.stress-table td:first-child,.stress-table th:first-child{text-align:left}
+.stress-table .stress-sub{font-weight:400;color:var(--muted);font-size:11px}
+.stress-table .stress-pnl{font-size:11.5px;color:var(--muted)}
+.stress-table .stress-pnl.neg{color:var(--gradRed)}
+.stress-table td.stress-stop{background:color-mix(in srgb,var(--gradOrange) 22%,transparent)}
+.stress-table td.stress-max{background:color-mix(in srgb,var(--gradRed) 28%,transparent)}
+
+/* HVカード: 過去1年のHVの範囲を表す棒(左端=最小、右端=最大。黒=いま、灰色の縦線=中央値) */
+.hv-bar{position:relative;display:block;height:8px;margin:8px 0 4px;border-radius:4px;
+  background:linear-gradient(90deg,var(--gradLightBlue),var(--gradYellow),var(--gradOrange),var(--gradRed))}
+.hv-bar-now{position:absolute;top:-4px;width:4px;height:16px;margin-left:-2px;border-radius:2px;background:var(--fg);box-shadow:0 0 0 1px var(--card)}
+.hv-bar-med{position:absolute;top:-2px;width:2px;height:12px;margin-left:-1px;background:var(--muted);opacity:.9}
+
+/* 一番上のパネルの、最新の株価(終値)表示 */
+.latest-price{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.latest-price[hidden]{display:none}
+.latest-price .lp-symbol{font-weight:700;font-size:15px}
+.latest-price .lp-label{font-size:12px;color:var(--muted)}
+.latest-price .lp-price{font-size:22px}
+.latest-price .lp-unit{font-size:12px;color:var(--muted);margin-left:-4px}
+.latest-price .lp-date{font-size:12px;color:var(--muted)}
+.latest-price .lp-change{font-size:13px;font-weight:700;margin-left:6px}
+.latest-price .lp-change.up{color:var(--gA)}
+.latest-price .lp-change.down{color:var(--gC)}
+
+/* 満期までの値動きの目安(コーン図) */
+.hv-cone{max-width:680px}
+.cone-chart{width:100%;height:auto;display:block}
+
+#hvMatchSummary .stat .stat-sub{white-space:normal;max-width:300px}
+#hvMatchSummary .hv-line{display:block;margin-top:3px;font-size:10.5px;color:var(--muted)}
+
+/* HVカードをクリックしたときの、過去1年のHVの推移グラフ */
+.hv-history{white-space:normal;margin-top:10px;max-width:680px}
+.hv-history-title{font-weight:700;margin-bottom:4px}
+.hv-history .hv-history-chart{width:100%;height:auto;display:block}
+.hv-history-note{margin-top:4px;font-size:11.5px;color:var(--muted);line-height:1.6}
+
+/* HVカード: 同じHVで満期の長さだけを変えた比較の表 */
+.hv-history .hv-compare{width:100%;margin-top:4px;font-size:12px}
+.hv-history .hv-compare th,.hv-history .hv-compare td{padding:5px 8px;text-align:right;white-space:nowrap}
+.hv-history .hv-compare th:first-child,.hv-history .hv-compare td:first-child{text-align:left}
+.hv-history .hv-compare tr.hv-cmp-now td{font-weight:700;background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.hv-history .hv-scroll{overflow-x:auto}
+/* 説明欄(flexの子)が、中の表の幅に引きずられて広がらないようにする(表は.hv-scroll内で横スクロール) */
+.summary .explain-box,.hv-history{min-width:0;max-width:100%}
+
+/* IVとHVの比較: 説明文が長いので、折り返す */
+#ivHvSummary .stat .stat-sub{white-space:normal;max-width:300px}
+
+/* IVとHVの比較: ITMになる確率の3点比較(IV換算・HV換算・過去の実績)の棒 */
+.cmp3{margin-top:12px;max-width:560px}
+.cmp3 .chart-title{margin:0 0 6px}
+.cmp3-group{margin:8px 0 12px}
+.cmp3-gtitle{font-size:12.5px;font-weight:700;margin-bottom:4px}
+.cmp3-row{display:flex;align-items:center;gap:8px;margin:3px 0}
+.cmp3-lab{flex:0 0 5.6em;font-size:12.5px}
+.cmp3-track{flex:1;min-width:0;height:14px;border-radius:7px;background:color-mix(in srgb,var(--muted) 14%,transparent);overflow:hidden}
+.cmp3-bar{display:block;height:100%;border-radius:7px}
+.cmp3-iv{background:var(--gradOrange)}
+.cmp3-hv{background:var(--gradLightBlue)}
+.cmp3-act{background:var(--muted)}
+.cmp3-val{flex:0 0 3.8em;text-align:right;font-size:13px}
+.cmp3-verdict{font-weight:700;color:var(--fg)}
+
+/* IVの変化×時間の経過の表: 利確の目安に届いたセル */
+.stress-table td.stress-profit{background:color-mix(in srgb,var(--gA) 24%,transparent)}
+
+/* 数字のカード: 「何の数字か」を数字の前に目立たせる(例: HV：53.2%、満期時ITM率：11.7%（HV換算）) */
+.stat .stat-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 3px}
+.stat .stat-head b{display:inline;font-size:20px}
+.stat .stat-name{font-size:13px;font-weight:700;color:var(--fg)}
+.stat .stat-suffix{font-size:12px;font-weight:700;color:var(--fg)}
+.stat .stat-line{display:block;font-size:12px;color:var(--fg);margin-top:2px}
+/* 一番上のパネル: 「最新の終値：390.22ドル」 */
+.latest-price .lp-main{display:inline-flex;align-items:baseline}
+.latest-price .lp-label{font-weight:700;color:var(--fg)}
+.latest-price .lp-unit{margin-left:0}
+
+/* 分析結果のカード: 判定する深さの表記(ITM（◯ドル）)は、名前と同じ見た目にする */
+.stat .stat-name .dep-sfx{font-size:inherit;color:inherit;font-weight:inherit}
+
+/* ロールオーバー計算機 */
+.roll-detail[hidden]{display:none}
+.stat .stat-suffix.roll-profit{color:var(--gA)}
+.stat .stat-suffix.roll-loss{color:var(--gC)}
+.roll-chart{max-width:680px}
+.roll-chart-svg{width:100%;height:auto;display:block}
+.roll-modebar{flex-wrap:wrap;gap:8px 10px}
+.roll-modebar .sp-btn{white-space:nowrap;flex:0 0 auto}
+.roll-modebar .field-hint{flex:1 1 100%}
+/* ロールオーバー計算機: 主要な入力(受取・支払い・利確割合)の見出しを目立たせる */
+.field label.roll-key{font-size:14.5px;font-weight:700;color:var(--fg);padding-left:8px;border-left:4px solid var(--accent);line-height:1.4}
+#rollSummary .stat .stat-sub,#rollItmSummary .stat .stat-sub{white-space:normal;max-width:300px}
+#rollSummary .stat,#rollItmSummary .stat{max-width:100%;min-width:0}
+.roll-group{border:1px solid var(--line);border-radius:10px;padding:12px 14px 4px;margin-bottom:14px;background:color-mix(in srgb,var(--field) 55%,transparent)}
+.roll-group h3{margin:0 0 10px;font-size:14px}
+.field label.roll-key .roll-unit{font-size:12px;font-weight:400;color:var(--muted);margin-left:2px}
+
+/* 推奨比率の逆算 */
+.ratio-table-wrap{max-height:380px;overflow-y:auto}
+.ratio-table td,.ratio-table th{text-align:right;white-space:nowrap}
+.ratio-table td:first-child,.ratio-table th:first-child{text-align:left}
+.ratio-table .ratio-mark{font-size:10.5px;font-weight:700;color:var(--accent)}
+.ratio-table tr.ratio-rec td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.ratio-table tr.ratio-cur td{background:color-mix(in srgb,var(--muted) 14%,transparent)}
+.ratio-table .sp-btn{padding:2px 10px;font-size:12px}
+#ratioSummary .stat .stat-sub{white-space:normal;max-width:300px}
+.ratio-table th,.ratio-table td{padding:6px 6px;font-size:12px}
+.ratio-table .ratio-strike{font-size:11px;color:var(--muted)}
+.ratio-table th{font-size:11px;line-height:1.3}
+.ratio-table .badge{padding:2px 8px;font-size:11px}
+.ratio-table th,.ratio-table td{padding:6px 4px}
+.ratio-table .ratio-strike{display:block}
+.ratio-table th{white-space:normal}
+.ratio-table .sp-btn{padding:2px 7px}
+/* 推奨比率の逆算: 見出しの行を固定(表の中でスクロールしても、常に上に見える) */
+.ratio-table thead th{position:sticky;top:0;z-index:2;background:var(--th);box-shadow:0 1px 0 var(--line)}
+.ratio-table tr.ratio-band td{background:color-mix(in srgb,var(--gA) 10%,transparent)}
+.ratio-table .ratio-prem{font-size:11px;font-weight:700}
+.ratio-table .ratio-prem.ok{color:var(--gA)}
+.ratio-table .ratio-prem.ng{color:var(--gC)}
+/* 注文内容: 売り・買いの権利行使価格、受取プレミアムの入力方法 */
+body[data-mode="naked"] .ord-premmode{display:none}
+#premLegsRow[hidden]{display:none}
+.ord-premmode .form-row{gap:12px}
+.ratio-step{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px}
+.ratio-step .sp-btn{white-space:nowrap}
+.cond-matrix th,.cond-matrix td{white-space:nowrap;text-align:right}
+.cond-matrix th:first-child,.cond-matrix td:first-child{text-align:left}
+.cond-matrix td.cm-hit{background:color-mix(in srgb,var(--accent) 22%,transparent);font-weight:600}
+.cond-matrix th.cm-sel{box-shadow:inset 0 -2px 0 var(--accent)}
+.stress-table td.stress-pickable{cursor:pointer}
+.stress-table td.stress-pickable:hover{outline:1px dashed var(--accent);outline-offset:-2px}
+.stress-table td.stress-picked{outline:2px solid var(--accent);outline-offset:-2px}
+.stress-picktag{font-size:11px;font-weight:700;color:var(--accent)}
+.stress-table td.stress-over{box-shadow:inset 0 0 0 2px var(--gC)}
+.stress-overtag{font-size:11px;font-weight:700;color:var(--gC)}
+.plan-table th{width:30%;text-align:left;vertical-align:top;white-space:normal;font-weight:600}
+.plan-table td{text-align:left;white-space:normal;word-break:break-word}
+.plan-na{color:var(--muted)}
+.plan-ng{color:var(--gradRed)}
+
+</style>
+<script>
+  // 試作用: 端末のライト/ダーク設定に合わせる(本番のtheme.jsは使わない)
+  document.documentElement.dataset.mode = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+</script>
+<style>
+  .proto-banner{background:var(--wbg);border:1px solid var(--wbd);color:var(--wfg);border-radius:8px;padding:8px 12px;font-size:12.5px;margin:0 0 12px}
+  /* 上に固定する帯 */
+  .c2-top{position:sticky;top:0;z-index:20;background:var(--bg);padding:6px 0 0;margin:0 -16px 12px;padding-left:16px;padding-right:16px;border-bottom:1px solid var(--line)}
+  .c2-band{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;padding:6px 0}
+  .c2-band .sym{font-size:18px;font-weight:700}
+  .c2-band .px{font-size:15px;font-weight:700}
+  .c2-band .kv{font-size:12px;color:var(--muted)}
+  .c2-band .kv b{color:var(--fg);font-size:13.5px}
+  .c2-nav{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px;white-space:nowrap}
+  .c2-nav a{font-size:12px;border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:14px;padding:3px 10px;text-decoration:none}
+  .c2-nav a .n{color:var(--muted);margin-right:3px}
+  /* セクション */
+  details.sec{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:12px;scroll-margin-top:110px}
+  details.sec>summary{cursor:pointer;list-style:none;padding:12px 14px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+  details.sec>summary::-webkit-details-marker{display:none}
+  details.sec>summary .t{font-size:15.5px;font-weight:700}
+  details.sec>summary .t .n{display:inline-block;min-width:22px;color:var(--accent)}
+  details.sec>summary .d{font-size:12px;color:var(--muted);flex:1 1 100%}
+  details.sec>summary::after{content:"▼ 開く";margin-left:auto;font-size:11.5px;color:var(--accent)}
+  details.sec[open]>summary::after{content:"▲ 閉じる"}
+  details.sec .body{padding:0 14px 14px}
+  .sub-h{font-size:13px;font-weight:700;margin:14px 0 6px;padding-top:10px;border-top:1px dashed var(--line)}
+  .sub-h:first-child{border-top:0;padding-top:0;margin-top:2px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}
+  .chip{font-size:11.5px;border:1px solid var(--line);background:var(--field);border-radius:6px;padding:2px 8px;color:var(--muted)}
+  .chip.moved{border-color:var(--accent);color:var(--accent)}
+  .ph{border:1px dashed var(--line);border-radius:8px;padding:10px;color:var(--muted);font-size:12.5px;background:var(--field)}
+  .tabs{display:flex;gap:6px;margin:6px 0 8px}
+  .tabs span{font-size:12.5px;border:1px solid var(--line);border-radius:7px;padding:3px 10px;color:var(--muted)}
+  .tabs span.on{border-color:var(--accent);color:var(--accent);font-weight:700}
+  .guide{background:var(--field);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px;margin-top:10px}
+  .guide h4{margin:0 0 6px;font-size:13px}
+  .guide ol{margin:4px 0 0 18px;padding:0}
+  .guide li{margin:4px 0}
+  .cmp{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0}
+  .cmp .stat{flex:1 1 120px}
+  .removed{text-decoration:line-through;color:var(--muted)}
+  table.map{border-collapse:collapse;width:100%;font-size:12.5px}
+  table.map th,table.map td{border:1px solid var(--line);padding:5px 7px;text-align:left;vertical-align:top}
+  table.map th{background:var(--th)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="proto-banner"><b>これは見た目だけの試作です（数字はダミー）。</b>本番の画面・計算は変えていません。上の帯とナビは、スクロールしても上に残ります。各セクションは、タイトルをクリックして開閉できます。</div>
+
+  <h1>ITM分析ツール Ver2<span style="font-size:13px;font-weight:400;color:var(--muted)">　画面整理C2の試作</span></h1>
+
+  <!-- 1. 上に固定する帯＋ナビ -->
+  <div class="c2-top">
+    <div class="c2-band">
+      <span class="sym">QQQ</span>
+      <span class="px">656.95<span class="kv">　11-17の終値</span></span>
+      <span class="kv"><b>ブルプット</b> 636P売 / 626P買</span>
+      <span class="kv">満期 <b>12-31</b>（30営業日）</span>
+    </div>
+    <div class="c2-band" style="padding-top:0">
+      <span class="badge b0">大ピンチ</span>
+      <span class="kv">ITM発生率（実績） <b>55.2%</b></span>
+      <span class="kv">満期時ITM率（HV換算） <b>38%</b></span>
+      <span class="kv">IV÷HV <b>0.96倍</b>（同程度）</span>
+    </div>
+    <nav class="c2-nav" aria-label="セクションへ移動">
+      <a href="#s1"><span class="n">1</span>入力</a>
+      <a href="#s2"><span class="n">2</span>結論</a>
+      <a href="#s3"><span class="n">3</span>見比べ</a>
+      <a href="#s4"><span class="n">4</span>値動きの背景</a>
+      <a href="#s5"><span class="n">5</span>注文プラン</a>
+      <a href="#s6"><span class="n">6</span>リスク確認</a>
+      <a href="#s7"><span class="n">7</span>注文まとめ</a>
+      <a href="#s8"><span class="n">8</span>絞り込み</a>
+    </nav>
+  </div>
+
+  <!-- 1 入力 -->
+  <details class="sec" id="s1" open>
+    <summary><span class="t"><span class="n">1</span>入力</span><span class="d">銘柄・取引タイプ・比率・満期日・集計期間を、ここだけで入力します（いまは「入力」と「注文内容」の2か所にあります）</span></summary>
+    <div class="body">
+      <div class="chips">
+        <span class="chip">ティッカー QQQ</span><span class="chip">取引タイプ ブルプット</span><span class="chip">権利行使価格の比率 0.968</span>
+        <span class="chip">満期日 12-31</span><span class="chip">集計期間 1年</span><span class="chip">判定する深さ 0</span>
+      </div>
+      <p class="sub" style="margin:8px 0 0">銘柄タブ（QQQ／SPY／…）はここの上に残します。「分析する」を押すと、下のすべてが更新されます。</p>
+    </div>
+  </details>
+
+  <!-- 2 結論 -->
+  <details class="sec" id="s2" open>
+    <summary><span class="t"><span class="n">2</span>結論：過去のデータで、有利か不利か</span><span class="d">総合判定・ITM発生率・本日の状況。いまは4番目のカードにある結論を、2番目に出します</span></summary>
+    <div class="body">
+      <div class="sub-h">分析結果</div>
+      <div class="summary">
+        <div class="stat"><div class="stat-head"><span class="stat-name">ITM発生率：</span><b>55.2%</b><span class="stat-suffix">（過去の実績）</span></div><span class="stat-sub">判定期間30営業日のあいだに一度でも届いた割合</span></div>
+        <div class="stat"><div class="stat-head"><span class="stat-name">総合判定：</span><span class="badge b0">大ピンチ</span></div></div>
+      </div>
+      <div class="sub-h">本日の状況</div>
+      <div class="chips"><span class="chip moved">終値・権利行使価格は上の帯に統合</span><span class="chip">いまの値動き（7営業日前比 −3.2%）</span></div>
+      <div class="sub-h">過去の営業日ごとのITM確率／エントリー日ごとのヒートマップ</div>
+      <div class="ph">（既存のグラフ・ヒートマップをそのまま移します。初期は開いた状態）</div>
+    </div>
+  </details>
+
+  <!-- 3 見比べ -->
+  <details class="sec" id="s3" open>
+    <summary><span class="t"><span class="n">3</span>見比べ：IV・HV・過去の実績</span><span class="d">ITMになる確率を3つの見方で比べ、どう読むかを1か所にまとめます（いまは「注文内容」の途中と、HVカード・分析結果に分かれて、説明が重なっています）</span></summary>
+    <div class="body">
+      <div class="sub-h">ITMになる確率の3点比較（満期時）</div>
+      <div class="cmp">
+        <div class="stat"><div class="stat-head"><span class="stat-name">IV換算：</span><b>37%</b></div><span class="stat-sub" style="white-space:normal">市場の見込み（IV 30%）</span></div>
+        <div class="stat"><div class="stat-head"><span class="stat-name">HV換算：</span><b>38%</b></div><span class="stat-sub" style="white-space:normal">いまの荒れ具合（HV 31.2%）</span></div>
+        <div class="stat"><div class="stat-head"><span class="stat-name">実績：</span><b>55%</b></div><span class="stat-sub" style="white-space:normal">過去に実際に起きた割合</span></div>
+      </div>
+      <p class="sub" style="margin:2px 0 0">※IV・HV換算は「満期時に」ITMになる理論上の確率、実績は「期間中に一度でも」ITMに届いた割合です。定義が違うため、数字をそのまま同じものとして比べないでください。</p>
+
+      <div class="guide">
+        <h4>この3つの見比べ方と、わかること（たたき台）</h4>
+        <ol>
+          <li><b>実績を、判断の中心に置く</b>：過去にこの条件で、実際に起きた割合です。</li>
+          <li><b>HV換算 − 実績</b>：HV換算が実績より大きいときは、いまが過去の平均より荒れている可能性があります（HVの「ふだん（中央値）」と見比べます）。</li>
+          <li><b>IV換算 − HV換算</b>：IV換算のほうが大きいときは、市場が、直近の実際の値動きより大きな動きを見込んでいます。受け取るプレミアムは多いが、リスクも高い状態です。</li>
+          <li><b>IV換算 と 実績</b>：IV換算が実績より大きければ、受け取るプレミアムが、過去のリスクに見合っている可能性があります。</li>
+          <li><b>3つが近い</b>なら、見方がそろっています。<b>離れている</b>ときは、期間・荒れ具合・市場の見込み・調べた期間の偏りのどれが原因かを、確認します。</li>
+        </ol>
+        <p class="sub" style="margin:8px 0 0">いずれも将来を保証するものではありません。</p>
+      </div>
+
+      <div class="sub-h">IVとHVの比較</div>
+      <div class="summary"><div class="stat"><div class="stat-head"><span class="stat-name">IV÷HV：</span><b>0.96倍</b><span class="stat-suffix">（同程度）</span></div></div></div>
+      <div class="chips"><span class="chip moved">HVカードの「満期時ITM率」「ITM発生率」は、この3点比較に統合</span><span class="chip moved">「実績＝判断の中心／HV換算＝荒れ具合」の説明も、上の読み方に統合</span></div>
+    </div>
+  </details>
+
+  <!-- 4 値動きの背景 -->
+  <details class="sec" id="s4">
+    <summary><span class="t"><span class="n">4</span>値動きの背景（参考）</span><span class="d">変動幅の統計・HV・満期までの値動きのグラフ。初期は閉じています</span></summary>
+    <div class="body">
+      <div class="ph">変動幅の統計（表）／HV（歴史的ボラティリティ）カード／満期までの値動きの目安と、権利行使価格の位置（満期10営業日前の縦線つき）</div>
+    </div>
+  </details>
+
+  <!-- 5 注文プラン -->
+  <details class="sec" id="s5" open>
+    <summary><span class="t"><span class="n">5</span>注文プラン</span><span class="d">権利行使価格を決め、受取・利確・満期日を整えます（売り系）</span></summary>
+    <div class="body">
+      <div class="sub-h">推奨比率の逆算</div>
+      <div class="ph">目標のITM発生率（%以下）→ 推奨の権利行使価格／比率ごとの一覧（1・5・10ドル刻み）</div>
+      <div class="sub-h">注文内容</div>
+      <div class="chips"><span class="chip">売りの権利行使価格 636</span><span class="chip">買いの権利行使価格 626</span><span class="chip">受取プレミアム 1.20</span><span class="chip">IV（売り建て側）30%</span><span class="chip">利確割合 80%</span></div>
+      <p class="sub" style="margin:4px 0 0">（入力欄は、ここにある売買の権利行使価格・プレミアム・IV・利確割合だけにします。ティッカー・比率・満期日は、1の入力に集約）</p>
+      <div class="sub-h">決済の目安・満期日と判断日・損益分岐点</div>
+      <div class="ph">利確（買い戻しの指値）／ロスカットの逆指値／満期日の候補と判断日／損益分岐点</div>
+    </div>
+  </details>
+
+  <!-- 6 リスク確認 -->
+  <details class="sec" id="s6" open>
+    <summary><span class="t"><span class="n">6</span>リスク確認と、損切りの目安</span><span class="d">ストレステストと、IV×時間の表を切り替えて見ます。損切りは、資金の2%まで（売り系）</span></summary>
+    <div class="body">
+      <div class="tabs"><span class="on">株価が動いた場合（ストレステスト）</span><span>株価が変わらず時間が経った場合</span></div>
+      <div class="ph">表（どちらの表でも、「資金2%超」の赤枠とセルの選択は、いまと同じ）。IVの注意文は、2つの表で1回だけにします</div>
+      <div class="sub-h">損切りの目安（資金の2%まで）とリスクリワード</div>
+      <div class="chips"><span class="chip">トータル資金額 50,000ドル</span><span class="chip">発注する枚数 2枚</span><span class="chip moved">買い戻し価格の上限 6.20</span><span class="chip moved">リスクリワード 1：0.19</span></div>
+    </div>
+  </details>
+
+  <!-- 7 注文まとめ -->
+  <details class="sec" id="s7" open>
+    <summary><span class="t"><span class="n">7</span>注文まとめ</span><span class="d">最終的な注文（売りの指値・利確・損切り・枚数）。ここまでの入力と選択が、すべて反映されます</span></summary>
+    <div class="body">
+      <div class="ph">注文まとめの表（12項目）＋「まとめをコピー」</div>
+    </div>
+  </details>
+
+  <!-- 8 絞り込み -->
+  <details class="sec" id="s8">
+    <summary><span class="t"><span class="n">8</span>エントリー条件で絞り込み／詳細マトリクス</span><span class="d">「今日と似た値動きの日」に絞った勝率。直近7営業日の詳細マトリクスつき。初期は閉じています</span></summary>
+    <div class="body">
+      <div class="ph">既存のカードをそのまま移します</div>
+    </div>
+  </details>
+
+  <!-- いまとの対応表 -->
+  <details class="sec" open>
+    <summary><span class="t">いまの並びとの対応</span><span class="d">どこにあった情報が、どこへ移るか（中身の計算・文章は変えず、場所と順番だけ）</span></summary>
+    <div class="body">
+      <table class="map">
+        <tr><th>いまの場所</th><th>試作での場所</th></tr>
+        <tr><td>入力パネル／注文内容の入力欄（ティッカー・取引タイプ・比率・満期日・判定する深さ）</td><td>1 入力（1か所に集約。連動の2重管理がなくなる）</td></tr>
+        <tr><td>本日の状況／終値（4か所）</td><td>上の固定帯（銘柄・終値・取引・満期・判定）＋2 結論</td></tr>
+        <tr><td>分析結果（総合判定バッジ）</td><td>上の固定帯と、2 結論</td></tr>
+        <tr><td>IVとHVの比較／3点比較／HVカードの確率2項目</td><td><b>3 見比べ</b>に統合（重なる説明を1つにして、見比べ方のガイドを追加）</td></tr>
+        <tr><td>変動幅の統計・HVカード</td><td>4 値動きの背景（初期は閉じる）</td></tr>
+        <tr><td>推奨比率の逆算・注文内容・決済の目安・満期日・損益分岐点</td><td>5 注文プラン</td></tr>
+        <tr><td>ストレステスト・IV×時間の表・損切りの目安</td><td>6 リスク確認（2つの表はタブ切替）</td></tr>
+        <tr><td>注文まとめ</td><td>7 注文まとめ</td></tr>
+        <tr><td>エントリー条件で絞り込み／詳細マトリクス</td><td>8（初期は閉じる）</td></tr>
+      </table>
+    </div>
+  </details>
+</div>
+</body>
+</html>
