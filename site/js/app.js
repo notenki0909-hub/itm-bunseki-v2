@@ -1027,7 +1027,7 @@ function renderHvCard(t) {
   const sideText = theory.zScore >= 0 ? "OTM側" : "ITM側";
   const items = [
     {
-      name: "1σの値動き", value: `±${theory.sigmaAmount.toFixed(2)}ドル`,
+      name: "1σの値動き", value: `±${theory.sigmaAmount.toFixed(2)}ドル`, suffix: "（HV基準）",
       sub: `満期まで。±${pct(theory.sigmaPct)}（直近${days}営業日のHV ${pct(hvN)}×√(${days}/252)）`,
       note: `直近${days}営業日（満期までの営業日数と同じ長さ）のHVから見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。\n1σ＝現在値×HV×√(営業日数÷252)。目安であり、将来を保証するものではありません。`,
     },
@@ -2015,6 +2015,16 @@ function renderIvHv(t, price, itmWhen) {
 「受け取る額が多い」ことと「取引が得になる」ことは別です。実際の値動きが、IVの見込みより小さく収まれば、売りは得になります。\n一般に、IVはHVより少し高めになりやすいため、「同程度」の幅を広めに取っています。`,
     },
   ];
+  // 1σの値動き(IV基準)。「4 HV」の同名のカードと同じ計算で、HVの代わりにIVを使う。
+  if (thIv) {
+    items.push({
+      name: "1σの値動き", value: `±${thIv.sigmaAmount.toFixed(2)}ドル`, suffix: "（IV基準）",
+      sub: `満期まで。±${pct(thIv.sigmaPct)}（IV ${pct(iv)}×√(${days}/252)）`,
+      note: `市場の見込み（IV）から見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。
+1σ＝現在値×IV×√(営業日数÷252)。「4 HV」の1σの値動き（HV基準）と同じ計算で、HVの代わりにIVを使っています。IVのほうが大きければ、1σも広くなります。
+IVは、売り建て側の1つの値を全体に当てはめた目安です。将来を保証するものではありません。`,
+    });
+  }
   // 理論プレミアム価格(HV計算。売り脚・買い脚ともHVを一律のIVとみなして計算)。受取額(未入力なら、入力したIVで計算した理論値)と比べる。
   // IV÷HVと同じ関係(受取が理論価格より少ない=IVがHVより低め)を、金額で見たもの。
   const fairStrikeBuy = isSp && t.rrSpreadWidth > 0 ? (kind === "put" ? strikeSell - t.rrSpreadWidth : strikeSell + t.rrSpreadWidth) : null;
