@@ -1,5 +1,6 @@
 // 買い向きのバックテスト: Trend Tracker(Pine)の「上昇転換日に買い、線を終値で割った日(=下降転換)か満期の早い方で手仕舞い」
 import fs from 'fs';
+const DIR = process.argv[2] || 'data';
 const SYMS = ['QQQ', 'SPY', 'AAPL', 'MSFT', 'NVDA', 'AMZN', 'IWM'];
 const NEXP = 110;            // コールの満期(営業日)。約150暦日
 const PER = 10, MULT = 3.0;  // ATR期間・倍率(Pineの初期値)
@@ -46,7 +47,7 @@ const pc = (x, d = 1) => (x * 100).toFixed(d) + '%';
 
 const rows = []; // 1取引 = 1行
 for (const sym of SYMS) {
-  const d = JSON.parse(fs.readFileSync('data/' + sym + '.json', 'utf8'));
+  const d = JSON.parse(fs.readFileSync(DIR + '/' + sym + '.json', 'utf8'));
   const { dates, closes: c, highs: h, lows: l } = d; const n = c.length;
   const tt = trendTracker(h, l, c);
   const flipUp = (i) => i > 20 && tt.trend[i] === 1 && tt.trend[i - 1] === -1;
@@ -86,7 +87,7 @@ function stat(rs, f, label) {
 }
 const flips = rows.filter((r) => r.kind === 'flip');
 const tdays = rows.filter((r) => r.kind === 'trendDay');
-console.log(`=== 条件: 上昇転換日に買い / 手仕舞い=線を終値で割った日か満期(${NEXP}営業日)の早い方 / コール=ATM・満期${NEXP}営業日(IV=HV20×1.15の仮定) / 7銘柄 約800営業日 ===`);
+console.log(`=== 条件: 上昇転換日に買い / 手仕舞い=線を終値で割った日か満期(${NEXP}営業日)の早い方 / コール=ATM・満期${NEXP}営業日(IV=HV20×1.15の仮定) / 7銘柄 ${DIR} ===`);
 console.log(`上昇転換の回数: ${flips.length}回（未決着${flips.filter((r) => r.open).length}回を除く ${flips.filter((r) => !r.open).length}回）`);
 console.log('\n--- 本命(上昇転換日に買い・線割れか満期で手仕舞い) ---');
 console.log(stat(flips, 'stock', '株        '));
@@ -110,8 +111,8 @@ for (const s of SYMS) {
   console.log(s, stat(r, 'stock', '株').replace('株: ', '株 '), '|', stat(r, 'call', 'C').replace('C: ', 'コール '));
 }
 console.log('\n--- 年ごと(本命・コール) ---');
-for (const y of ['2023', '2024', '2025', '2026']) {
+for (const y of [...new Set(flips.map((x) => x.date.slice(0, 4)))].sort()) {
   const r = flips.filter((x) => x.date.startsWith(y));
   console.log(y, stat(r, 'stock', '株').replace('株: ', '株 '), '|', stat(r, 'call', 'C').replace('C: ', 'コール '));
 }
-fs.writeFileSync('data/buy_rows.json', JSON.stringify(rows));
+fs.writeFileSync(DIR + '/buy_rows.json', JSON.stringify(rows));
