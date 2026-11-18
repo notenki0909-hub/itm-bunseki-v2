@@ -504,6 +504,13 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
         <p class="sub" style="margin:0 0 8px">1〜5で見たことを、順に並べました。上から「前提の値動き」→「過去の実績（土台）」→「HV（いまの荒れ具合）」→「IV（これからの見込み）」の順です。</p>
         <div class="volatility-wrap"><table class="volatility-table concl-table"><thead><tr><th>順</th><th>根拠</th><th>結果</th><th>読み方</th></tr></thead><tbody id="conclBody"></tbody></table></div>
         <h3 style="margin:16px 0 8px;font-size:14px" id="ivConeTitle">満期までの値動きの目安と、権利行使価格の位置（3つの見方を重ねる）</h3>
+        <div class="cone-zoom">
+          <span class="field-hint">縦の間隔：</span>
+          <button type="button" class="sp-btn" id="coneZoomOut" title="縦の間隔を狭くする">− 狭く</button>
+          <button type="button" class="sp-btn" id="coneZoomIn" title="縦の間隔を広くする">＋ 広く</button>
+          <button type="button" class="sp-btn" id="coneZoomReset" title="初期の縦の間隔に戻す">初期に戻す</button>
+          <span class="field-hint">グラフの上でマウスホイール（スマホは2本指のピンチ）でも変えられます</span>
+        </div>
         <div id="ivConeWrap" class="hv-cone"></div>
         <p class="sub" id="ivConeLegend" style="margin:4px 0 0"></p>
         <div data-only="sell">

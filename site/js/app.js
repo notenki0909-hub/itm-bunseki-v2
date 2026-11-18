@@ -1062,7 +1062,57 @@ function renderHvCard(t) {
 // 3つの見方を重ねる: ①HV基準の±1σ・±2σ(青) ②IV基準の±1σ(オレンジの点線の枠。売り系でIVが分かれば) ③過去の実績の約68%の範囲(灰色の帯)と最小・最大(点線)。
 // 材料(coneBase)は、renderHvCardが置く。IVは、renderIvHvが分かったときに渡す。
 let coneBase = null;
+// 縦の間隔の倍率(1＝基準の高さ300)。マウスホイール・ピンチ・ボタンで変える。ブラウザに保存する。
+const CONE_VSCALE_KEY = "itm-tool-cone-vscale-v1";
+const CONE_VSCALE_DEFAULT = 2;
+const CONE_VSCALE_MIN = 0.5;
+const CONE_VSCALE_MAX = 4;
+let coneVScale = (() => {
+  try {
+    const v = Number(localStorage.getItem(CONE_VSCALE_KEY));
+    if (Number.isFinite(v) && v >= CONE_VSCALE_MIN && v <= CONE_VSCALE_MAX && v > 0) return v;
+  } catch (e) { /* 既定値を使う */ }
+  return CONE_VSCALE_DEFAULT;
+})();
+let lastCone = null; // 直近のdrawConeの引数(縦の間隔を変えたときの描き直し用)
+function setConeVScale(v) {
+  const next = Math.min(CONE_VSCALE_MAX, Math.max(CONE_VSCALE_MIN, v));
+  if (Math.abs(next - coneVScale) < 1e-4) return;
+  coneVScale = next;
+  try { localStorage.setItem(CONE_VSCALE_KEY, String(next)); } catch (e) { /* 保存できなくても動く */ }
+  if (lastCone) drawCone(lastCone.t, lastCone.iv);
+}
+// コーン図の上で、マウスホイール(上で広く・下で狭く)、スマホは2本指のピンチ(広げると広く)で、縦の間隔を変える。
+// ボタンでも変えられる。ホイールは、図の上にいる間、ページのスクロールを止める。
+function setupConeZoom() {
+  const wrap = els.ivConeWrap;
+  const apply = (v) => setConeVScale(v); // 描き直しは軽いので、その場で行う
+  wrap.addEventListener("wheel", (e) => {
+    if (!wrap.querySelector("svg")) return;
+    e.preventDefault();
+    apply(coneVScale * Math.exp(-e.deltaY * 0.0015));
+  }, { passive: false });
+  let pinch = null;
+  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  wrap.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2) pinch = { d: dist(e.touches), v: coneVScale };
+  }, { passive: true });
+  wrap.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2 && pinch && pinch.d > 0) {
+      e.preventDefault();
+      apply(pinch.v * (dist(e.touches) / pinch.d));
+    }
+  }, { passive: false });
+  const end = (e) => { if (e.touches.length < 2) pinch = null; };
+  wrap.addEventListener("touchend", end, { passive: true });
+  wrap.addEventListener("touchcancel", end, { passive: true });
+  const step = (f) => () => setConeVScale(coneVScale * f);
+  document.getElementById("coneZoomIn").addEventListener("click", step(1.25));
+  document.getElementById("coneZoomOut").addEventListener("click", step(0.8));
+  document.getElementById("coneZoomReset").addEventListener("click", () => setConeVScale(CONE_VSCALE_DEFAULT));
+}
 function drawCone(t, iv) {
+  lastCone = { t, iv };
   const wrap = els.ivConeWrap;
   const legend = els.ivConeLegend;
   wrap.innerHTML = "";
@@ -1087,6 +1137,7 @@ function drawCone(t, iv) {
     markLabel: `満期${MARK_BEFORE_EXPIRY}営業日前 ${shiftTradingDays(cb.expiryDate, MARK_BEFORE_EXPIRY).slice(5)}`,
     ivSigmaPct: ivSigma,
     empCone: emp,
+    vScale: coneVScale,
   });
   const markText = days > MARK_BEFORE_EXPIRY ? `灰色の縦線＝満期の${MARK_BEFORE_EXPIRY}営業日前（その日の日付と、そのときのHV・IVの±1σの株価）。` : "";
   const ivText = !sell ? ""
@@ -2825,6 +2876,7 @@ function init() {
   initMomentumLookbackOptions();
   setupTickerHistoryDropdown(els.ticker, els.tickerHistoryDropdown);
   setupStatExplain();
+  setupConeZoom();
 
   // 復元の優先順位: URLの共有パラメータ > 同一端末の保存状態 > 新規タブ
   const shareData = parseShareParam();

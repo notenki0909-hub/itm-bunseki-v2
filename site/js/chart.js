@@ -96,11 +96,12 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
  * @param {number|null} p.markBefore 満期のこの営業日数前に縦線を引く(満期までの日数より小さいときだけ。例: 10＝満期の10営業日前)。その位置の±1σの株価も出す
  * @param {string} p.markLabel 縦線の下に出す文字(日付など)
  * @param {number|null} p.ivSigmaPct IV基準の満期までの1σ(割合)。あれば、HV基準の帯(青)にIV基準の±1σの帯(オレンジ)を重ねる
+ * @param {number} p.vScale 縦の間隔の倍率。1＝基準の高さ(300)。2なら、縦の間隔が2倍
  * @param {{lo:number[],hi:number[],min:number[],max:number[]}|null} p.empCone 過去の実績の帯(営業日ごとの変化率。k=0〜days)。あれば、約68%の範囲を灰色の帯、最小・最大を点線で重ねる
  */
-export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", ivSigmaPct = null, empCone = null }) {
+export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", ivSigmaPct = null, empCone = null, vScale = 1 }) {
   const w = 640;
-  const h = 860; // 線が重ならないよう、縦を広く取る
+  const h = Math.round(300 * vScale); // 縦の高さ。基準は300(倍率1)
   const padL = 50;
   const padR = 92;
   const padT = 14;
@@ -125,8 +126,9 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
 
   // 左のグリッド線と価格の目盛り(5本)
   let grid = "";
-  for (let i = 0; i <= 12; i++) {
-    const v = yMin + ((yMax - yMin) * i) / 12;
+  const gridN = Math.max(4, Math.round(h / 60));
+  for (let i = 0; i <= gridN; i++) {
+    const v = yMin + ((yMax - yMin) * i) / gridN;
     grid += `<line x1="${padL}" y1="${f(y(v))}" x2="${xEnd}" y2="${f(y(v))}" stroke="var(--line)" stroke-width="1"/>`
       + `<text x="${padL - 6}" y="${f(y(v) + 3)}" font-size="10" text-anchor="end" fill="var(--muted)">${v.toFixed(v >= 100 ? 0 : 1)}</text>`;
   }
