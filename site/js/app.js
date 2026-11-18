@@ -253,8 +253,6 @@ const els = {
   ratioInput: document.getElementById("ratioInput"),
   windowDateInput: document.getElementById("windowDateInput"),
   windowHint: document.getElementById("windowHint"),
-  orderWindowDateInput: document.getElementById("orderWindowDateInput"),
-  orderWindowHint: document.getElementById("orderWindowHint"),
   periodSelect: document.getElementById("periodSelect"),
   status: document.getElementById("status"),
 
@@ -333,18 +331,24 @@ const els = {
   orderCard: document.getElementById("orderCard"),
   ratioCard: document.getElementById("ratioCard"),
   ratioTargetInput: document.getElementById("ratioTargetInput"),
-  orderRatioInput: document.getElementById("orderRatioInput"),
   ratioEffHint: document.getElementById("ratioEffHint"),
   riskCapitalInput: document.getElementById("riskCapitalInput"),
   planQtyInput: document.getElementById("planQtyInput"),
   riskSummary: document.getElementById("riskSummary"),
   riskNote: document.getElementById("riskNote"),
   riskClearPick: document.getElementById("riskClearPick"),
+  bandRow1: document.getElementById("bandRow1"),
+  bandRow2: document.getElementById("bandRow2"),
+  bandNav: document.getElementById("bandNav"),
+  condGate: document.getElementById("condGate"),
+  riskTabStress: document.getElementById("riskTabStress"),
+  riskTabTime: document.getElementById("riskTabTime"),
+  stressWrap: document.getElementById("stressWrap"),
+  ivTimeWrap: document.getElementById("ivTimeWrap"),
   planCard: document.getElementById("planCard"),
   planBody: document.getElementById("planBody"),
   planCopyBtn: document.getElementById("planCopyBtn"),
   planCopyHint: document.getElementById("planCopyHint"),
-  orderRatioEffHint: document.getElementById("orderRatioEffHint"),
   ratioMinPremInput: document.getElementById("ratioMinPremInput"),
   ratioStepBtns: document.getElementById("ratioStepBtns"),
   ratioPremHint: document.getElementById("ratioPremHint"),
@@ -352,14 +356,11 @@ const els = {
   ratioActions: document.getElementById("ratioActions"),
   ratioBody: document.getElementById("ratioBody"),
   ratioNote: document.getElementById("ratioNote"),
-  orderTicker: document.getElementById("orderTicker"),
-  orderClose: document.getElementById("orderClose"),
   orderLine: document.getElementById("orderLine"),
   orderTypeLabel: document.getElementById("orderTypeLabel"),
   orderMaxLossField: document.getElementById("orderMaxLossField"),
   orderMaxLoss: document.getElementById("orderMaxLoss"),
   orderMaxLossHint: document.getElementById("orderMaxLossHint"),
-  orderDepthPct: document.getElementById("orderDepthPct"),
   spBtn: document.getElementById("spBtn"),
   rrPayPremiumInput: document.getElementById("rrPayPremiumInput"),
   rrDepthInput: document.getElementById("rrDepthInput"),
@@ -411,7 +412,7 @@ function newTabState() {
     ratio: OPTION_TYPES.put_sell.ratio,
     windowDays: DEFAULT_WINDOW,
     periodDays: DEFAULT_PERIOD_DAYS,
-    conditionMode: "lookback",
+    conditionMode: "countWithin7", // 既定は「直近7営業日中の該当日数」(最低条件の判定と同じ見方)
     momentumLookback: DEFAULT_MOMENTUM_LOOKBACK,
     minMatchDays: 3,
     momentumDirection: "down",
@@ -488,7 +489,6 @@ function switchTab(id) {
   els.statusDateInput.value = t.statusDate ?? "";
   updateRiskRewardInputUI(t.typeKey, t.rrVariant);
   syncOrderDerived(t);
-  syncMirrors();
   setStatus("");
 
   if (t.closesFull) {
@@ -502,6 +502,9 @@ function switchTab(id) {
     els.ratioCard.hidden = true;
     els.orderCard.hidden = true;
     els.conditionCard.hidden = true;
+    els.planCard.hidden = true;
+    renderTopBand(null);
+    syncSections();
   }
   renderTabBar();
   persistState();
@@ -617,7 +620,7 @@ function syncWindowInputs(t, message = "", force = false) {
   const cal = calendarDaysBetween(asOf, exp);
   const base = `残り${t.windowDays}営業日（${cal}暦日）・${EXPIRY_KIND_LABEL[expiryKind(exp)]}${cal > GUIDE_MAX_CALENDAR_DAYS ? "・講座の想定の約60暦日を超えています" : ""}`;
   const hint = message ? `${message}　${base}` : base;
-  for (const [inp, h] of [[els.windowDateInput, els.windowHint], [els.orderWindowDateInput, els.orderWindowHint]]) {
+  for (const [inp, h] of [[els.windowDateInput, els.windowHint]]) {
     inp.min = min;
     inp.max = max;
     if (force || document.activeElement !== inp) inp.value = exp;
@@ -700,6 +703,9 @@ async function onAnalyze() {
   els.ratioCard.hidden = true;
   els.orderCard.hidden = true;
   els.conditionCard.hidden = true;
+  els.planCard.hidden = true;
+  renderTopBand(null);
+  syncSections();
   try {
     const data = await fetchHistory(symbol);
     t.symbol = data.symbol;
@@ -710,7 +716,6 @@ async function onAnalyze() {
     addTickerToHistory(data.symbol);
     t.ratioNormalize = true;
     renderAll(t);
-    syncMirrors();
     renderTabBar();
     persistState();
   } catch (e) {
@@ -749,7 +754,6 @@ function onFormChange() {
   syncOrderDerived(t);
 
   if (t.closesFull) renderAll(t);
-  syncMirrors();
   renderTabBar();
   persistState();
 }
@@ -812,6 +816,9 @@ function ratio4(strike, price, itmWhen) {
 const fmtStrike = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(2));
 
 function renderAll(t) {
+  band.hvItm = null;
+  band.ivhv = null;
+  band.cond = null;
   syncOrderDerived(t);
   syncWindowInputs(t);
   renderLatestPrice(t);
@@ -824,6 +831,8 @@ function renderAll(t) {
   renderPlanCard(t);
   setupStatExplain();
   renderConditionCard(t);
+  renderTopBand(t);
+  syncSections();
 }
 
 // 「変動幅の統計」カードを描画する。集計期間セレクターの影響を受けず、
@@ -996,6 +1005,7 @@ function renderHvCard(t) {
   const depthDollar = t.rrDepth ?? 0;
   const hvN = computeHv(closes, days);
   const theory = hvN === null ? null : hvTheory({ price, strike, depthDollar, itmWhen: type.itmWhen, days, hv: hvN });
+  band.hvItm = theory ? theory.probItmAtExpiry : null;
   els.hvTheoryTitle.textContent = `満期（${days}営業日）までの値動きの目安と、権利行使価格の位置`;
   if (!theory) {
     els.hvTheorySummary.innerHTML = "";
@@ -1298,6 +1308,19 @@ function renderConditionCard(t) {
 
   const thresholdFrac = t.momentumThresholdPct / 100;
   const latestIdx = closes.length - 1;
+  // 最低条件: 1〜7営業日前との比較のうち、設定した変化率以上の値動きが1日でもあるか(推奨は、該当日数の設定値以上)
+  {
+    let hitDays7 = 0;
+    let any7 = false;
+    for (let k = 1; k <= 7; k++) {
+      const m = computeMomentum(closes, latestIdx, k);
+      if (m === null) continue;
+      any7 = true;
+      if (t.momentumDirection === "down" ? m <= -thresholdFrac : m >= thresholdFrac) hitDays7++;
+    }
+    band.cond = any7 ? { hitDays: hitDays7, rec: t.minMatchDays, down: t.momentumDirection === "down" } : null;
+    renderCondGate();
+  }
   let todayMatches;
   if (t.conditionMode === "countWithin7") {
     let hitDays = 0;
@@ -1437,7 +1460,6 @@ function syncOrderDerived(t) {
     : entered ? `売りの権利行使価格 ${fmtStrike(sellEff)}（入力値）を使用中。比率を変更すると、この入力は消えます`
       : `権利行使価格 ${fmtStrike(sellEff)} になるように、比率を合わせています`;
   els.ratioEffHint.textContent = ratioHint;
-  els.orderRatioEffHint.textContent = ratioHint;
 
   // 比率を、権利行使価格(整数)になるように合わせる。
   //  ・売りの権利行使価格を入力しているとき: 常に、その価格に合わせた比率を表示する(価格が主、比率は従)。
@@ -1447,7 +1469,7 @@ function syncOrderDerived(t) {
   // 入力欄に文字を打っている最中は、書き換えない(入力が終わったとき(changeイベント)に直す)。
   if (latest !== null && sellEff > 0 && (entered || t.ratioNormalize)) {
     const r4 = ratio4(sellEff, latest, itmWhen);
-    const typing = !t.ratioCommit && (document.activeElement === els.ratioInput || document.activeElement === els.orderRatioInput);
+    const typing = !t.ratioCommit && document.activeElement === els.ratioInput;
     if (!typing) {
       t.ratio = r4;
       els.ratioInput.value = r4;
@@ -1516,9 +1538,6 @@ function renderOrderCard(t) {
   const todayStrike = ratioStrike;
 
   els.orderTypeLabel.textContent = `：${isSp ? labels.spread : labels.naked}${asOfSuffixOf(t)}`;
-  els.orderTicker.textContent = t.symbol || "―";
-  els.orderClose.textContent = `最新終値 ${latest.toFixed(2)}（${dates[dates.length - 1]}）`;
-  els.orderDepthPct.textContent = els.rrDepthPct.textContent;
 
   const fmt = (v) => v.toFixed(2);
   // 売り系スプレッド(ブルプット/ベアコール)は、最大損失額(差額−受取プレミアム額)を利確割合の右に表示する
@@ -1890,7 +1909,7 @@ function renderRatioCard(t) {
     const same = cur && rec.strike === cur.strike;
     els.ratioActions.innerHTML = same
       ? `<span class="field-hint">いまの権利行使価格（${fmtStrike(curK)}）が、推奨の権利行使価格です。</span>`
-      : `<button type="button" class="sp-btn" data-use-strike="${rec.strike}">この権利行使価格（${fmtStrike(rec.strike)}）を使う</button> <span class="field-hint">「売りの権利行使価格」に入力して、分析をやり直します（いま：${fmtStrike(curK)}${cur && cur.itm !== null ? `、ITM発生率 ${pctText(cur.itm)}` : ""}）</span>`;
+      : `<button type="button" class="sp-btn" data-use-strike="${rec.strike}">この権利行使価格（${fmtStrike(rec.strike)}）を採用する</button> <span class="field-hint">「売りの権利行使価格」に入力して、分析をやり直します（いま：${fmtStrike(curK)}${cur && cur.itm !== null ? `、ITM発生率 ${pctText(cur.itm)}` : ""}）</span>`;
   } else {
     els.ratioActions.innerHTML = "";
   }
@@ -1908,7 +1927,7 @@ function renderRatioCard(t) {
     return `<tr class="${cls}"><td><b>${fmtStrike(x.strike)}</b> <span class="ratio-strike">（比率${ratioOf(x)}）</span>${marks.length ? `<br><span class="ratio-mark">${marks.join("・")}</span>` : ""}</td>`
       + `<td>${x.itm === null ? "―" : pctText(x.itm)}<br><span class="badge ${badgeLevelClass(x.level)}">${x.badge}</span></td>`
       + `<td>${x.theory === null ? "―" : pctText(x.theory)}${premLine}</td>`
-      + `<td><button type="button" class="sp-btn" data-use-strike="${x.strike}">使う</button></td></tr>`;
+      + `<td><button type="button" class="sp-btn" data-use-strike="${x.strike}">採用</button></td></tr>`;
   }).join("");
   els.ratioNote.textContent = `過去の実績に基づく目安です。独立した試行は、件数÷判定期間の営業日数で、約${trials}回分しかありません。選んだ権利行使価格が、たまたま過去に当てはまっただけの可能性もあります。判定する深さは、いまの入力の割合のまま使っています。満期時ITM率（HV換算）は、HVから求めた理論上の確率です。`
     + (ivs ? " 受取（理論）は、✓が下限以上、✗が下限未満です。薄い色の行は、ITM発生率と受取の両方の条件を満たす比率です。" : "");
@@ -1962,6 +1981,7 @@ function renderIvHv(t, price, itmWhen) {
 
   const ratio = iv / hv;
   const judge = judgeIvHv(ratio);
+  band.ivhv = { ratio, word: judge.word };
   const depthDollar = t.rrDepth ?? 0;
   const thIv = hvTheory({ price, strike: strikeSell, depthDollar, itmWhen, days, hv: iv });
   const thHv = hvTheory({ price, strike: strikeSell, depthDollar, itmWhen, days, hv });
@@ -1982,7 +2002,7 @@ function renderIvHv(t, price, itmWhen) {
     {
       name: "HV", value: pct(hv), suffix: `（直近${days}営業日）`,
       sub: pos ? `満期と同じ長さ・ふだん（中央値）${pct(pos.median, 0)}` : "満期と同じ長さ",
-      note: `満期（${days}営業日）と同じ長さの期間で測った、過去の実際の値動きの大きさ（HV、年率）です。上のHVのエリアと同じ値です。`,
+      note: `満期（${days}営業日）と同じ長さの期間で測った、過去の実際の値動きの大きさ（HV、年率）です。「値動きの背景」のHVのエリアと同じ値です。`,
     },
     {
       name: "IV÷HV", value: `${ratio.toFixed(2)}倍`,
@@ -2014,7 +2034,7 @@ function renderIvHv(t, price, itmWhen) {
     items.push({
       name: "満期時ITM率", value: pct(thIv.probItmAtExpiry), suffix: "（IV換算）",
       sub: `理論上の確率。HV換算 ${pct(thHv.probItmAtExpiry)}／期間中に一度でも届く目安 約${pct(thIv.probTouch, 0)}`,
-      note: `上のHV換算の理論上の確率と同じ計算で、HVの代わりにIVを使ったものです（1σ＝IV×√(営業日数÷252)、株価の平均的な上昇・下落はないと仮定した単純な近似）。\nIVはHVより高いことが多いので、IV換算のほうが、ITMになりやすい（売りには厳しい）見積もりになります。HV換算との差は、市場が織り込んでいる「余分な変動」の大きさです。\n将来を保証するものではありません。`,
+      note: `「値動きの背景」のHV換算の理論上の確率と同じ計算で、HVの代わりにIVを使ったものです（1σ＝IV×√(営業日数÷252)、株価の平均的な上昇・下落はないと仮定した単純な近似）。\nIVはHVより高いことが多いので、IV換算のほうが、ITMになりやすい（売りには厳しい）見積もりになります。HV換算との差は、市場が織り込んでいる「余分な変動」の大きさです。\n将来を保証するものではありません。`,
     });
   }
   els.ivHvSummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
@@ -2138,7 +2158,7 @@ function renderIvTime(t, price, itmWhen, asOfDate) {
     ivText,
     receivedText,
     `緑のセルは、現在値が利確の目安（受取額×（1−利確割合${profitPercentOf(t)}%）＝${money(profitMax)}）以下になり、利確の条件に届いています。橙のセルは、現在値が${money(stopMin)}以上（受取額の1.9倍以上＝ロスカットの逆指値の水準）です${maxValue !== null ? "。さらに濃い色は、スプレッド幅の上限（最大損失）に近い水準です" : ""}。`,
-    `時間が経つと、株価が動かなくても現在値は下がります（時間の経過による価値の減り）。IVが上がると現在値は上がり、IVが下がると下がります（決算発表のあとは、IVが下がりやすい傾向があります）。株価も動く場合は、上のストレステストを見てください。損失が出るセル（現在値が受取額より高いセル）は、クリックすると「損切りの場面」として選べます（太い枠のセル。もう一度クリックすると外れます）。選んだ場面は、リスクリワードと、注文まとめに反映されます。`,
+    `時間が経つと、株価が動かなくても現在値は下がります（時間の経過による価値の減り）。IVが上がると現在値は上がり、IVが下がると下がります（決算発表のあとは、IVが下がりやすい傾向があります）。株価も動く場合は、「株価が動いた場合」のタブ（ストレステスト）を見てください。損失が出るセル（現在値が受取額より高いセル）は、クリックすると「損切りの場面」として選べます（太い枠のセル。もう一度クリックすると外れます）。選んだ場面は、リスクリワードと、注文まとめに反映されます。`,
     "金利0・配当なし、IVは全体が一律に動くとして計算した目安です。実際の価格とは、スキュー・流動性などでずれます。",
   ].filter(Boolean).join(" ");
 }
@@ -2173,7 +2193,7 @@ function limitInfoOf(t, received) {
 function limitLineText(info, money, maxValue = null) {
   const usd = (v) => `${Math.abs(v).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}ドル`;
   if (info.value === null) {
-    return "【資金2%の目安】下の「損切りの目安」の欄でトータル資金額を入力すると、損失が資金の2%を超える場面に、赤枠の「資金2%超」の印が付きます。";
+    return "【資金2%の目安】「注文プラン」でトータル資金額を入力すると、損失が資金の2%を超える場面に、赤枠の「資金2%超」の印が付きます。";
   }
   return `【資金2%の目安】資金${usd(info.capital)}の2%＝${usd(info.allowed)}。${info.qty}枚${info.assumed ? "（発注枚数が未入力のため、仮に1枚）" : ""}の場合、現在値（買い戻し価格）が ${money(info.value)} 以上になると、損失が資金の2%を超えます（赤枠の「資金2%超」）。${maxValue !== null && info.value >= maxValue ? "この枚数では、スプレッドの最大損失でも、損失は資金の2%以内に収まるため、印は付きません。" : ""}`;
 }
@@ -2249,7 +2269,7 @@ function renderRiskPlan(t) {
       name: "損切りの買い戻し価格（2%の上限）", value: money(ctx.limitValue),
       suffix: `（受取${money(ctx.received)}＋損失${money(ctx.limitLossPerShare)}）`,
       sub: `${ctx.qty}枚で、損失が${usd(ctx.allowed)}（資金の${RISK_PCT * 100}%）になる買い戻し価格${ctx.qtyInput === null ? "（選んだ場面から決めた枚数）" : ""}`,
-      note: "ポジションの買い戻しに必要な価格（現在値）が、この価格に届いたら損切りする、という目安です。受取プレミアム＋（資金の2%÷（100株×枚数））で計算しています。逆指値の注文は、発動後に不利な価格で約定することがあります。\n上のストレステストの表では、この価格以上になるセルに「2%超」の印を付けています。",
+      note: "ポジションの買い戻しに必要な価格（現在値）が、この価格に届いたら損切りする、という目安です。受取プレミアム＋（資金の2%÷（100株×枚数））で計算しています。逆指値の注文は、発動後に不利な価格で約定することがあります。\n2つの表（ストレステストと、IVの変化と時間の経過）では、この価格以上になるセルに「2%超」の印を付けています。",
       attrs: `data-target="${T}"`,
     });
   } else {
@@ -2514,7 +2534,7 @@ function renderStressTest(t, price, itmWhen) {
     ivText,
     receivedText,
     `色付きのセルは、現在値が${money(stopMin)}以上（受取額の1.9倍以上＝ロスカットの逆指値の水準）です${maxValue !== null ? "。さらに濃い色は、スプレッド幅の上限（最大損失）に近い水準です" : ""}。`,
-    "表のセルをクリックすると、その場面を「損切りの場面」として選べます（太い枠のセル。もう一度クリックすると外れます）。株価が変わらずに時間が経った場合の損失は、下の「IVの変化と時間の経過の影響」の表で見られます。選んだ場面は、リスクリワードと、注文まとめに反映されます。",
+    "表のセルをクリックすると、その場面を「損切りの場面」として選べます（太い枠のセル。もう一度クリックすると外れます）。株価が変わらずに時間が経った場合の損失は、「株価が変わらず時間が経った場合」のタブ（IVの変化と時間の経過の影響）で見られます。選んだ場面は、リスクリワードと、注文まとめに反映されます。",
     "金利0・配当なし、株価がすぐに動いたとして（時間の経過なし）計算した目安です。実際の価格とは、スキュー・流動性などでずれます。すでに両方の権利行使価格を超えて動いている場合は、IVが上がるとスプレッドの価格がわずかに下がることがあります。",
   ].filter(Boolean).join(" ");
 }
@@ -2526,47 +2546,7 @@ function onToggleSp() {
   t.rrVariant = t.rrVariant === "spread" ? "naked" : "spread";
   updateRiskRewardInputUI(t.typeKey, t.rrVariant);
   if (t.closesFull) renderAll(t);
-  syncMirrors();
   persistState();
-}
-
-// 同じ入力欄を複数の場所に置くための仕組み。値の持ち主(idで参照する正本)と、
-// data-mirror="正本のid"を付けた入力欄(ミラー)の値を常に同期させる。
-// ミラーで入力すると正本に値を移して同じ入力イベントを発火させるため、既存の処理がそのまま動く。
-function setupMirrors() {
-  const canonIds = new Set();
-  document.querySelectorAll("[data-mirror]").forEach((m) => {
-    const canon = document.getElementById(m.dataset.mirror);
-    if (!canon) return;
-    canonIds.add(m.dataset.mirror);
-    const isSelect = m.tagName === "SELECT";
-    if (isSelect) m.innerHTML = canon.innerHTML;
-    const evt = isSelect ? "change" : "input";
-    m.addEventListener(evt, () => {
-      canon.value = m.value;
-      canon.dispatchEvent(new Event(evt, { bubbles: true }));
-    });
-    if (!isSelect) {
-      m.addEventListener("blur", () => {
-        canon.dispatchEvent(new Event("blur"));
-        syncMirrors();
-      });
-    }
-  });
-  canonIds.forEach((id) => {
-    const canon = document.getElementById(id);
-    canon.addEventListener(canon.tagName === "SELECT" ? "change" : "input", syncMirrors);
-  });
-  syncMirrors();
-}
-
-function syncMirrors() {
-  document.querySelectorAll("[data-mirror]").forEach((m) => {
-    const canon = document.getElementById(m.dataset.mirror);
-    if (!canon) return;
-    if (m.value !== canon.value) m.value = canon.value;
-    m.disabled = canon.disabled;
-  });
 }
 
 // 満期時の損益分岐点(株価)を描画する。単体・スプレッドとも、上部の比率で決まる権利行使価格
@@ -2683,38 +2663,109 @@ function setupCellTip() {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideCellTip(); });
 }
 
-const COLLAPSE_KEY = "itm-tool-collapsed-v1";
-function setupCollapsibleCards() {
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}") || {}; } catch (e) { saved = {}; }
-  ["volatilityCard", "hvCard", "result", "ratioCard", "orderCard", "conditionCard"].forEach((id) => {
-    const card = document.getElementById(id);
-    if (!card) return;
-    const head = card.querySelector(":scope > .result-head, :scope > .order-head") || card.querySelector(":scope > h2");
-    if (!head) return;
-    head.classList.add("card-head");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "card-toggle";
-    const apply = (collapsed) => {
-      card.classList.toggle("collapsed", collapsed);
-      btn.textContent = collapsed ? "開く" : "閉じる";
-      btn.setAttribute("aria-expanded", String(!collapsed));
-    };
-    apply(!!saved[id]);
-    btn.addEventListener("click", () => {
-      const collapsed = !card.classList.contains("collapsed");
-      apply(collapsed);
-      saved[id] = collapsed;
-      try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(saved)); } catch (e) { /* 保存できなくても動作に支障はない */ }
-    });
-    card.appendChild(btn);
-  });
+// ---- 画面の構成: 上に固定する帯・セクション・最低条件の表示・リスクのタブ ----
+// 帯に出す値。各描画関数が、計算のついでに置いていく(renderAllの最初にリセットする)
+const band = { hvItm: null, ivhv: null, cond: null };
+
+// セクション(3〜8)の表示を、中のカードの表示状態に合わせる。ナビの項目も同じ。
+// 売り系だけのセクション(data-only="sell")は、買い系のときは出さない。
+function syncSections() {
+  const shown = (...cards) => cards.some((c) => !c.hidden);
+  const set = (id, show) => {
+    const sec = document.getElementById(id);
+    const sellOnlyHidden = sec && sec.dataset.only === "sell" && document.body.dataset.group === "buy";
+    const on = show && !sellOnlyHidden;
+    if (sec) sec.hidden = !on;
+    const a = els.bandNav.querySelector(`a[href="#${id}"]`);
+    if (a) a.hidden = !on;
+  };
+  set("s3", shown(els.todayCard, els.result));
+  set("s4", shown(els.orderCard));
+  set("s5", shown(els.ratioCard));
+  set("s6", shown(els.orderCard));
+  set("s7", shown(els.planCard));
+  set("s8", shown(els.volatilityCard, els.hvCard));
+}
+
+// 上に固定する帯(銘柄・終値・取引・満期／最低条件・総合判定・ITM発生率・満期時ITM率・IV÷HV)。t=nullなら、未選択の表示
+function renderTopBand(t) {
+  const kv = (name, valueHtml) => `<span class="kv">${name} <b>${valueHtml}</b></span>`;
+  if (!t || !t.closesFull || !t.symbol) {
+    els.bandRow1.innerHTML = '<span class="sym" style="color:var(--muted)">―</span><span class="kv"><b>ティッカーを入力して「分析する」を押してください</b></span>';
+    els.bandRow2.innerHTML = ["最低条件", "総合判定", "ITM発生率", "IV÷HV"].map((n) => kv(n, "―")).join("");
+    return;
+  }
+  const closes = periodClosesOf(t);
+  const dates = periodDatesOf(t);
+  const latest = closes[closes.length - 1];
+  const asOf = dates[dates.length - 1];
+  const type = OPTION_TYPES[t.typeKey];
+  const group = typeGroup(t.typeKey);
+  const isSp = t.rrVariant === "spread";
+  const labels = RISK_VARIANT_LABELS[t.typeKey] || RISK_VARIANT_LABELS.put_sell;
+  const isPut = type.itmWhen === "below";
+  const kind = isPut ? "P" : "C";
+  const strike = effStrikeOf(t, latest);
+  let strikes;
+  if (group === "sell") {
+    const buyK = isSp && t.rrSpreadWidth > 0 ? (isPut ? strike - t.rrSpreadWidth : strike + t.rrSpreadWidth) : null;
+    strikes = isSp ? `${fmtStrike(strike)}${kind}売 / ${buyK !== null ? fmtStrike(buyK) : "―"}${kind}買` : `${fmtStrike(strike)}${kind}売`;
+  } else {
+    strikes = `${fmtStrike(strike)}${kind}買`;
+  }
+  const expiry = shiftTradingDays(asOf, -t.windowDays);
+  els.bandRow1.innerHTML = `<span class="sym">${t.symbol}</span>`
+    + `<span class="px">${latest.toFixed(2)}<span class="kv">　${asOf.slice(5)}の終値</span></span>`
+    + `<span class="kv"><b>${isSp ? labels.spread : labels.naked}</b> ${strikes}</span>`
+    + `<span class="kv">満期 <b>${expiry.slice(5)}</b>（${t.windowDays}営業日）</span>`;
+  const pct = (v, d = 0) => (v * 100).toFixed(d) + "%";
+  const c = band.cond;
+  const parts = [
+    c ? kv("最低条件", `<span class="${c.hitDays >= 1 ? "band-ok" : "band-ng"}">${c.hitDays >= 1 ? "満たす" : "満たしていません"}</span>`) : kv("最低条件", "―"),
+    `<span class="${els.badge.className}">${els.badge.textContent}</span>`,
+    kv("ITM発生率（実績）", els.overallProb.textContent),
+  ];
+  if (band.hvItm !== null) parts.push(kv("満期時ITM率（HV換算）", pct(band.hvItm)));
+  if (group === "sell" && band.ivhv) parts.push(kv("IV÷HV", `${band.ivhv.ratio.toFixed(2)}倍（${band.ivhv.word}）`));
+  els.bandRow2.innerHTML = parts.join("");
+}
+
+// 「最低条件」の判定の表示。最低条件＝1〜7営業日前との比較のうち、設定した変化率以上の値動きが1日以上。推奨＝該当日数の設定値以上。
+function renderCondGate() {
+  const c = band.cond;
+  if (!c) { els.condGate.hidden = true; return; }
+  const word = c.down ? "下落" : "上昇";
+  const detail = `1〜7営業日前との比較のうち、設定した変化率以上の${word}が<b>${c.hitDays}/7日</b>`;
+  let cls;
+  let html;
+  if (c.hitDays >= 1 && c.hitDays >= c.rec) {
+    cls = "ok";
+    html = `<b>最低条件：満たしています</b>（推奨も満たしています）　${detail}あります（最低条件は1日以上、推奨は${c.rec}日以上）。`;
+  } else if (c.hitDays >= 1) {
+    cls = "mid";
+    html = `<b>最低条件：満たしています</b>（推奨には届きません）　${detail}あります（最低条件は1日以上、推奨は${c.rec}日以上）。`;
+  } else {
+    cls = "ng";
+    html = `<b>最低条件：満たしていません</b>　${detail}です（最低条件は1日以上）。下の画面は、そのまま見られます。`;
+  }
+  els.condGate.className = `gate ${cls}`;
+  els.condGate.innerHTML = html;
+  els.condGate.hidden = false;
+}
+
+// リスク確認のタブ(ストレステスト／IVの変化と時間の経過)
+function setRiskTab(which) {
+  const stress = which === "stress";
+  els.stressWrap.hidden = !stress;
+  els.ivTimeWrap.hidden = stress;
+  for (const [btn, on] of [[els.riskTabStress, stress], [els.riskTabTime, !stress]]) {
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-selected", String(on));
+  }
 }
 
 function init() {
   initThemeBar("theme-bar");
-  setupCollapsibleCards();
   setupCellTip();
   initTypeOptions();
   initPeriodOptions();
@@ -2747,7 +2798,6 @@ function init() {
     onFormChange();
   };
   els.ratioInput.addEventListener("change", onRatioCommit);
-  els.orderRatioInput.addEventListener("change", onRatioCommit);
   // 比率を変えたら、入力した売りの権利行使価格は消して、比率から決める(どちらか一方で権利行使価格を決める)
   els.ratioInput.addEventListener("input", debounce(() => {
     els.rrSellStrikeInput.value = "";
@@ -2777,7 +2827,7 @@ function init() {
   });
   // 満期日(判定期間)の入力。キーボード入力の途中経過で何度も再計算しないよう、入力が止まってから反映する
   const debouncedCommit = debounce((v) => commitWindowDate(v), 600);
-  for (const inp of [els.windowDateInput, els.orderWindowDateInput]) {
+  for (const inp of [els.windowDateInput]) {
     inp.addEventListener("change", () => debouncedCommit(inp.value));
   }
   els.periodSelect.addEventListener("change", onFormChange);
@@ -2817,6 +2867,8 @@ function init() {
       renderAll(t);
     });
   }
+  els.riskTabStress.addEventListener("click", () => setRiskTab("stress"));
+  els.riskTabTime.addEventListener("click", () => setRiskTab("time"));
   els.riskClearPick.addEventListener("click", () => {
     const t = activeTab();
     if (!t || !t.closesFull) return;
@@ -2868,7 +2920,6 @@ function init() {
   els.statusDateReset.addEventListener("click", () => onStatusDateChange(""));
   els.shareBtn.addEventListener("click", onShareLink);
   els.openDetailBtn.addEventListener("click", onOpenDetail);
-  setupMirrors();
 }
 
 function debounce(fn, ms) {
