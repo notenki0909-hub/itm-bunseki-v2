@@ -534,7 +534,7 @@ details.mini#volDetails[hidden]{display:none}
 .be-check{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;cursor:pointer}
 #ratioEffHint{font-weight:700;color:var(--fg)}
 .bs-table tr.bs-risk td{background:color-mix(in srgb, var(--gradOrange) 14%, transparent)}
-.be-box{margin:14px 0;padding:12px 16px;border:2px solid var(--accent);border-radius:10px;background:color-mix(in srgb, var(--accent) 9%, transparent)}
-.be-box .be-check{margin:0 0 4px;font-size:19px;font-weight:800;line-height:1.5}
-.be-box .be-check input{width:22px;height:22px;flex:0 0 auto}
+.be-box{margin:14px 0;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb, var(--accent) 9%, transparent)}
+.be-box .be-check{margin:0 0 4px;font-size:14px;font-weight:700;line-height:1.5}
+.be-box .be-check input{flex:0 0 auto}
 .be-box .field-hint{display:block;font-size:12.5px}

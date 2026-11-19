@@ -14,7 +14,7 @@ import { renderDayProbChart, DAY_PROB_BANDS, renderConeChart, renderHvHistoryCha
 import { renderEntryHeatmap, ENTRY_HEATMAP_BANDS, renderDepthHeatmap, DEPTH_HEATMAP_BANDS, renderOtmHeatmap, OTM_HEATMAP_BANDS, OTM_RATE_BANDS } from "./heatmap.js";
 import { initThemeBar } from "./theme.js";
 import { isPriceDataStale } from "./marketTime.js";
-import { stressTest, ivTimeTable, solveFlatIv, resolveIvs, positionValue, judgeIvHv, TRADING_DAYS_PER_YEAR } from "./optionModel.js";
+import { stressTest, ivTimeTable, solveFlatIv, resolveIvs, positionValue, judgeIvHv, bsPrice, TRADING_DAYS_PER_YEAR } from "./optionModel.js";
 import { WEEKDAY_JA, weekday, parseYmd, isTradingDay, previousTradingDay, shiftTradingDays, tradingDaysBetween, expiryKind, EXPIRY_KIND_LABEL, EXPIRY_KIND_NOTE } from "./usMarket.js";
 import { addTickerToHistory, setupTickerHistoryDropdown, loadTickerHistory, mergeTickerHistory } from "./tickerHistory.js";
 
@@ -335,6 +335,10 @@ const els = {
   buyRiskSummary: document.getElementById("buyRiskSummary"),
   buyRiskBody: document.getElementById("buyRiskBody"),
   buyRiskNote: document.getElementById("buyRiskNote"),
+  buyTimeIntro: document.getElementById("buyTimeIntro"),
+  buyTimeHead: document.getElementById("buyTimeHead"),
+  buyTimeBody: document.getElementById("buyTimeBody"),
+  buyTimeNote: document.getElementById("buyTimeNote"),
   buyPlanCard: document.getElementById("buyPlanCard"),
   buyPlanBody: document.getElementById("buyPlanBody"),
   buyPlanCopyBtn: document.getElementById("buyPlanCopyBtn"),
@@ -2902,10 +2906,10 @@ function renderBuyStudy(t) {
   const body = rows.map((r) => {
     const label = r.x === null ? "条件なし（毎日買う・基準）" : `${dirWord} ${r.x}%以上`;
     const sel = r.x !== null && Math.abs(r.x - curX) < 1e-9;
-    if (!r.n) return `<tr class="${sel ? "bs-sel" : ""}"><td>${label}</td><td colspan="5">当てはまる日がありません</td><td>${r.x === null ? "" : `<button type="button" class="sp-btn" data-use-x="${r.x}">この値にする</button>`}</td></tr>`;
+    if (!r.n) return `<tr class="${sel ? "bs-sel" : ""}"><td>${label}</td><td colspan="4">当てはまる日がありません</td><td>${r.x === null ? "" : `<button type="button" class="sp-btn" data-use-x="${r.x}">この値にする</button>`}</td></tr>`;
     return `<tr class="${sel ? "bs-sel" : ""}"><td>${label}${sel ? '<br><span class="bs-sub">いまの設定</span>' : ""}</td>`
       + `<td>${r.n}件<br><span class="bs-sub">独立した場面は約${r.trials}回分</span></td>`
-      + `<td>${f(r.stock)}</td><td>${f(r.opt)}</td>`
+      + `<td>${f(r.opt)}</td>`
       + `<td>${(r.lineRate * 100).toFixed(0)}%<br><span class="bs-sub">平均${r.avgDays.toFixed(0)}日</span></td>`
       + `<td>${pctTxt(r.optHoldMean)}</td>`
       + `<td>${r.x === null ? "" : `<button type="button" class="sp-btn" data-use-x="${r.x}">この値にする</button>`}</td></tr>`;
@@ -2921,7 +2925,7 @@ function renderBuyStudy(t) {
   els.buyStudyNote.innerHTML = `各行は、この銘柄の過去（取得済みの全データ。${v.closes.length}営業日）で、その条件に当てはまった日に買い、<b>固定の線（買った日の終値から、ATR(${ATR_PERIOD})の${t.buyAtrMult}倍）を終値で割った日、または満期（${t.windowDays}営業日）の早い方</b>で手仕舞った場合の結果です。`
     + `オプションは、いまの権利行使価格の比率（${ratio.toFixed(4)}）・満期の営業日数で、<b>IVは実際の値ではなく、直近20営業日のHV×1.15の仮定</b>（Black-Scholes・手数料なし）で計算しています。`
     + `<br>・<b>平均</b>＝1回あたりの平均損益率。大勝ちが少しあると、平均が大きくなります。<b>中央値</b>＝普通の取引の損益率（並べて真ん中）。<b>勝率</b>＝プラスで終わった割合。${typeLabel}は、平均が中央値より大きくなりやすい取引です。`
-    + `<br>・株は、買い方向の損益率です。「満期保有」は、線を使わず満期まで持った場合のオプションの平均です（線の効果を見る参考）。`
+    + `<br>・「満期保有」は、線を使わず満期まで持った場合のオプションの平均です（線の効果を見る参考）。`
     + `<br>・件数は、日が重なるため、独立した場面は「件数÷満期の営業日数」回分ほどです。${hint}`
     + `<br>・複数銘柄・期間の検証（強い上昇相場に偏った期間）では、下落が大きいほど成績が良い傾向でしたが、大きな下落から反発した少数の場面に集中していました。将来を保証するものではありません。`;
   card.hidden = false;
@@ -2983,7 +2987,47 @@ function renderBuyRisk(t, price, strike, asOfDate) {
   els.buyRiskNote.innerHTML = `${warn}${capNote}${riskNote}<br>・オプションの価格は、満期までの日数・IV（${ivSrc}${tbl.iv !== null ? `：${(tbl.iv * 100).toFixed(1)}%` : ""}）はそのままで、株価だけが線まで動いたとしたBlack-Scholes（金利0・配当なし）の目安です。実際は、IVの変化や時間の経過、売買の差でずれます。`
     + `<br>・オプションの損失は、最大でも支払ったプレミアムです。満期が短い・OTMのとき、線に届く前に全損することがあります。`
     + `<br>・線は、期待値を上げるものではなく、<b>損失の大きさを決めるもの</b>です（過去の検証では、倍率を大きくするほど、平均と勝率は上がり、最悪の損失が深くなりました）。`;
+  renderBuyTime(t, price, strike, asOfDate, tbl, kind, capital, ivSrc);
   card.hidden = false;
+}
+
+// 買い建玉の、時間の経過の表。株価は今の水準のまま動かず、IVが変わり(縦)、時間が経った(横)ときの、オプション価格と損益。
+// 買い手は、時間が経つと、株価が動かなくても価格が下がる(時間価値の減少)。損失が資金の2%以上になるセルに印を付ける。
+const BUY_TIME_IV_CHANGES = [-0.10, -0.05, 0, 0.10, 0.20, 0.30];
+function renderBuyTime(t, price, strike, asOfDate, tbl, kind, capital, ivSrc) {
+  const clear = (msg) => {
+    els.buyTimeIntro.textContent = "";
+    els.buyTimeHead.innerHTML = "";
+    els.buyTimeBody.innerHTML = "";
+    els.buyTimeNote.textContent = msg;
+  };
+  if (!tbl || tbl.iv === null || !(tbl.premium > 0)) { clear("支払いプレミアム額（またはIV）を入力すると表示します。"); return; }
+  const days = t.windowDays;
+  const iv0 = tbl.iv;
+  const pay = tbl.premium;
+  const cols = [{ remain: days, name: "いま" }];
+  if (days > 10) cols.push({ remain: 10, name: "2週間前" });
+  if (days > 3) cols.push({ remain: 3, name: "3日前" });
+  const qty = t.planQty > 0 ? t.planQty : 1;
+  const limit = capital > 0 ? capital * 0.02 : null;
+  const money = (v) => v.toFixed(2);
+  const dateOf = (remain) => shiftTradingDays(asOfDate, -(days - remain)).slice(5);
+  els.buyTimeIntro.textContent = `株価は今の水準（${money(price)}）のまま動かず、IVだけが変わり、時間が経った場合の、買ったオプションの価格（太字）と、支払ったプレミアム（${money(pay)}）に対する損益です（1枚＝100株あたり）。買い手は、時間が経つと、株価が動かなくても価格が下がります（時間価値の減少）。`
+    + (limit !== null ? `「資金2%超」は、${qty}枚${t.planQty > 0 ? "" : "（枚数が未入力のため1枚）"}で、損失が資金の2%（${limit.toLocaleString("ja-JP", { maximumFractionDigits: 0 })}ドル）以上になるセルです。` : "");
+  els.buyTimeHead.innerHTML = `<tr><th>IVの変化</th>${cols.map((c) => `<th>${c.name}<br><span class="stress-sub">残り${c.remain}営業日（${dateOf(c.remain)}）</span></th>`).join("")}</tr>`;
+  els.buyTimeBody.innerHTML = BUY_TIME_IV_CHANGES.filter((up) => iv0 + up >= 0.02).map((up) => {
+    const label = up === 0 ? "変わらない" : `${up > 0 ? "＋" : "−"}${Math.abs(Math.round(up * 100))}ポイント`;
+    const tds = cols.map((c) => {
+      const value = bsPrice(kind, price, strike, c.remain / TRADING_DAYS_PER_YEAR, iv0 + up);
+      const pnl = value - pay; // 買い手の損益(1株)
+      const over = limit !== null && pnl < 0 && -pnl * 100 * qty >= limit;
+      const cls = [pnl >= 0 ? "stress-profit" : "", over ? "stress-over" : ""].filter(Boolean).join(" ");
+      const sign = Math.abs(pnl * 100) < 0.5 ? "" : (pnl >= 0 ? "+" : "−"); // ほぼ0のときは符号なし
+      return `<td class="${cls}"><b>${money(value)}</b><br><span class="stress-pnl ${pnl < 0 ? "neg" : ""}">${sign}${Math.abs(pnl * 100).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}ドル（${sign}${Math.abs(pnl / pay * 100).toFixed(0)}%）</span>${over ? '<br><span class="stress-overtag">資金2%超</span>' : ""}</td>`;
+    }).join("");
+    return `<tr><td>${label}<br><span class="stress-sub">IV ${((iv0 + up) * 100).toFixed(1)}%</span></td>${tds}</tr>`;
+  }).join("");
+  els.buyTimeNote.textContent = `IVは、${ivSrc}（${(iv0 * 100).toFixed(1)}%）を基準に、全体が一律に動くとして計算しています。緑のセルは、支払ったプレミアム以上の価格（損益がプラス）です。金利0・配当なしのBlack-Scholesの目安で、実際の価格とは、スキュー・売買の差などでずれます。株価が動く場合は、上の表（固定の線）を見てください。`;
 }
 
 let lastBuyPlanText = "";

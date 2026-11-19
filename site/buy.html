@@ -105,7 +105,7 @@
     <h3 style="margin:0 0 8px;font-size:14px">買う条件の下落率は、何%がよいか（この銘柄の過去の結果）</h3>
     <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　上の「エントリー条件」の変化率（%以上）を変えて買った場合の、この銘柄の結果です。変化率を決める判断材料にします。</p>
     <div class="volatility-wrap"><table class="volatility-table bs-table">
-      <thead><tr><th>買う条件<br>（1〜7営業日前との比較で、1日以上）</th><th>件数</th><th>株<br>（買い方向の損益率）</th><th>オプション<br>（損益率）</th><th>線で手仕舞い<br>（平均保有）</th><th>（参考）線なしで<br>満期まで持つ<br>オプション平均</th><th></th></tr></thead>
+      <thead><tr><th>買う条件<br>（1〜7営業日前との比較で、1日以上）</th><th>件数</th><th>オプション<br>（損益率）</th><th>線で手仕舞い<br>（平均保有）</th><th>（参考）線なしで<br>満期まで持つ<br>オプション平均</th><th></th></tr></thead>
       <tbody id="buyStudyBody"></tbody>
     </table></div>
     <p class="sub" id="buyStudyNote" style="margin:8px 0 0"></p>
@@ -548,6 +548,14 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
           <tbody id="buyRiskBody"></tbody>
         </table></div>
         <p class="sub" id="buyRiskNote" style="margin:8px 0 0"></p>
+
+        <h3 style="margin:18px 0 8px;font-size:14px">株価が変わらず、時間が経った場合のオプション価格（IVの変化別）</h3>
+        <p class="sub" id="buyTimeIntro" style="margin:0 0 8px"></p>
+        <div class="volatility-wrap"><table class="volatility-table stress-table">
+          <thead id="buyTimeHead"></thead>
+          <tbody id="buyTimeBody"></tbody>
+        </table></div>
+        <p class="sub" id="buyTimeNote" style="margin:8px 0 0"></p>
       </div>
     </div>
   </details>
