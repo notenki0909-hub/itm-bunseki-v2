@@ -53,6 +53,7 @@ function tabRecipe(t) {
     ratio: t.ratio,
     windowDays: t.windowDays,
     periodDays: t.periodDays,
+    periodManual: t.periodManual,
     conditionMode: t.conditionMode,
     momentumLookback: t.momentumLookback,
     minMatchDays: t.minMatchDays,
@@ -85,6 +86,7 @@ function applyRecipe(t, rec) {
     ratio: rec.ratio ?? t.ratio,
     windowDays: rec.windowDays ?? t.windowDays,
     periodDays: rec.periodDays ?? t.periodDays,
+    periodManual: rec.periodManual ?? t.periodManual,
     conditionMode: rec.conditionMode || t.conditionMode,
     momentumLookback: rec.momentumLookback ?? t.momentumLookback,
     minMatchDays: rec.minMatchDays ?? t.minMatchDays,
@@ -453,7 +455,8 @@ const els = {
 };
 
 function hideBuyCards() {
-  for (const c of [els.buyStudyCard, els.buyRiskCard, els.buyPlanCard, els.periodCompareCard]) if (c) c.hidden = true;
+  for (const c of [els.buyStudyCard, els.buyRiskCard, els.buyPlanCard]) if (c) c.hidden = true;
+  if (els.periodCompareCard) els.periodCompareCard.hidden = true;
 }
 
 function activeTab() {
@@ -474,6 +477,7 @@ function newTabState() {
     typeKey: PAGE_TYPES[0],
     ratio: OPTION_TYPES[PAGE_TYPES[0]].ratio,
     windowDays: DEFAULT_WINDOW,
+    periodManual: false, // 集計期間を自分で選んだか(選んでいなければ、分析のたびに、慎重な見方の基準の期間を自動で選ぶ)
     periodDays: PAGE === "buy" ? 750 : DEFAULT_PERIOD_DAYS, // 買いページの初期値は3年(件数が多く、期間による偏りが出にくい)。売りは1年
     conditionMode: "countWithin7", // 既定は「直近7営業日中の該当日数」(最低条件の判定と同じ見方)
     momentumLookback: DEFAULT_MOMENTUM_LOOKBACK,
@@ -793,7 +797,14 @@ async function onAnalyze() {
     setStatus(`${data.symbol} の${data.closes.length}日分の終値を取得しました`);
     addTickerToHistory(data.symbol);
     t.ratioNormalize = true;
+    // 集計期間を自分で選んでいないときは、慎重な見方の基準の期間(1年以上で、売り=ITM発生率が最も高い／買い=最も低い)を初期値にする
+    let autoPeriod = null;
+    if (!t.periodManual) {
+      const { basis } = periodCompareRows(t);
+      if (basis) { t.periodDays = basis.p.days; els.periodSelect.value = String(t.periodDays); autoPeriod = basis.p.label; }
+    }
     renderAll(t);
+    if (autoPeriod) setStatus(`${data.symbol} の${data.closes.length}日分の終値を取得しました。集計期間は、慎重な見方の基準の「${autoPeriod}」を選びました`);
     renderTabBar();
     persistState();
   } catch (e) {
@@ -808,7 +819,9 @@ function onFormChange() {
   if (!t) return;
   t.typeKey = els.typeSelect.value;
   t.ratio = Number(els.ratioInput.value) || OPTION_TYPES[t.typeKey].ratio;
-  t.periodDays = Number(els.periodSelect.value) || DEFAULT_PERIOD_DAYS;
+  const newPeriod = Number(els.periodSelect.value) || DEFAULT_PERIOD_DAYS;
+  if (newPeriod !== t.periodDays) t.periodManual = true; // 自分で期間を変えたら、自動の選択はしない
+  t.periodDays = newPeriod;
   t.conditionMode = els.conditionModeSelect.value;
   t.momentumLookback = Number(els.momentumLookbackSelect.value) || DEFAULT_MOMENTUM_LOOKBACK;
   t.minMatchDays = Number(els.minMatchDaysInput.value) || 1;
@@ -906,7 +919,8 @@ function renderAll(t) {
   renderPlanCard(t);
   setupStatExplain();
   renderConditionCard(t);
-  if (PAGE === "buy") { renderBuyStudy(t); renderPeriodCompare(t); }
+  if (PAGE === "buy") renderBuyStudy(t);
+  renderPeriodCompare(t);
   renderConclusion(t);
   renderTopBand(t);
   syncSections();
@@ -2901,39 +2915,53 @@ function renderConclusion(t) {
 
 // ================= 買いページ専用 =================
 
-// 集計期間ごとの、ITM発生率(期間中に一度でも・満期時)の比較。買い手は、ITMに届く割合が低い期間ほど慎重な見方。
-function renderPeriodCompare(t) {
-  const card = els.periodCompareCard;
-  if (!card) return;
-  const full = viewDataOf(t).closes;
+// 集計期間ごとの、ITM発生率(期間中に一度でも・満期時)の比較。売り・買いとも。
+// 慎重な見方の基準＝1年以上の期間のうち、売りはITM発生率が最も高い期間、買いは最も低い期間(6ヶ月は、短く偶然に左右されるため、基準から除く)。
+// 集計期間を自分で選んでいないときは、分析のたびに、この基準の期間を初期値にする。
+const PERIOD_BASIS_MIN_DAYS = 253;
+function periodCompareRows(t) {
+  const v = viewDataOf(t);
+  const full = v.closes;
   const type = OPTION_TYPES[t.typeKey];
-  const { depthPct } = depthInfo(t, periodClosesOf(t));
+  const group = typeGroup(t.typeKey);
   const ratio = effRatioOf(t, full[full.length - 1]);
+  const { depthPct } = depthInfo(t, full);
   const rows = [];
   for (const p of PERIOD_OPTIONS) {
     if (full.length < p.days) continue; // その期間のデータが足りない
-    const cl = full.slice(-p.days);
-    const dt = viewDataOf(t).dates.slice(-p.days);
-    const an = computeItmAnalysis(cl, { ratio, itmWhen: type.itmWhen, window: t.windowDays, group: typeGroup(t.typeKey), depthPct }, dt);
+    const an = computeItmAnalysis(full.slice(-p.days), { ratio, itmWhen: type.itmWhen, window: t.windowDays, group, depthPct }, v.dates.slice(-p.days));
     if (!an.entryCount) continue;
     rows.push({ p, n: an.entryCount, touch: an.overallItmProb, exp: an.dayProb[t.windowDays - 1] ?? null });
   }
+  const pool = rows.filter((r) => r.p.days >= PERIOD_BASIS_MIN_DAYS && r.touch !== null);
+  const pick = group === "sell" ? (a, b) => (b.touch > a.touch ? b : a) : (a, b) => (b.touch < a.touch ? b : a);
+  const basis = pool.length ? pool.reduce(pick) : null;
+  return { rows, basis, group, type };
+}
+
+function renderPeriodCompare(t) {
+  const card = els.periodCompareCard;
+  if (!card) return;
+  const { rows, basis, group, type } = periodCompareRows(t);
   if (!rows.length) { card.hidden = true; return; }
-  // 慎重な見方の基準: 独立した場面が5回分以上ある期間のうち、ITM発生率がいちばん低い期間(該当がなければ、全期間から)
-  const trialsOf = (r) => r.n / t.windowDays;
-  const pool = rows.filter((r) => trialsOf(r) >= 5);
-  const lowest = (pool.length ? pool : rows).reduce((a, b) => (b.touch < a.touch ? b : a));
   const f = (v) => (v === null || v === undefined ? "―" : (v * 100).toFixed(1) + "%");
+  const tag = group === "sell" ? "最も高い（慎重な見方）" : "最も低い（慎重な見方）";
   els.periodCompareBody.innerHTML = rows.map((r) => {
     const sel = r.p.days === t.periodDays;
-    const low = r === lowest;
-    return `<tr class="${sel ? "bs-sel" : ""}"><td>${r.p.label}${sel ? '<br><span class="bs-sub">いまの設定</span>' : ""}</td>`
+    const isBasis = basis !== null && r === basis;
+    return `<tr class="${sel ? "bs-sel" : ""}"><td>${r.p.label}${sel ? '<br><span class="bs-sub">いまの設定</span>' : ""}${r.p.days < PERIOD_BASIS_MIN_DAYS ? '<br><span class="bs-sub">基準から除く</span>' : ""}</td>`
       + `<td>${r.n}件<br><span class="bs-sub">独立した場面は約${Math.max(1, Math.round(r.n / t.windowDays))}回分</span></td>`
-      + `<td><b>${f(r.touch)}</b>${low ? '<br><span class="bs-sub">最も低い（慎重な見方）</span>' : ""}</td><td>${f(r.exp)}</td>`
+      + `<td><b>${f(r.touch)}</b>${isBasis ? `<br><span class="bs-sub">${tag}</span>` : ""}</td><td>${f(r.exp)}</td>`
       + `<td>${sel ? "" : `<button type="button" class="sp-btn" data-use-period="${r.p.days}">この期間にする</button>`}</td></tr>`;
   }).join("");
-  const kindWord = type.itmWhen === "above" ? "上昇相場が続いた期間は、コール買いのITM発生率が高く出ます" : "下落相場が続いた期間は、プット買いのITM発生率が高く出ます";
-  els.periodCompareNote.textContent = `買い手は、ITMに届く割合が低い期間ほど、慎重な見方になります（表では「最も低い」期間。独立した場面が5回分未満の期間は、基準から除いています）。長い期間のほうが穏やかとは限りません。期間のなかの相場の向きで変わります（${kindWord}）。件数が少ない期間（6ヶ月など）は、独立した場面が少なく、偶然に左右されます。`;
+  let note;
+  if (group === "sell") {
+    note = "売り手は、ITMに届く割合が高い期間ほど、慎重な見方になります（荒れた期間で見ます）。表では、1年以上の期間のうち「最も高い」期間が基準です。長い期間のほうが荒いとは限りません（期間のなかの相場の向きで変わります）。";
+  } else {
+    const kindWord = type.itmWhen === "above" ? "上昇相場が続いた期間は、コール買いのITM発生率が高く出ます" : "下落相場が続いた期間は、プット買いのITM発生率が高く出ます";
+    note = `買い手は、ITMに届く割合が低い期間ほど、慎重な見方になります。表では、1年以上の期間のうち「最も低い」期間が基準です。長い期間のほうが穏やかとは限りません（期間のなかの相場の向きで変わります。${kindWord}）。`;
+  }
+  els.periodCompareNote.textContent = `${note}6ヶ月は、期間が短く、独立した場面が少ないため、基準から除いています。集計期間を自分で選ばないときは、分析のたびに、基準の期間を初期値にします。`;
   card.hidden = false;
 }
 
@@ -3399,6 +3427,16 @@ function init() {
   });
   els.shareBtn.addEventListener("click", onShareLink);
   els.openDetailBtn.addEventListener("click", onOpenDetail);
+  // 期間ごとのITM発生率の表の「この期間にする」(売り・買い共通)
+  if (els.periodCompareBody) {
+    els.periodCompareBody.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-use-period]");
+      const t = activeTab();
+      if (!b || !t || !t.closesFull) return;
+      els.periodSelect.value = b.dataset.usePeriod;
+      onFormChange();
+    });
+  }
   if (PAGE === "buy") {
     if (els.buyAtrMultSelect) els.buyAtrMultSelect.addEventListener("change", onFormChange);
     if (els.beBaseCheck) els.beBaseCheck.addEventListener("change", onFormChange);
@@ -3408,13 +3446,6 @@ function init() {
       const t = activeTab();
       if (!b || !t || !t.closesFull) return;
       els.momentumThresholdInput.value = b.dataset.useX;
-      onFormChange();
-    });
-    els.periodCompareBody.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-use-period]");
-      const t = activeTab();
-      if (!b || !t || !t.closesFull) return;
-      els.periodSelect.value = b.dataset.usePeriod;
       onFormChange();
     });
     els.buyPlanCopyBtn.addEventListener("click", async () => {
