@@ -383,6 +383,16 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
     <p style="margin:14px 0 0"><button id="openDetailBtn" type="button" class="btn-outline">詳細マトリクスを別ページで見る（元Excel形式）</button></p>
   </div>
 
+  <div id="periodCompareCard" class="card in-sec" hidden>
+    <h3 style="margin:0 0 8px;font-size:14px">集計期間を変えると、ITM発生率はどう変わるか（慎重な見方の基準）</h3>
+    <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　いまの注文プラン（権利行使価格・満期・判定の基準）のまま、集計期間だけを変えた結果です。</p>
+    <div class="volatility-wrap"><table class="volatility-table bs-table">
+      <thead><tr><th>集計期間</th><th>エントリー件数</th><th>期間中に一度でもITM<br>（ITM発生率）</th><th>満期時にITM</th><th></th></tr></thead>
+      <tbody id="periodCompareBody"></tbody>
+    </table></div>
+    <p class="sub" id="periodCompareNote" style="margin:8px 0 0"></p>
+  </div>
+
   <div id="condResultCard" class="card in-sec" hidden>
     <h3 style="margin:0 0 8px;font-size:14px">1の「エントリー条件」に当てはまった日だけに絞った、過去の実績</h3>
     <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　上の実績（全エントリー日）のうち、1の「エントリー条件」に当てはまった日だけに絞って数えたものです。</p>

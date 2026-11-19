@@ -327,6 +327,9 @@ const els = {
   pageNotice: document.getElementById("pageNotice"),
   buyAtrMultSelect: document.getElementById("buyAtrMultSelect"),
   buyStudyCard: document.getElementById("buyStudyCard"),
+  periodCompareCard: document.getElementById("periodCompareCard"),
+  periodCompareBody: document.getElementById("periodCompareBody"),
+  periodCompareNote: document.getElementById("periodCompareNote"),
   buyStudyBody: document.getElementById("buyStudyBody"),
   buyStudyNote: document.getElementById("buyStudyNote"),
   buyRiskCard: document.getElementById("buyRiskCard"),
@@ -450,7 +453,7 @@ const els = {
 };
 
 function hideBuyCards() {
-  for (const c of [els.buyStudyCard, els.buyRiskCard, els.buyPlanCard]) if (c) c.hidden = true;
+  for (const c of [els.buyStudyCard, els.buyRiskCard, els.buyPlanCard, els.periodCompareCard]) if (c) c.hidden = true;
 }
 
 function activeTab() {
@@ -471,7 +474,7 @@ function newTabState() {
     typeKey: PAGE_TYPES[0],
     ratio: OPTION_TYPES[PAGE_TYPES[0]].ratio,
     windowDays: DEFAULT_WINDOW,
-    periodDays: DEFAULT_PERIOD_DAYS,
+    periodDays: PAGE === "buy" ? 750 : DEFAULT_PERIOD_DAYS, // 買いページの初期値は3年(件数が多く、期間による偏りが出にくい)。売りは1年
     conditionMode: "countWithin7", // 既定は「直近7営業日中の該当日数」(最低条件の判定と同じ見方)
     momentumLookback: DEFAULT_MOMENTUM_LOOKBACK,
     minMatchDays: 3,
@@ -723,7 +726,7 @@ function commitWindowDate(value) {
 
 function initPeriodOptions() {
   els.periodSelect.innerHTML = PERIOD_OPTIONS
-    .map((p) => `<option value="${p.days}" ${p.days === DEFAULT_PERIOD_DAYS ? "selected" : ""}>${p.label}</option>`)
+    .map((p) => `<option value="${p.days}" ${p.days === (PAGE === "buy" ? 750 : DEFAULT_PERIOD_DAYS) ? "selected" : ""}>${p.label}</option>`)
     .join("");
 }
 
@@ -903,7 +906,7 @@ function renderAll(t) {
   renderPlanCard(t);
   setupStatExplain();
   renderConditionCard(t);
-  if (PAGE === "buy") renderBuyStudy(t);
+  if (PAGE === "buy") { renderBuyStudy(t); renderPeriodCompare(t); }
   renderConclusion(t);
   renderTopBand(t);
   syncSections();
@@ -2898,6 +2901,42 @@ function renderConclusion(t) {
 
 // ================= 買いページ専用 =================
 
+// 集計期間ごとの、ITM発生率(期間中に一度でも・満期時)の比較。買い手は、ITMに届く割合が低い期間ほど慎重な見方。
+function renderPeriodCompare(t) {
+  const card = els.periodCompareCard;
+  if (!card) return;
+  const full = viewDataOf(t).closes;
+  const type = OPTION_TYPES[t.typeKey];
+  const { depthPct } = depthInfo(t, periodClosesOf(t));
+  const ratio = effRatioOf(t, full[full.length - 1]);
+  const rows = [];
+  for (const p of PERIOD_OPTIONS) {
+    if (full.length < p.days) continue; // その期間のデータが足りない
+    const cl = full.slice(-p.days);
+    const dt = viewDataOf(t).dates.slice(-p.days);
+    const an = computeItmAnalysis(cl, { ratio, itmWhen: type.itmWhen, window: t.windowDays, group: typeGroup(t.typeKey), depthPct }, dt);
+    if (!an.entryCount) continue;
+    rows.push({ p, n: an.entryCount, touch: an.overallItmProb, exp: an.dayProb[t.windowDays - 1] ?? null });
+  }
+  if (!rows.length) { card.hidden = true; return; }
+  // 慎重な見方の基準: 独立した場面が5回分以上ある期間のうち、ITM発生率がいちばん低い期間(該当がなければ、全期間から)
+  const trialsOf = (r) => r.n / t.windowDays;
+  const pool = rows.filter((r) => trialsOf(r) >= 5);
+  const lowest = (pool.length ? pool : rows).reduce((a, b) => (b.touch < a.touch ? b : a));
+  const f = (v) => (v === null || v === undefined ? "―" : (v * 100).toFixed(1) + "%");
+  els.periodCompareBody.innerHTML = rows.map((r) => {
+    const sel = r.p.days === t.periodDays;
+    const low = r === lowest;
+    return `<tr class="${sel ? "bs-sel" : ""}"><td>${r.p.label}${sel ? '<br><span class="bs-sub">いまの設定</span>' : ""}</td>`
+      + `<td>${r.n}件<br><span class="bs-sub">独立した場面は約${Math.max(1, Math.round(r.n / t.windowDays))}回分</span></td>`
+      + `<td><b>${f(r.touch)}</b>${low ? '<br><span class="bs-sub">最も低い（慎重な見方）</span>' : ""}</td><td>${f(r.exp)}</td>`
+      + `<td>${sel ? "" : `<button type="button" class="sp-btn" data-use-period="${r.p.days}">この期間にする</button>`}</td></tr>`;
+  }).join("");
+  const kindWord = type.itmWhen === "above" ? "上昇相場が続いた期間は、コール買いのITM発生率が高く出ます" : "下落相場が続いた期間は、プット買いのITM発生率が高く出ます";
+  els.periodCompareNote.textContent = `買い手は、ITMに届く割合が低い期間ほど、慎重な見方になります（表では「最も低い」期間。独立した場面が5回分未満の期間は、基準から除いています）。長い期間のほうが穏やかとは限りません。期間のなかの相場の向きで変わります（${kindWord}）。件数が少ない期間（6ヶ月など）は、独立した場面が少なく、偶然に左右されます。`;
+  card.hidden = false;
+}
+
 // 買いページの「5 IV」: IVの水準・IV÷HV・IV基準の1σ・理論プレミアム価格(HV計算)を、買い手向けの読み方で出す。
 // IVは、入力(任意)があればその値、なければ支払いプレミアム額から逆算した値。どちらもなければ表示しない(コーン図のIVの帯も出ない)。
 function renderBuyIv(t, price, strike) {
@@ -3369,6 +3408,13 @@ function init() {
       const t = activeTab();
       if (!b || !t || !t.closesFull) return;
       els.momentumThresholdInput.value = b.dataset.useX;
+      onFormChange();
+    });
+    els.periodCompareBody.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-use-period]");
+      const t = activeTab();
+      if (!b || !t || !t.closesFull) return;
+      els.periodSelect.value = b.dataset.usePeriod;
       onFormChange();
     });
     els.buyPlanCopyBtn.addEventListener("click", async () => {
