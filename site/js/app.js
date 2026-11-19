@@ -2634,8 +2634,8 @@ function renderBreakEvenPrice(t, closes, todayStrike) {
         + "\nスプレッドの場合は、プレミアムに差し引き後の正味の額(受取−支払い)を入力してください。\nプレミアムは1株あたりの額で、手数料は含みません。",
     },
     {
-      name: "現在の株価との差", value: diffPct === null ? "―" : (diffPct >= 0 ? "+" : "") + (diffPct * 100).toFixed(2) + "%",
-      sub: `現在の株価${latest.toFixed(2)}`,
+      name: "損益分岐点と現在の株価の差", value: diffPct === null ? "―" : (diffPct >= 0 ? "+" : "") + (diffPct * 100).toFixed(2) + "%",
+      sub: breakEven === null ? `現在の株価${latest.toFixed(2)}` : `損益分岐点${breakEven.toFixed(2)} ÷ 現在の株価${latest.toFixed(2)} − 1（権利行使価格との差ではありません）`,
       note: "損益分岐点が、現在の株価(最新の終値)から見て何%離れているかです。\n例えばプット売りで-8%なら、株価が現在より8%下がるまでは(満期時に)損失にならない、という余裕の目安になります。",
     },
   ];
