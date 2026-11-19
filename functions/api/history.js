@@ -86,15 +86,19 @@ export async function onRequestGet(context) {
   const kv = env.PRICE_CACHE; // KV未バインドの環境でも動くようoptionalに扱う
   const cacheKey = `itm-history:${symbol}`;
 
+  // hl=1: 高値・安値も返す(買いページのATR用)。売りページは付けない(従来と同じ応答)。
+  const wantHl = url.searchParams.get("hl") === "1";
   const cached = kv ? await kv.get(cacheKey, "json") : null;
+  const out = (body) => json(wantHl ? body : stripHl(body), 200);
   const cachedLatest = cached?.dates?.[cached.dates.length - 1];
   const now = Date.now();
   // キャッシュが新しければそのまま返す。古くても、直近1時間以内に取り直しを試して失敗している
   // 場合は(無料枠の上限などで失敗し続けないよう)再試行せず、古いキャッシュを返す。
   if (cached) {
-    const stale = isPriceDataStale(cached.fetchedAt, cachedLatest, now);
+    // 高値・安値を求められたのに、古い形式のキャッシュ(高値・安値なし)のときは、古いものとして取り直す
+    const stale = isPriceDataStale(cached.fetchedAt, cachedLatest, now) || (wantHl && !Array.isArray(cached.highs));
     const triedRecently = Number.isFinite(cached.lastAttemptAt) && now - cached.lastAttemptAt < RETRY_INTERVAL_MS;
-    if (!stale || triedRecently) return json(cached, 200);
+    if (!stale || triedRecently) return out(cached);
   }
 
   // 取り直しに失敗したとき、古いキャッシュがあればそれを返す(エラーにしない)。
@@ -105,7 +109,7 @@ export async function onRequestGet(context) {
         kv.put(cacheKey, JSON.stringify({ ...cached, lastAttemptAt: now }), { expirationTtl: CACHE_TTL_SECONDS })
       );
     }
-    return json(cached, 200);
+    return out(cached);
   };
 
   const apiKey = env.TWELVEDATA_API_KEY;
@@ -139,15 +143,22 @@ export async function onRequestGet(context) {
 
   const dates = [];
   const closes = [];
+  const highs = [];
+  const lows = [];
   for (const row of data.values) {
     const c = Number(row.close);
     if (!Number.isFinite(c)) continue;
     dates.push(row.datetime);
     closes.push(c);
+    // 高値・安値が欠けた行は、終値で代用する(ATRが大きくずれないための保険)
+    const hi = Number(row.high);
+    const lo = Number(row.low);
+    highs.push(Number.isFinite(hi) ? hi : c);
+    lows.push(Number.isFinite(lo) ? lo : c);
   }
 
   // fetchedAt: Twelve Dataから取得した時刻。ブラウザ側もこの値で「古いか」を判定する。
-  const result = { symbol, currency: data.meta?.currency || null, dates, closes, fetchedAt: now };
+  const result = { symbol, currency: data.meta?.currency || null, dates, closes, highs, lows, fetchedAt: now };
 
   if (kv) {
     context.waitUntil(
@@ -155,7 +166,13 @@ export async function onRequestGet(context) {
     );
   }
 
-  return json(result, 200);
+  return out(result);
+}
+
+// 高値・安値を外した応答(売りページ向け。従来と同じ形)
+function stripHl(body) {
+  const { highs, lows, ...rest } = body;
+  return rest;
 }
 
 function json(body, status) {

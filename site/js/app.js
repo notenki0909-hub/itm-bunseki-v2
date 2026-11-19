@@ -9,6 +9,7 @@ import {
   VOLATILITY_PERIODS, computeVolatilityStats, computeRecentVolatilityAmount,
   computeHv, computeHvSeries, hvPosition, hvTheory, computeEmpiricalCone,
 } from "./calc.js";
+import { computeBuyStudy, computeFixedLineTable, computeAtr, assumedIvAt, BUY_X_LIST, BUY_ATR_MULTS, DEFAULT_ATR_MULT, ATR_PERIOD } from "./buyline.js";
 import { renderDayProbChart, DAY_PROB_BANDS, renderConeChart, renderHvHistoryChart } from "./chart.js";
 import { renderEntryHeatmap, ENTRY_HEATMAP_BANDS, renderDepthHeatmap, DEPTH_HEATMAP_BANDS, renderOtmHeatmap, OTM_HEATMAP_BANDS, OTM_RATE_BANDS } from "./heatmap.js";
 import { initThemeBar } from "./theme.js";
@@ -32,7 +33,16 @@ const priceCache = new Map();
 
 // 同一端末での永続化(localStorage)。ページ遷移・リロード・ブラウザ再起動をまたいで
 // タブの状態(取得済みデータ込み)を復元できるようにする。
-const STORAGE_KEY = "itm-tool-state-v1";
+// 売りページ(index.html)と買いページ(buy.html)は、同じコードで動く。body の data-page="buy" が買いページ。
+// 取引タイプ・保存先(タブの状態)・一部のカードが、ページごとに違う。
+const PAGE = document.body.dataset.page === "buy" ? "buy" : "sell";
+const PAGE_TYPES = PAGE === "buy" ? ["call_buy", "put_buy"] : ["put_sell", "call_sell"];
+const OTHER_PAGE = PAGE === "buy" ? "index.html" : "buy.html";
+const isPageType = (k) => PAGE_TYPES.includes(k);
+const SELL_STORAGE_KEY = "itm-tool-state-v1";
+const BUY_STORAGE_KEY = "itm-tool-state-buy-v1";
+const STORAGE_KEY = PAGE === "buy" ? BUY_STORAGE_KEY : SELL_STORAGE_KEY;
+let migratedTabCount = 0; // 売りページを開いたとき、買い系のタブを買いページへ移した数
 
 // 端末をまたいだ共有用。タブの「設定」だけ(取得済みデータは含めない)をURLに載せる。
 // URLが長くなりすぎるのを避けるため、価格データは含めず、開いた側で再取得させる設計。
@@ -63,6 +73,7 @@ function tabRecipe(t) {
     rrPremBuy: t.rrPremBuy,
     stopPick: t.stopPick,
     planQty: t.planQty,
+    buyAtrMult: t.buyAtrMult,
   };
 }
 
@@ -93,7 +104,10 @@ function applyRecipe(t, rec) {
     rrPremBuy: rec.rrPremBuy ?? t.rrPremBuy,
     stopPick: rec.stopPick ?? t.stopPick,
     planQty: rec.planQty ?? t.planQty,
+    buyAtrMult: rec.buyAtrMult ?? t.buyAtrMult,
   });
+  // 買いページは、単体注文のみ(スプレッドは未対応)
+  if (PAGE === "buy") t.rrVariant = "naked";
   // 古い保存状態・共有リンクの引き継ぎ。
   //  - 買い系の支払いプレミアム額は、以前はrrLossBasis(さらに前はrrPremium)に保存していた。
   //    今は専用のrrPayPremiumに保存する(受取プレミアムと意味が違うため、別々に持つ)。
@@ -123,6 +137,8 @@ function persistState() {
         ...tabRecipe(t),
         closesFull: t.closesFull,
         datesFull: t.datesFull,
+        // 高値・安値は、買いページ(ATR)でだけ使うため、買いページだけ保存する
+        ...(PAGE === "buy" ? { highsFull: t.highsFull, lowsFull: t.lowsFull } : {}),
         fetchedAt: t.fetchedAt,
       })),
     };
@@ -143,15 +159,34 @@ function loadFromSavedState() {
   }
   if (!payload || !Array.isArray(payload.tabs) || payload.tabs.length === 0) return false;
 
-  for (const rec of payload.tabs) {
+  // このページの取引タイプのタブだけを開く。売りページに残っていた買い系のタブは、買いページの保存先へ移す。
+  const own = payload.tabs.filter((r) => isPageType(r.typeKey));
+  const other = payload.tabs.filter((r) => !isPageType(r.typeKey));
+  if (PAGE === "sell" && other.length) {
+    try {
+      const rawBuy = localStorage.getItem(BUY_STORAGE_KEY);
+      const buyPayload = rawBuy ? JSON.parse(rawBuy) : { activeIndex: 0, tabs: [] };
+      for (const r of other) {
+        // 買い系のタブは、高値・安値がない(開いたときに取り直す)。同じ銘柄・同じタイプが既にあれば、移さない
+        if (!buyPayload.tabs.some((b) => b.symbol === r.symbol && b.typeKey === r.typeKey)) buyPayload.tabs.push(r);
+      }
+      localStorage.setItem(BUY_STORAGE_KEY, JSON.stringify(buyPayload));
+      migratedTabCount = other.length;
+    } catch (e) { /* 移せなくても、売りページは動く */ }
+  }
+  if (own.length === 0) return false;
+
+  for (const rec of own) {
     const t = newTabState();
     applyRecipe(t, rec);
     t.closesFull = rec.closesFull || null;
     t.datesFull = rec.datesFull || null;
+    t.highsFull = rec.highsFull || null;
+    t.lowsFull = rec.lowsFull || null;
     t.fetchedAt = rec.fetchedAt ?? null; // 古い保存状態には無い(=古いデータとして扱い、開いたときに取り直す)
     tabs.push(t);
   }
-  const idx = Math.min(Math.max(payload.activeIndex || 0, 0), tabs.length - 1);
+  const idx = Math.min(Math.max(PAGE === "sell" && other.length ? 0 : (payload.activeIndex || 0), 0), tabs.length - 1);
   switchTab(tabs[idx].id);
   return true;
 }
@@ -189,6 +224,8 @@ async function loadFromShareRecipes(recipes) {
       const data = await fetchHistory(t.symbol);
       t.closesFull = data.closes;
       t.datesFull = data.dates;
+      t.highsFull = data.highs ?? null;
+      t.lowsFull = data.lows ?? null;
       t.fetchedAt = data.fetchedAt ?? Date.now();
     } catch (e) {
       // このタブだけ取得失敗。「分析する」ボタンで再試行できる
@@ -290,6 +327,19 @@ const els = {
   condResultCard: document.getElementById("condResultCard"),
   volDetails: document.getElementById("volDetails"),
   conclBody: document.getElementById("conclBody"),
+  pageNotice: document.getElementById("pageNotice"),
+  buyAtrMultSelect: document.getElementById("buyAtrMultSelect"),
+  buyStudyCard: document.getElementById("buyStudyCard"),
+  buyStudyBody: document.getElementById("buyStudyBody"),
+  buyStudyNote: document.getElementById("buyStudyNote"),
+  buyRiskCard: document.getElementById("buyRiskCard"),
+  buyRiskSummary: document.getElementById("buyRiskSummary"),
+  buyRiskBody: document.getElementById("buyRiskBody"),
+  buyRiskNote: document.getElementById("buyRiskNote"),
+  buyPlanCard: document.getElementById("buyPlanCard"),
+  buyPlanBody: document.getElementById("buyPlanBody"),
+  buyPlanCopyBtn: document.getElementById("buyPlanCopyBtn"),
+  buyPlanCopyHint: document.getElementById("buyPlanCopyHint"),
 
   result: document.getElementById("result"),
   badge: document.getElementById("badge"),
@@ -396,6 +446,10 @@ const els = {
   stressNote: document.getElementById("stressNote"),
 };
 
+function hideBuyCards() {
+  for (const c of [els.buyStudyCard, els.buyRiskCard, els.buyPlanCard]) if (c) c.hidden = true;
+}
+
 function activeTab() {
   return tabs.find((t) => t.id === activeTabId) || null;
 }
@@ -407,10 +461,13 @@ function newTabState() {
     otmView: false,   // 「過去の営業日ごとのITM確率」とエントリー日ごとのITM状況を、OTM表示にしているか。表示だけの一時的な切替で、保存・共有はしない
     statusDate: null, // 「本日の状況」で見る過去の日付(YYYY-MM-DD)。null=本日。表示だけの一時的な指定で、保存・共有はしない
     fetchedAt: null,  // closesFullをサーバーが取得した時刻(UTCミリ秒)。古いかの判定に使う
+    highsFull: null,  // 高値・安値(買いページだけ。ATRに使う)。closesFullと同じ並び
+    lowsFull: null,
+    buyAtrMult: DEFAULT_ATR_MULT, // 買いページ: 固定の手仕舞い線のATR倍率
     closesFull: null, // フェッチした生データ(最大件数)。期間セレクターはこれをローカルでスライスするだけ
     datesFull: null,  // closesFullと同じ並びの日付文字列
-    typeKey: "put_sell",
-    ratio: OPTION_TYPES.put_sell.ratio,
+    typeKey: PAGE_TYPES[0],
+    ratio: OPTION_TYPES[PAGE_TYPES[0]].ratio,
     windowDays: DEFAULT_WINDOW,
     periodDays: DEFAULT_PERIOD_DAYS,
     conditionMode: "countWithin7", // 既定は「直近7営業日中の該当日数」(最低条件の判定と同じ見方)
@@ -488,6 +545,7 @@ function switchTab(id) {
   els.rrPremSellInput.value = t.rrPremSell ?? "";
   els.rrPremBuyInput.value = t.rrPremBuy ?? "";
   els.statusDateInput.value = t.statusDate ?? "";
+  if (els.buyAtrMultSelect) els.buyAtrMultSelect.value = String(t.buyAtrMult);
   updateRiskRewardInputUI(t.typeKey, t.rrVariant);
   syncOrderDerived(t);
   setStatus("");
@@ -504,6 +562,7 @@ function switchTab(id) {
     els.orderCard.hidden = true;
     els.conditionCard.hidden = true;
     els.planCard.hidden = true;
+    hideBuyCards();
     renderConclusion(null);
     renderTopBand(null);
     syncSections();
@@ -518,13 +577,15 @@ function switchTab(id) {
 // 開いていないタブは取りにいかない。サーバー側にキャッシュがあれば、外部APIは叩かれない。
 async function refreshIfStale(t) {
   if (!t || !t.symbol || !t.closesFull || t.refreshing) return;
-  if (!isStaleData(t.fetchedAt, t.datesFull)) return;
+  if (!isStaleData(t.fetchedAt, t.datesFull) && !(PAGE === "buy" && !t.highsFull)) return; // 買いページは、高値・安値がないときも取り直す
   t.refreshing = true;
   if (activeTabId === t.id) setStatus(`${t.symbol} の最新の株価データを確認中…（それまでは保存済みのデータを表示しています）`);
   try {
     const data = await fetchHistory(t.symbol);
     t.closesFull = data.closes;
     t.datesFull = data.dates;
+    t.highsFull = data.highs ?? null;
+    t.lowsFull = data.lows ?? null;
     t.fetchedAt = data.fetchedAt ?? Date.now();
     persistState();
     if (activeTabId === t.id) {
@@ -578,6 +639,7 @@ function renderTabBar() {
 
 function initTypeOptions() {
   els.typeSelect.innerHTML = Object.entries(OPTION_TYPES)
+    .filter(([key]) => isPageType(key))
     .map(([key, t]) => `<option value="${key}">${t.label}</option>`)
     .join("");
 }
@@ -679,8 +741,9 @@ function isStaleData(fetchedAt, dates) {
 async function fetchHistory(symbol) {
   // 同一ブラウザ内で既に取得済みで、まだ古くなければAPIを叩かず使い回す(タブをまたいでも共有)
   const hit = priceCache.get(symbol);
-  if (hit && !isStaleData(hit.fetchedAt, hit.dates)) return hit;
-  const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}`);
+  if (hit && !isStaleData(hit.fetchedAt, hit.dates) && (PAGE !== "buy" || hit.highs)) return hit;
+  // 買いページは、ATR用に高値・安値も受け取る(hl=1)。売りページは従来どおり終値だけ。
+  const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}${PAGE === "buy" ? "&hl=1" : ""}`);
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
   priceCache.set(symbol, data);
@@ -706,6 +769,7 @@ async function onAnalyze() {
   els.orderCard.hidden = true;
   els.conditionCard.hidden = true;
   els.planCard.hidden = true;
+  hideBuyCards();
   renderConclusion(null);
     renderTopBand(null);
   syncSections();
@@ -714,6 +778,8 @@ async function onAnalyze() {
     t.symbol = data.symbol;
     t.closesFull = data.closes;
     t.datesFull = data.dates;
+    t.highsFull = data.highs ?? null;
+    t.lowsFull = data.lows ?? null;
     t.fetchedAt = data.fetchedAt ?? Date.now();
     setStatus(`${data.symbol} の${data.closes.length}日分の終値を取得しました`);
     addTickerToHistory(data.symbol);
@@ -739,6 +805,7 @@ function onFormChange() {
   t.minMatchDays = Number(els.minMatchDaysInput.value) || 1;
   t.momentumDirection = els.momentumDirectionSelect.value;
   t.momentumThresholdPct = Number(els.momentumThresholdInput.value) || 0;
+  if (els.buyAtrMultSelect) t.buyAtrMult = Number(els.buyAtrMultSelect.value) || DEFAULT_ATR_MULT;
   updateConditionModeUI(t.conditionMode);
 
   t.rrDepth = els.rrDepthInput.value === "" ? null : Math.max(0, Number(els.rrDepthInput.value));
@@ -783,8 +850,11 @@ function periodDatesOf(t) {
 // つもりで、すべてのカードを計算するため)。未指定なら取得済みの全データ。
 function viewDataOf(t) {
   const { endIdx } = resolveStatusDate(t);
-  if (endIdx === t.closesFull.length - 1) return { closes: t.closesFull, dates: t.datesFull };
-  return { closes: t.closesFull.slice(0, endIdx + 1), dates: t.datesFull.slice(0, endIdx + 1) };
+  if (endIdx === t.closesFull.length - 1) return { closes: t.closesFull, dates: t.datesFull, highs: t.highsFull, lows: t.lowsFull };
+  return {
+    closes: t.closesFull.slice(0, endIdx + 1), dates: t.datesFull.slice(0, endIdx + 1),
+    highs: t.highsFull ? t.highsFull.slice(0, endIdx + 1) : null, lows: t.lowsFull ? t.lowsFull.slice(0, endIdx + 1) : null,
+  };
 }
 
 // 日付指定中のとき、見出しに付ける「（◯◯時点）」。本日なら空文字。
@@ -824,6 +894,7 @@ function renderAll(t) {
   band.cond = null;
   band.hvSigma = null;
   band.hvPos = null;
+  band.buyLine = null;
   syncOrderDerived(t);
   syncWindowInputs(t);
   renderLatestPrice(t);
@@ -836,6 +907,7 @@ function renderAll(t) {
   renderPlanCard(t);
   setupStatExplain();
   renderConditionCard(t);
+  if (PAGE === "buy") renderBuyStudy(t);
   renderConclusion(t);
   renderTopBand(t);
   syncSections();
@@ -1053,7 +1125,7 @@ function renderHvCard(t) {
     if (posN.percentile >= 0.8) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より荒れている時期です。実績を調べた期間とは、荒れ具合が違う可能性があります。`;
     else if (posN.percentile <= 0.2) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より穏やかな時期です。実績を調べた期間とは、荒れ具合が違う可能性があります。`;
   }
-  els.hvTheoryNote.textContent = `${regime}${regime ? " " : ""}ITMになる確率（HV換算）は、「6 まとめ」で、IV換算・過去の実績と並べて見ます。※HVは過去の値動きの大きさで、IV（オプション価格に織り込まれた将来の変動の大きさ）ではありません。`;
+  els.hvTheoryNote.textContent = `${regime}${regime ? " " : ""}ITMになる確率（HV換算）は、「${PAGE === "buy" ? "5" : "6"} まとめ」で、IV換算・過去の実績と並べて見ます。※HVは過去の値動きの大きさで、IV（オプション価格に織り込まれた将来の変動の大きさ）ではありません。`;
   els.hvCard.hidden = false;
   setupStatExplain();
 }
@@ -1611,6 +1683,10 @@ function renderOrderCard(t) {
     renderRiskPlan(t);
   }
   renderBreakEvenPrice(t, closes, todayStrike);
+  if (PAGE === "buy" && group === "buy") {
+    renderBuyRisk(t, latest, todayStrike, dates[dates.length - 1]);
+    renderBuyPlan(t, latest, todayStrike, dates[dates.length - 1]);
+  }
   els.orderCard.hidden = false;
 }
 
@@ -2685,7 +2761,7 @@ function setupCellTip() {
 
 // ---- 画面の構成: 上に固定する帯・セクション・最低条件の表示・リスクのタブ ----
 // 帯に出す値。各描画関数が、計算のついでに置いていく(renderAllの最初にリセットする)
-const band = { hvItm: null, ivhv: null, cond: null, hvSigma: null, hvPos: null };
+const band = { hvItm: null, ivhv: null, cond: null, hvSigma: null, hvPos: null, buyLine: null };
 
 // セクション(3〜8)の表示を、中のカードの表示状態に合わせる。ナビの項目も同じ。
 // 売り系だけのセクション(data-only="sell")は、買い系のときは出さない。
@@ -2701,6 +2777,10 @@ function syncSections() {
   };
   els.condResultCard.hidden = els.conditionCard.hidden;
   els.volDetails.hidden = els.volatilityCard.hidden;
+  if (PAGE === "buy") {
+    set("sb7", shown(els.buyRiskCard));
+    set("sb8", shown(els.buyPlanCard));
+  }
   set("s3", shown(els.todayCard, els.result));
   set("s4", shown(els.hvCard));
   set("s5", shown(els.orderCard));
@@ -2768,14 +2848,14 @@ function renderConclusion(t) {
   if (c) {
     const word = c.down ? "下落" : "上昇";
     const ok = c.hitDays >= 1;
-    rows.push(row(1, "basis-none", "直近の値動き",
+    rows.push(row(rows.length + 1, "basis-none", "直近の値動き",
       `${ok ? "最低条件：満たしています" : "最低条件：満たしていません"}`,
       `1〜7営業日前との比較のうち、設定した変化率以上の${word}が${c.hitDays}/7日（最低条件は1日以上、推奨は${c.rec}日以上）。`));
   }
 
   const dep = depthSuffixOf(t);
   const goodWord = group === "sell" ? "低いほど有利" : "高いほど有利";
-  rows.push(row(2, "basis-act", "過去の実績",
+  rows.push(row(rows.length + 1, "basis-act", "過去の実績",
     `ITM${dep}発生率 ${els.overallProb.textContent}（総合判定：${els.badge.textContent}）`,
     `過去のエントリー${els.entryCount.textContent}件のうち、${els.itmCount.textContent}件で、判定期間内に一度はITM${dep}に届きました（${goodWord}）。`));
 
@@ -2785,18 +2865,162 @@ function renderConclusion(t) {
     const pctl = hp ? hp.percentile : null;
     const regimeNote = pctl === null ? "" : pctl >= 0.8 ? "過去1年の中では荒れている時期なので、実績を調べた期間より、動きが大きくなりやすい点に注意します。"
       : pctl <= 0.2 ? "過去1年の中では穏やかな時期です。" : "過去1年の中では、ふだんに近い水準です。";
-    rows.push(row(3, "basis-hv", "HV",
+    rows.push(row(rows.length + 1, "basis-hv", "HV",
       `権利行使価格は、満期までの値動き（1σ ±${pct(hs.sigmaPct)}）の ${Math.abs(hs.z).toFixed(2)}σ ${hs.z >= 0 ? "外側" : "内側"}`,
       `直近${hs.days}営業日のHVは${pct(hp ? hp.hv : 0)}。${regimeNote}`));
   }
 
   const iv = band.ivhv;
   if (group === "sell" && iv) {
-    rows.push(row(4, "basis-iv", "IV",
+    rows.push(row(rows.length + 1, "basis-iv", "IV",
       `IV ${pct(iv.iv)}（HVの${iv.ratio.toFixed(2)}倍・${iv.word}）`,
       `${iv.phrase}。${iv.meaning}。`));
   }
+  const bl = band.buyLine;
+  if (PAGE === "buy" && bl) {
+    rows.push(row(rows.length + 1, "basis-none", "固定の線",
+      `手仕舞いの線 ${bl.line.toFixed(2)}（${bl.movePct >= 0 ? "+" : ""}${pct(bl.movePct)}）`,
+      `買った日の終値から、ATR(${ATR_PERIOD})の${bl.mult}倍${bl.kind === "call" ? "下がった" : "上がった"}価格です。この線に届いたら手仕舞う目安で、期待値を上げる線ではなく、損失の大きさを決める線です。`));
+  }
   body.innerHTML = rows.join("");
+}
+
+// ================= 買いページ専用 =================
+const pctTxt = (v, d = 0) => (v === null || v === undefined || Number.isNaN(v) ? "―" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
+const buyKindOf = (t) => (OPTION_TYPES[t.typeKey].itmWhen === "above" ? "call" : "put");
+
+// 「買う条件の下落率(上昇率)Xは、何%がよいか」の、この銘柄の過去の結果。固定の線(ATR×倍率)か満期の早い方で手仕舞う。
+function renderBuyStudy(t) {
+  const card = els.buyStudyCard;
+  if (!card) return;
+  const v = viewDataOf(t);
+  if (!v.highs || !v.lows || v.closes.length < 60) { card.hidden = true; return; }
+  const kind = buyKindOf(t);
+  const price = v.closes[v.closes.length - 1];
+  const ratio = effRatioOf(t, price);
+  const direction = t.momentumDirection;
+  const curX = t.momentumThresholdPct;
+  const xs = [...new Set([...BUY_X_LIST, ...(curX > 0 ? [curX] : [])])].sort((a, b) => a - b);
+  const rows = computeBuyStudy({ closes: v.closes, highs: v.highs, lows: v.lows, kind, ratio, window: t.windowDays, xList: [null, ...xs], direction, mult: t.buyAtrMult });
+  const dirWord = direction === "down" ? "下落" : "上昇";
+  const f = (s) => (s ? `${pctTxt(s.mean)}<br><span class="bs-sub">中央${pctTxt(s.median)}・勝率${(s.win * 100).toFixed(0)}%</span>` : "―");
+  const body = rows.map((r) => {
+    const label = r.x === null ? "条件なし（毎日買う・基準）" : `${dirWord} ${r.x}%以上`;
+    const sel = r.x !== null && Math.abs(r.x - curX) < 1e-9;
+    if (!r.n) return `<tr class="${sel ? "bs-sel" : ""}"><td>${label}</td><td colspan="5">当てはまる日がありません</td><td>${r.x === null ? "" : `<button type="button" class="sp-btn" data-use-x="${r.x}">この値にする</button>`}</td></tr>`;
+    return `<tr class="${sel ? "bs-sel" : ""}"><td>${label}${sel ? '<br><span class="bs-sub">いまの設定</span>' : ""}</td>`
+      + `<td>${r.n}件<br><span class="bs-sub">独立した場面は約${r.trials}回分</span></td>`
+      + `<td>${f(r.stock)}</td><td>${f(r.opt)}</td>`
+      + `<td>${(r.lineRate * 100).toFixed(0)}%<br><span class="bs-sub">平均${r.avgDays.toFixed(0)}日</span></td>`
+      + `<td>${pctTxt(r.optHoldMean)}</td>`
+      + `<td>${r.x === null ? "" : `<button type="button" class="sp-btn" data-use-x="${r.x}">この値にする</button>`}</td></tr>`;
+  }).join("");
+  els.buyStudyBody.innerHTML = body;
+  const used = rows.filter((r) => r.x !== null && r.n > 0 && r.trials >= 3 && r.opt);
+  let hint = "";
+  if (used.length) {
+    const best = used.reduce((a, b) => (b.opt.median > a.opt.median ? b : a));
+    hint = `オプションの中央値が最も高いのは「${dirWord} ${best.x}%以上」（${best.n}件・独立した場面は約${best.trials}回分）です。独立した場面が少ない行は、偶然に左右されます。`;
+  }
+  const typeLabel = OPTION_TYPES[t.typeKey].label;
+  els.buyStudyNote.innerHTML = `各行は、この銘柄の過去（取得済みの全データ。${v.closes.length}営業日）で、その条件に当てはまった日に買い、<b>固定の線（買った日の終値から、ATR(${ATR_PERIOD})の${t.buyAtrMult}倍）を終値で割った日、または満期（${t.windowDays}営業日）の早い方</b>で手仕舞った場合の結果です。`
+    + `オプションは、いまの権利行使価格の比率（${ratio.toFixed(4)}）・満期の営業日数で、<b>IVは実際の値ではなく、直近20営業日のHV×1.15の仮定</b>（Black-Scholes・手数料なし）で計算しています。`
+    + `<br>・<b>平均</b>＝1回あたりの平均損益率。大勝ちが少しあると、平均が大きくなります。<b>中央値</b>＝普通の取引の損益率（並べて真ん中）。<b>勝率</b>＝プラスで終わった割合。${typeLabel}は、平均が中央値より大きくなりやすい取引です。`
+    + `<br>・株は、買い方向の損益率です。「満期保有」は、線を使わず満期まで持った場合のオプションの平均です（線の効果を見る参考）。`
+    + `<br>・件数は、日が重なるため、独立した場面は「件数÷満期の営業日数」回分ほどです。${hint}`
+    + `<br>・複数銘柄・期間の検証（強い上昇相場に偏った期間）では、下落が大きいほど成績が良い傾向でしたが、大きな下落から反発した少数の場面に集中していました。将来を保証するものではありません。`;
+  card.hidden = false;
+}
+
+// 固定の線(買った時点で決めて動かさない)。ATR倍率ごとに、線に届いたときの株・オプションの損失と、資金の2%に収まる数量を並べる。
+function renderBuyRisk(t, price, strike, asOfDate) {
+  const card = els.buyRiskCard;
+  if (!card) return;
+  const v = viewDataOf(t);
+  if (!v.highs || !v.lows) {
+    els.buyRiskSummary.innerHTML = "";
+    els.buyRiskBody.innerHTML = "";
+    els.buyRiskNote.textContent = "高値・安値を取得できていないため、固定の線を計算できません。「分析する」を押し直してください。";
+    card.hidden = false;
+    return;
+  }
+  const kind = buyKindOf(t);
+  const atrArr = computeAtr(v.highs, v.lows, v.closes, ATR_PERIOD);
+  const atr = atrArr[atrArr.length - 1];
+  if (!(atr > 0)) { card.hidden = true; return; }
+  const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
+  const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
+  const assumed = assumedIvAt(v.closes, v.closes.length - 1);
+  const capital = riskCapital();
+  const tbl = computeFixedLineTable({
+    price, atr, kind, strike, days: t.windowDays, premium, capital: capital > 0 ? capital : null,
+    iv: ivIn !== null ? ivIn : (premium !== null ? null : assumed), mults: BUY_ATR_MULTS.includes(t.buyAtrMult) ? BUY_ATR_MULTS : [...BUY_ATR_MULTS, t.buyAtrMult].sort((a, b) => a - b),
+  });
+  const dirWord = kind === "call" ? "下がった" : "上がった";
+  const sel = tbl.rows.find((r) => r.mult === t.buyAtrMult) || tbl.rows[0];
+  band.buyLine = { line: sel.line, movePct: sel.movePct, mult: sel.mult, kind };
+  const ivSrc = tbl.iv === null ? "（IVを計算できません）"
+    : ivIn !== null ? "入力したIV" : (premium !== null ? "支払いプレミアムから逆算したIV" : "仮定のIV（直近20営業日のHV×1.15）");
+  els.buyRiskSummary.innerHTML = [
+    { name: "ATR", value: atr.toFixed(2), suffix: `（直近${ATR_PERIOD}営業日）`, sub: `株価の${(atr / price * 100).toFixed(1)}%。1日の値幅(高値−安値など)の平均的な大きさ`, note: `ATR(Average True Range)は、直近${ATR_PERIOD}営業日の「1日の値幅」の平均です（前日の終値からの飛びも含めます）。固定の線の幅の単位として使います。` },
+    { name: `手仕舞いの線（ATR×${sel.mult}）`, value: sel.line.toFixed(2), sub: `買った日の終値${price.toFixed(2)}から ${sel.moveAmount.toFixed(2)}ドル（${pctTxt(sel.movePct, 1)}）${dirWord}価格`, note: "買った時点で決めて動かさない、1本の固定の線です。トレンドの判定や、日々の切り上げはしません。終値がこの線に届いたら手仕舞う、という目安です。" },
+  ].map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
+  const money = (x) => (x === null || x === undefined ? "―" : x.toLocaleString("ja-JP", { maximumFractionDigits: 2 }));
+  els.buyRiskBody.innerHTML = tbl.rows.map((r) => {
+    const isSel = r.mult === t.buyAtrMult;
+    const qtyShares = r.maxShares === null ? "―（資金を入力）" : `${r.maxShares.toLocaleString("ja-JP")}株`;
+    const qtyOpt = r.maxContracts === null ? "―（資金を入力）" : r.maxContracts === 0 ? "0枚（1枚でも2%超）" : `${r.maxContracts.toLocaleString("ja-JP")}枚`;
+    return `<tr class="${isSel ? "bs-sel" : ""}"><td>ATR×${r.mult}${isSel ? '<br><span class="bs-sub">いまの設定</span>' : ""}</td>`
+      + `<td>${r.line.toFixed(2)}<br><span class="bs-sub">${pctTxt(r.movePct, 1)}</span></td>`
+      + `<td>${money(r.moveAmount)}ドル<br><span class="bs-sub">資金2%なら ${qtyShares}</span></td>`
+      + `<td>${r.value === null ? "―" : money(r.value)}<br><span class="bs-sub">プレミアム${tbl.premium === null ? "―" : money(tbl.premium)}</span></td>`
+      + `<td>${r.optLoss === null ? "―" : `${money(r.optLoss)}ドル（${(r.optLossPct * 100).toFixed(0)}%）<br><span class="bs-sub">1枚 ${money(r.optLoss * 100)}ドル・資金2%なら ${qtyOpt}</span>`}</td></tr>`;
+  }).join("");
+  const warn = premium === null && ivIn === null ? "支払いプレミアム額（またはIV）が未入力のため、IVは仮定の値です。「2 注文プラン」に支払いプレミアム額を入れると、実際の価格に近づきます。 " : "";
+  const capNote = capital > 0 ? `資金（${money(capital)}ドル）の2%＝${money(capital * 0.02)}ドルが、1回の手仕舞いで許せる損失の上限です。` : "「2 注文プラン」にトータル資金額を入れると、資金の2%に収まる株数・枚数を出します。";
+  els.buyRiskNote.innerHTML = `${warn}${capNote}<br>・オプションの価格は、満期までの日数・IV（${ivSrc}${tbl.iv !== null ? `：${(tbl.iv * 100).toFixed(1)}%` : ""}）はそのままで、株価だけが線まで動いたとしたBlack-Scholes（金利0・配当なし）の目安です。実際は、IVの変化や時間の経過、売買の差でずれます。`
+    + `<br>・オプションの損失は、最大でも支払ったプレミアムです。満期が短い・OTMのとき、線に届く前に全損することがあります。`
+    + `<br>・線は、期待値を上げるものではなく、<b>損失の大きさを決めるもの</b>です（過去の検証では、倍率を大きくするほど、平均と勝率は上がり、最悪の損失が深くなりました）。`;
+  card.hidden = false;
+}
+
+let lastBuyPlanText = "";
+function renderBuyPlan(t, price, strike, asOfDate) {
+  const card = els.buyPlanCard;
+  if (!card) return;
+  const v = viewDataOf(t);
+  const kind = buyKindOf(t);
+  const type = OPTION_TYPES[t.typeKey];
+  const expiry = shiftTradingDays(asOfDate, -t.windowDays);
+  const bl = band.buyLine;
+  const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
+  const capital = riskCapital();
+  const ask = (m) => `―（${m}を入力）`;
+  const money = (x) => x.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
+  // 発注枚数: 入力があればその値。空欄なら、資金の2%に収まる最大枚数
+  let optLoss = null;
+  if (bl && premium !== null) {
+    const atrArr = v.highs && v.lows ? computeAtr(v.highs, v.lows, v.closes, ATR_PERIOD) : null;
+    const tbl = atrArr ? computeFixedLineTable({ price, atr: atrArr[atrArr.length - 1], kind, strike, days: t.windowDays, premium, iv: t.rrIvSell > 0 ? t.rrIvSell / 100 : null, capital: capital > 0 ? capital : null, mults: [bl.mult] }) : null;
+    optLoss = tbl ? tbl.rows[0] : null;
+  }
+  const qty = t.planQty ?? (optLoss && optLoss.maxContracts !== null ? optLoss.maxContracts : null);
+  const qtyNote = t.planQty ? "入力した枚数" : (qty !== null ? "資金の2%に収まる最大枚数" : "");
+  const rows = [];
+  const add = (k, val) => rows.push([k, val]);
+  add("銘柄・取引", `${t.symbol}　${type.label}い（${kind === "call" ? "コール" : "プット"}）　基準日の終値 ${price.toFixed(2)}${asOfSuffixOf(t)}`);
+  add("発注する権利行使価格・満期", `権利行使価格 ${fmtStrike(strike)}（終値の${(strike / price * 100).toFixed(1)}%）　満期 ${expiry}（残り${t.windowDays}営業日）`);
+  add("支払いプレミアム（買いの指値）", premium === null ? ask("支払いプレミアム額") : `1株 ${money(premium)}ドル　／　1枚 ${money(premium * 100)}ドル`);
+  add("枚数", qty === null ? ask("トータル資金額（または枚数）") : qty === 0 ? "0枚（1枚でも、線に届いたときの損失が資金の2%を超えます。枚数を入力するか、資金・線の倍率を見直してください）" : `${qty}枚（${qtyNote}）　／　支払い合計 ${premium === null ? "―" : money(premium * 100 * qty)}ドル`);
+  add("手仕舞いの線（固定）", bl ? `${bl.line.toFixed(2)}（買った日の終値から ${pctTxt(bl.movePct, 1)}・ATR×${bl.mult}）。終値がこの線に届いたら手仕舞う` : "―");
+  add("線に届いたときのオプションの損失", optLoss && optLoss.optLoss !== null ? `1株 ${money(optLoss.optLoss)}ドル（支払いの${(optLoss.optLossPct * 100).toFixed(0)}%）　／　1枚 ${money(optLoss.optLoss * 100)}ドル${qty ? `　／　${qty}枚で ${money(optLoss.optLoss * 100 * qty)}ドル` : ""}` : ask("支払いプレミアム額"));
+  add("資金に対する損失", optLoss && optLoss.optLoss !== null && qty && capital > 0 ? `${(optLoss.optLoss * 100 * qty / capital * 100).toFixed(2)}%（上限2%${optLoss.optLoss * 100 * qty / capital > 0.02 ? "を超えています" : "以内"}）` : ask("トータル資金額・枚数"));
+  add("満期より前の判断日", `満期の10営業日前（${shiftTradingDays(expiry, MARK_BEFORE_EXPIRY)}）に、利益・損失を見直します`);
+  const act = els.overallProb.textContent;
+  add("判断の根拠", `ITM発生率（過去の実績）${act}・総合判定 ${els.badge.textContent}${band.hvItm !== null ? `／満期時ITM率（HV換算）${(band.hvItm * 100).toFixed(1)}%` : ""}${band.cond ? `／最低条件 ${band.cond.hitDays >= 1 ? "満たしている" : "満たしていない"}（${band.cond.hitDays}/7日）` : ""}`);
+  els.buyPlanBody.innerHTML = rows.map(([k, val]) => `<tr><th>${k}</th><td>${val}</td></tr>`).join("");
+  lastBuyPlanText = rows.map(([k, val]) => `${k}：${val.replace(/<[^>]+>/g, "")}`).join("\n");
+  card.hidden = false;
 }
 
 // 「最低条件」の判定の表示。最低条件＝1〜7営業日前との比較のうち、設定した変化率以上の値動きが1日以上。推奨＝該当日数の設定値以上。
@@ -2846,10 +3070,20 @@ function init() {
   // 復元の優先順位: URLの共有パラメータ > 同一端末の保存状態 > 新規タブ
   const shareData = parseShareParam();
   if (shareData) {
-    loadFromShareRecipes(shareData.recipes);
+    // 共有リンクの取引タイプが、このページのものでなければ、もう一方のページへ移す(混ざっているときは、このページのタブだけ開く)
+    const own = shareData.recipes.filter((r) => !r.typeKey || isPageType(r.typeKey));
+    if (own.length === 0) {
+      location.replace(`${OTHER_PAGE}${location.search}`);
+      return;
+    }
+    loadFromShareRecipes(own);
     mergeTickerHistory(shareData.tickerHistory);
   } else if (!loadFromSavedState()) {
     createTab();
+  }
+  if (migratedTabCount > 0 && els.pageNotice) {
+    els.pageNotice.innerHTML = `買い系のタブ（${migratedTabCount}件）は、<a href="buy.html">買いページ</a>に移しました。`;
+    els.pageNotice.hidden = false;
   }
 
   els.analyzeBtn.addEventListener("click", onAnalyze);
@@ -2858,6 +3092,7 @@ function init() {
   });
   els.typeSelect.addEventListener("change", () => {
     els.ratioInput.value = OPTION_TYPES[els.typeSelect.value].ratio;
+    if (PAGE === "buy") els.momentumDirectionSelect.value = OPTION_TYPES[els.typeSelect.value].itmWhen === "above" ? "down" : "up";
     els.rrSellStrikeInput.value = ""; // 取引タイプが変わると、入力した売りの権利行使価格は意味が変わるため消す
     onFormChange();
   });
@@ -2990,6 +3225,26 @@ function init() {
   els.statusDateReset.addEventListener("click", () => onStatusDateChange(""));
   els.shareBtn.addEventListener("click", onShareLink);
   els.openDetailBtn.addEventListener("click", onOpenDetail);
+  if (PAGE === "buy") {
+    if (els.buyAtrMultSelect) els.buyAtrMultSelect.addEventListener("change", onFormChange);
+    // 「買う条件の過去の結果」の表の「この値にする」ボタン: 下落率(上昇率)の入力に反映して、再計算する
+    els.buyStudyBody.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-use-x]");
+      const t = activeTab();
+      if (!b || !t || !t.closesFull) return;
+      els.momentumThresholdInput.value = b.dataset.useX;
+      onFormChange();
+    });
+    els.buyPlanCopyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(lastBuyPlanText);
+        els.buyPlanCopyHint.textContent = "コピーしました";
+      } catch (err) {
+        els.buyPlanCopyHint.textContent = "コピーできませんでした。表を選んで、コピーしてください";
+      }
+      setTimeout(() => { els.buyPlanCopyHint.textContent = ""; }, 3000);
+    });
+  }
 }
 
 function debounce(fn, ms) {
