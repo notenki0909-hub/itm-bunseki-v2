@@ -22,14 +22,15 @@
       <a href="#s2"><span class="n">2</span>注文プラン</a>
       <a href="#s3" hidden><span class="n">3</span>過去の実績</a>
       <a href="#s4" hidden><span class="n">4</span>HV</a>
-      <a href="#s6" hidden><span class="n">5</span>まとめ</a>
-      <a href="#sb7" hidden><span class="n">6</span>リスク確認</a>
-      <a href="#sb8" hidden><span class="n">7</span>注文まとめ</a>
+      <a href="#s5" hidden><span class="n">5</span>IV</a>
+      <a href="#s6" hidden><span class="n">6</span>まとめ</a>
+      <a href="#sb7" hidden><span class="n">7</span>リスク確認</a>
+      <a href="#sb8" hidden><span class="n">8</span>注文まとめ</a>
     </nav>
   </div>
 
   <div class="flow">
-    <b>使い方の流れ</b>：①<b>最低条件</b>（買う条件＝直近7営業日の値動き）を確認し、「何%下落したら買うか」を、この銘柄の過去の結果を見て決める → ②いま考えている<b>注文プラン</b>を入れる → ③<b>過去の実績</b>（実際に起きたこと。判断の土台）→ ④<b>HV</b>（過去の値動きの大きさ）→ ⑤<b>まとめ</b>で見方がそろっているか確認 → ⑥<b>リスク確認</b>（固定の手仕舞い線：ここまで下がったら手仕舞う）→ ⑦<b>注文まとめ</b>
+    <b>使い方の流れ</b>：①<b>最低条件</b>（買う条件＝直近7営業日の値動き）を確認し、「何%下落したら買うか」を、この銘柄の過去の結果を見て決める → ②いま考えている<b>注文プラン</b>を入れる → ③<b>過去の実績</b>（実際に起きたこと。判断の土台）→ ④<b>HV</b>（過去の値動きの大きさ）→ ⑤<b>IV</b>（市場のこれからの見込み。買い手は、IVが高いほど割高）→ ⑥<b>まとめ</b>で見方がそろっているか確認 → ⑦<b>リスク確認</b>（固定の手仕舞い線：ここまで下がったら手仕舞う）→ ⑧<b>注文まとめ</b>
   </div>
 
   <details class="sec" id="s1" open>
@@ -482,12 +483,12 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
     </div>
   </details>
 
-  <details class="sec" id="s5" data-only="sell" open hidden>
-    <summary><span class="t"><span class="n">5</span>IV：市場のこれからの見込み</span><span class="d">根拠＝IV。市場は、過去（HV）より大きな動きを見込んでいるか。受け取るプレミアムは見合うか</span></summary>
+  <details class="sec" id="s5" open hidden>
+    <summary><span class="t"><span class="n">5</span>IV：市場のこれからの見込み</span><span class="d">根拠＝IV。市場は、過去（HV）より大きな動きを見込んでいるか。支払うプレミアムは、割高か割安か</span></summary>
     <div class="body">
       <div class="card in-sec" id="compareCard">
         <p class="basis basis-iv"><i></i><b>根拠：IV</b>　オプション価格に織り込まれた、市場のこれからの見込みです。実際に起きたこと（実績）ではなく、将来への見方です。</p>
-        <h3 style="margin:0 0 8px;font-size:14px" id="ivHvTitle">IVとHVの比較（市場の見込みは、過去の値動きより高めか低めか）</h3>
+        <h3 style="margin:0 0 8px;font-size:14px" id="ivHvTitle">IVとHVの比較（市場の見込みは、過去の値動きより高めか低めか。買い手は、高いほど割高）</h3>
         <div class="summary" id="ivHvSummary"></div>
         <p class="sub" id="ivHvNote" style="margin:8px 0 0"></p>
       </div>
@@ -495,11 +496,11 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </details>
 
   <details class="sec" id="s6" open hidden>
-    <summary><span class="t"><span class="n">5</span>まとめ：見方を並べて、納得できるか確認する</span><span class="d">最低条件・実績・HV・IVを1枚に並べ、ITM確率の3点比較で、見方がそろっているかを見ます</span></summary>
+    <summary><span class="t"><span class="n">6</span>まとめ：見方を並べて、納得できるか確認する</span><span class="d">最低条件・実績・HV・IVを1枚に並べ、ITM確率の3点比較で、見方がそろっているかを見ます</span></summary>
     <div class="body">
       <div class="card in-sec" id="conclusionCard">
         <h3 style="margin:0 0 8px;font-size:14px">ここまでの見方を、1枚にまとめる</h3>
-        <p class="sub" style="margin:0 0 8px">1〜4で見たことを、順に並べました。上から「前提の値動き」→「過去の実績（土台）」→「HV（いまの荒れ具合）」→「固定の手仕舞い線」の順です。</p>
+        <p class="sub" style="margin:0 0 8px">1〜5で見たことを、順に並べました。上から「前提の値動き」→「過去の実績（土台）」→「HV（いまの荒れ具合）」→「IV（これからの見込み）」→「固定の手仕舞い線」の順です。</p>
         <div class="volatility-wrap"><table class="volatility-table concl-table"><thead><tr><th>順</th><th>根拠</th><th>結果</th><th>読み方</th></tr></thead><tbody id="conclBody"></tbody></table></div>
         <h3 style="margin:16px 0 8px;font-size:14px" id="ivConeTitle">満期までの値動きの目安と、権利行使価格の位置（3つの見方を重ねる）</h3>
         <div class="cone-zoom">
@@ -528,7 +529,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </details>
 
   <details class="sec" id="sb7" data-only="buy" open hidden>
-    <summary><span class="t"><span class="n">6</span>リスク確認：ここまで下がったら手仕舞う（固定の線）</span><span class="d">買った時点で決めて動かさない線。線に届いたときの損失と、資金の2%に収まる数量を、ATR倍率ごとに並べます</span></summary>
+    <summary><span class="t"><span class="n">7</span>リスク確認：ここまで下がったら手仕舞う（固定の線）</span><span class="d">買った時点で決めて動かさない線。線に届いたときの損失と、資金の2%に収まる数量を、ATR倍率ごとに並べます</span></summary>
     <div class="body">
       <div id="buyRiskCard" class="card in-sec" hidden>
         <p class="basis basis-none"><i></i><b>根拠：ATR（直近の値幅）とBlack-Scholesの理論価格</b>　Pineの「ATR×倍率」の考え方を、<b>買った時点で決める固定の線</b>としてだけ使います。トレンドの判定や、日々の切り上げは使いません。</p>
@@ -551,7 +552,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </details>
 
   <details class="sec" id="sb8" data-only="buy" open hidden>
-    <summary><span class="t"><span class="n">7</span>注文まとめ</span><span class="d">最終的な注文（買いの指値・枚数・手仕舞いの線・損失）。ここまでの入力と選択が、すべて反映されます</span></summary>
+    <summary><span class="t"><span class="n">8</span>注文まとめ</span><span class="d">最終的な注文（買いの指値・枚数・手仕舞いの線・損失）。ここまでの入力と選択が、すべて反映されます</span></summary>
     <div class="body">
       <div id="buyPlanCard" class="card in-sec" hidden>
         <h2 style="margin:0 0 6px;font-size:16px">注文まとめ（買い注文・手仕舞いの線・損失）</h2>

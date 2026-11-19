@@ -1120,7 +1120,7 @@ function renderHvCard(t) {
     if (posN.percentile >= 0.8) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より荒れている時期です。実績を調べた期間とは、荒れ具合が違う可能性があります。`;
     else if (posN.percentile <= 0.2) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より穏やかな時期です。実績を調べた期間とは、荒れ具合が違う可能性があります。`;
   }
-  els.hvTheoryNote.textContent = `${regime}${regime ? " " : ""}ITMになる確率（HV換算）は、「${PAGE === "buy" ? "5" : "6"} まとめ」で、IV換算・過去の実績と並べて見ます。※HVは過去の値動きの大きさで、IV（オプション価格に織り込まれた将来の変動の大きさ）ではありません。`;
+  els.hvTheoryNote.textContent = `${regime}${regime ? " " : ""}ITMになる確率（HV換算）は、「6 まとめ」で、IV換算・過去の実績と並べて見ます。※HVは過去の値動きの大きさで、IV（オプション価格に織り込まれた将来の変動の大きさ）ではありません。`;
   els.hvCard.hidden = false;
   setupStatExplain();
 }
@@ -1178,8 +1178,7 @@ function drawCone(t, iv) {
   const beText = beVal !== null && !beIsBarrier ? `紫の点線＝損益分岐点（権利行使価格${cb.type.itmWhen === "below" ? "−" : "＋"}${grp === "sell" ? "受取" : "支払い"}プレミアム＝${beVal.toFixed(2)}、現在値から${((beVal / cb.price - 1) * 100).toFixed(1)}%）。` : "";
   const itmText = Math.abs(strikeBe - theory.barrier) > 0.005 ? `細い赤の実線＝ITMの水準（権利行使価格${strikeBe.toFixed(2)}）。` : "";
   const markText = days > MARK_BEFORE_EXPIRY ? `灰色の縦線＝満期の${MARK_BEFORE_EXPIRY}営業日前（その日の日付と、そのときのHV・IVの±1σの株価）。` : "";
-  const ivText = !sell ? ""
-    : ivSigma !== null
+  const ivText = ivSigma !== null
       ? "オレンジの点線の枠＝IV基準の±1σ（市場が見込む範囲）。IVは、売り建て側の1つの値を全体に当てはめた目安です。"
       : "IV（売り建て側）か受取プレミアム額を入力すると、IV基準の±1σの枠が重なります。";
   let empText = "";
@@ -1683,6 +1682,7 @@ function renderOrderCard(t) {
   }
   renderBreakEvenPrice(t, closes, todayStrike);
   if (PAGE === "buy" && group === "buy") {
+    renderBuyIv(t, latest, todayStrike);
     renderBuyRisk(t, latest, todayStrike, dates[dates.length - 1]);
     renderBuyPlan(t, latest, todayStrike, dates[dates.length - 1]);
   }
@@ -2777,6 +2777,7 @@ function syncSections() {
   els.condResultCard.hidden = els.conditionCard.hidden;
   els.volDetails.hidden = els.volatilityCard.hidden;
   if (PAGE === "buy") {
+    set("s5", shown(els.orderCard));
     set("sb7", shown(els.buyRiskCard));
     set("sb8", shown(els.buyPlanCard));
   }
@@ -2827,7 +2828,7 @@ function renderTopBand(t) {
     kv("ITM発生率（実績）", els.overallProb.textContent),
   ];
   if (band.hvItm !== null) parts.push(kv("満期時ITM率（HV換算）", pct(band.hvItm)));
-  if (group === "sell" && band.ivhv) parts.push(kv("IV÷HV", `${band.ivhv.ratio.toFixed(2)}倍（${band.ivhv.word}）`));
+  if (band.ivhv) parts.push(kv("IV÷HV", `${band.ivhv.ratio.toFixed(2)}倍（${band.ivhv.word}）`));
   els.bandRow2.innerHTML = parts.join("");
 }
 
@@ -2870,7 +2871,7 @@ function renderConclusion(t) {
   }
 
   const iv = band.ivhv;
-  if (group === "sell" && iv) {
+  if (iv) {
     rows.push(row(rows.length + 1, "basis-iv", "IV",
       `IV ${pct(iv.iv)}（HVの${iv.ratio.toFixed(2)}倍・${iv.word}）`,
       `${iv.phrase}。${iv.meaning}。`));
@@ -2885,6 +2886,80 @@ function renderConclusion(t) {
 }
 
 // ================= 買いページ専用 =================
+
+// 買いページの「5 IV」: IVの水準・IV÷HV・IV基準の1σ・理論プレミアム価格(HV計算)を、買い手向けの読み方で出す。
+// IVは、入力(任意)があればその値、なければ支払いプレミアム額から逆算した値。どちらもなければ表示しない(コーン図のIVの帯も出ない)。
+function renderBuyIv(t, price, strike) {
+  if (!els.ivHvSummary) return;
+  const kind = buyKindOf(t);
+  const itmWhen = OPTION_TYPES[t.typeKey].itmWhen;
+  const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
+  const days = t.windowDays;
+  const clear = (msg) => {
+    drawCone(t, null);
+    els.ivHvSummary.innerHTML = "";
+    els.ivHvNote.textContent = msg;
+  };
+  const { closes } = viewDataOf(t);
+  const hv = computeHv(closes, days);
+  if (hv === null) { clear("HVを計算するためのデータが足りないため、表示できません。"); return; }
+  const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
+  const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
+  const T = days / TRADING_DAYS_PER_YEAR;
+  let iv = ivIn;
+  let source = "input";
+  if (iv === null) {
+    if (premium === null) { clear("IV（任意）か、支払いプレミアム額を入力すると表示します。"); return; }
+    iv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: null, T, premium });
+    source = "calibrated";
+    if (iv === null) { clear("支払いプレミアム額に合うIVが見つかりませんでした。支払いプレミアム額や権利行使価格を、確認してください。"); return; }
+  }
+  const ratio = iv / hv;
+  const judge = judgeIvHv(ratio);
+  const depthDollar = depthDollarOf(t);
+  const thIv = hvTheory({ price, strike, depthDollar, itmWhen, days, hv: iv });
+  // 買い手向けの読み方: IVが高い＝オプションの価格(支払うプレミアム)は割高。IVが下がると、株価が動かなくても価格が下がる
+  const meaning = judge.level === "rich"
+    ? "IVが高め＝オプションの価格（支払うプレミアム）は割高です。決算発表のあとなどにIVが下がると、株価が思いどおりに動いても、価格が下がって損をしやすくなります"
+    : judge.level === "cheap"
+      ? "IVが低め＝オプションの価格（支払うプレミアム）は割安です。IVが上がると、価格が上がって有利になります。ただし、株価が動かないと、時間の経過で価格が下がる点は同じです"
+      : "標準的な水準です";
+  band.ivhv = { ratio, word: judge.word, phrase: judge.phrase, meaning, iv, hv };
+  const ivSub = source === "input" ? "証券会社のオプションチェーンの値" : `支払いプレミアム額${premium.toFixed(2)}に合うIV`;
+  const items = [
+    {
+      name: "IV", value: pct(iv), suffix: source === "input" ? "（入力値）" : "（支払いプレミアムから逆算）", sub: ivSub,
+      note: `IV（インプライド・ボラティリティ）は、オプションの価格に織り込まれた、これからの値動きの見込みの大きさ（年率）です。HVが「過去に実際に動いた大きさ」なのに対し、IVは「市場がこれから動くと見込んでいる大きさ」で、実際の値動きではありません。\n買い手にとって、IVが高いほど、オプションの価格（支払うプレミアム）は高くなります（割高）。\n${source === "input" ? "入力したIVを使っています。" : "IVが未入力のため、入力した支払いプレミアム額に合うIVを、Black-Scholesの式（金利0・配当なし）で逆算しています。"}`,
+    },
+    {
+      name: "IV÷HV", value: `${ratio.toFixed(2)}倍`,
+      sub: `HV ${pct(hv)}（満期と同じ長さ・「4 HV」と同じ値）で割った倍率。${judge.word}（1.2倍以上＝高め、0.8倍以下＝低め）`,
+      note: `IVがHVの何倍かを見て、市場のこれからの見込み（IV）が、過去の実際の値動き（HV）より高めか低めかを判断する目安です。\n1.2倍以上＝高め／0.8倍以下＝低め／その間＝同程度。この基準は、このツールの簡易的なものです（一般に、IVはHVより少し高めになりやすいため、「同程度」の幅を広めに取っています）。\n買い手は、高めのとき、オプションが割高です。決算発表などの予定された出来事をまたぐ場合は、IVが高いのは自然です。`,
+    },
+  ];
+  if (thIv) {
+    items.push({
+      name: "1σの値動き", value: `±${thIv.sigmaAmount.toFixed(2)}ドル`, suffix: "（IV基準）",
+      sub: `満期まで。±${pct(thIv.sigmaPct)}（IV ${pct(iv)}×√(${days}/252)）`,
+      note: `市場の見込み（IV）から見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。\n1σ＝現在値×IV×√(営業日数÷252)。「4 HV」の1σの値動き（HV基準）と同じ計算で、HVの代わりにIVを使っています。\nIVは、1つの値を全体に当てはめた目安です。将来を保証するものではありません。`,
+    });
+  }
+  const hvPrice = bsPrice(kind, price, strike, T, hv);
+  if (hvPrice > 0.005 && premium !== null) {
+    const diff = premium - hvPrice;
+    const sign = diff >= 0 ? "+" : "−";
+    items.push({
+      name: "理論プレミアム価格", value: hvPrice.toFixed(2), suffix: "（HV計算）",
+      sub: `支払い ${premium.toFixed(2)}／差 ${sign}${Math.abs(diff).toFixed(2)}（${sign}${Math.abs(diff / hvPrice * 100).toFixed(0)}%）`,
+      note: `満期（${days}営業日）と同じ長さのHVを、IVの代わりに使って、Black-Scholesの式（金利0・配当なし）で計算した、オプションの価格（1株あたり）の理論値です。過去の実際の値動きから見て妥当な価格の目安です。\n支払いプレミアムが、この価格より高い（差がプラス）ときは、IVがHVより高めで、割高です。低いときは割安です（IV÷HVと同じ関係を、金額で見たものです）。\nHVは過去の値動きなので、市場の価格（IV）とは、ずれて当然です。決算発表などをまたぐ場合は、市場の価格のほうが高いのは自然です。断定的な判定には使えません。`,
+    });
+  }
+  els.ivHvSummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
+  els.ivHvNote.textContent = `IV${pct(iv)}は、満期と同じ長さのHV${pct(hv)}の${ratio.toFixed(2)}倍（${judge.word}）です。${meaning}。`
+    + "※IVは、これからの値動きの見込みです（実際の値動きではありません）。HVは、過去に実際に動いた大きさです。決算発表などの予定された出来事をまたぐ場合は、IVが高いのは自然で、買い手に不利とは限りません。判定の基準（1.2倍以上＝高め、0.8倍以下＝低め）は、このツールの簡易的なものです。ITMになる確率の3点比較（IV換算・HV換算・実績）は、売りページにあります。";
+  drawCone(t, { thIv });
+  setupStatExplain();
+}
 const pctTxt = (v, d = 0) => (v === null || v === undefined || Number.isNaN(v) ? "―" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
 const buyKindOf = (t) => (OPTION_TYPES[t.typeKey].itmWhen === "above" ? "call" : "put");
 
