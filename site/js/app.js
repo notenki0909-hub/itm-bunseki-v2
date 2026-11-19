@@ -494,7 +494,7 @@ function newTabState() {
     rrPremSell: null,
     rrPremBuy: null,
     stopPick: null,   // 表で選んだ損切りの場面("-0.1|1"＝ストレステスト(株価の変化|IV上昇の列番号)、"time|30|0.3"＝IVの変化と時間の経過の表)。null=選んでいない。null=ATRの損切りの目安
-    planQty: null,    // 発注枚数(空欄=損切りの上限＝資金の2%から計算)
+    planQty: 1,       // 発注枚数。新しいタブの初期値は1枚(空欄にすると、損切りの上限＝資金の2%に収まる最大枚数で計算)
   };
 }
 
@@ -551,6 +551,9 @@ function switchTab(id) {
   els.rrPremSellInput.value = t.rrPremSell ?? "";
   els.rrPremBuyInput.value = t.rrPremBuy ?? "";
   if (els.buyAtrMultSelect) els.buyAtrMultSelect.value = String(t.buyAtrMult);
+  // トータル資金額(全タブ共通)と発注枚数(タブごと)の入力欄。買いページでは、ここで反映する(売りページは、リスク確認の描画でも反映する)
+  els.riskCapitalInput.value = riskCapital() > 0 ? riskCapital() : "";
+  els.planQtyInput.value = t.planQty > 0 ? t.planQty : "";
   updateRiskRewardInputUI(t.typeKey, t.rrVariant);
   syncOrderDerived(t);
   setStatus("");
