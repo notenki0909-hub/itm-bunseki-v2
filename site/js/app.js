@@ -60,6 +60,7 @@ function tabRecipe(t) {
     momentumThresholdPct: t.momentumThresholdPct,
     rrVariant: t.rrVariant,
     rrDepth: t.rrDepth,
+    rrBeBase: t.rrBeBase,
     rrPremium: t.rrPremium,
     rrPayPremium: t.rrPayPremium,
     rrProfitRatio: t.rrProfitRatio,
@@ -91,6 +92,7 @@ function applyRecipe(t, rec) {
     momentumThresholdPct: rec.momentumThresholdPct ?? t.momentumThresholdPct,
     rrVariant: rec.rrVariant || t.rrVariant,
     rrDepth: rec.rrDepth ?? t.rrDepth,
+    rrBeBase: rec.rrBeBase ?? t.rrBeBase,
     rrPremium: rec.rrPremium ?? t.rrPremium,
     rrPayPremium: rec.rrPayPremium ?? t.rrPayPremium,
     rrProfitRatio: rec.rrProfitRatio ?? t.rrProfitRatio,
@@ -413,6 +415,8 @@ const els = {
   rrPayPremiumInput: document.getElementById("rrPayPremiumInput"),
   rrDepthInput: document.getElementById("rrDepthInput"),
   rrDepthPct: document.getElementById("rrDepthPct"),
+  beBaseCheck: document.getElementById("beBaseCheck"),
+  beBaseHint: document.getElementById("beBaseHint"),
   rrBreakEvenSummary: document.getElementById("rrBreakEvenSummary"),
   rrPremiumInput: document.getElementById("rrPremiumInput"),
   rrProfitRatioInput: document.getElementById("rrProfitRatioInput"),
@@ -473,6 +477,7 @@ function newTabState() {
     momentumThresholdPct: 5,
     rrVariant: "naked",
     rrDepth: null,
+    rrBeBase: false, // 買いページ: 損益分岐点(権利行使価格＋支払いプレミアム)を、判定の基準にする
     rrPremium: null,
     rrPayPremium: null,
     rrProfitRatio: null,
@@ -530,6 +535,7 @@ function switchTab(id) {
   updateConditionModeUI(t.conditionMode);
 
   els.rrDepthInput.value = t.rrDepth ?? "";
+  if (els.beBaseCheck) els.beBaseCheck.checked = !!t.rrBeBase;
   els.rrPremiumInput.value = t.rrPremium ?? "";
   els.rrPayPremiumInput.value = t.rrPayPremium ?? "";
   els.rrProfitRatioInput.value = t.rrProfitRatio ?? "";
@@ -804,6 +810,7 @@ function onFormChange() {
   updateConditionModeUI(t.conditionMode);
 
   t.rrDepth = els.rrDepthInput.value === "" ? null : Math.max(0, Number(els.rrDepthInput.value));
+  if (els.beBaseCheck) t.rrBeBase = els.beBaseCheck.checked;
   t.rrPremium = els.rrPremiumInput.value === "" ? null : Number(els.rrPremiumInput.value);
   t.rrPayPremium = els.rrPayPremiumInput.value === "" ? null : Number(els.rrPayPremiumInput.value);
   t.rrProfitRatio = els.rrProfitRatioInput.value === "" ? null : Number(els.rrProfitRatioInput.value);
@@ -943,7 +950,7 @@ function hvCompareBlockHtml(t, closes, dates, days) {
   const window = t.windowDays;
   const price = closes[closes.length - 1];
   const strike = effStrikeOf(t, price);
-  const depthDollar = t.rrDepth ?? 0;
+  const depthDollar = depthDollarOf(t);
   const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
   const sigmaText = (th) => `${Math.abs(th.zScore).toFixed(2)}σ${th.zScore >= 0 ? "外" : "内"}`;
   const asOfDate = dates[dates.length - 1];
@@ -1063,7 +1070,7 @@ function renderHvCard(t) {
   const days = t.windowDays;
   const price = closes[closes.length - 1];
   const strike = effStrikeOf(t, price);
-  const depthDollar = t.rrDepth ?? 0;
+  const depthDollar = depthDollarOf(t);
   const hvN = computeHv(closes, days);
   const theory = hvN === null ? null : hvTheory({ price, strike, depthDollar, itmWhen: type.itmWhen, days, hv: hvN });
   band.hvItm = theory ? theory.probItmAtExpiry : null;
@@ -1189,11 +1196,20 @@ function renderTodayCard(t) {
   els.todayCard.hidden = false;
 }
 
+// 判定する深さ(ドル)。買いページで「損益分岐点を基準にする」にチェックがあり、支払いプレミアム額が入っているときは、
+// 支払いプレミアム額(＝損益分岐点−権利行使価格)。それ以外は、入力した深さ(空欄＝0)。
+function isBeBase(t) {
+  return PAGE === "buy" && !!t.rrBeBase && t.rrPayPremium !== null && t.rrPayPremium > 0;
+}
+function depthDollarOf(t) {
+  return isBeBase(t) ? t.rrPayPremium : (t.rrDepth ?? 0);
+}
+
 // 判定する深さ(ドル)を、現在の権利行使価格(本日の終値×比率)に対する割合に換算する。
 // 過去の各エントリーにも同じ割合を当てはめる(過去の株価水準が今と違っても公平に比べられるように
 // するため)。分析結果・エントリー条件で絞り込みなどで共通に使う。
 function depthInfo(t, closes) {
-  const depthDollar = t.rrDepth ?? 0;
+  const depthDollar = depthDollarOf(t);
   const todayStrike = effStrikeOf(t, closes[closes.length - 1]);
   const depthPct = todayStrike > 0 ? depthDollar / todayStrike : 0;
   return { depthDollar, todayStrike, depthPct };
@@ -1201,7 +1217,8 @@ function depthInfo(t, closes) {
 
 // 判定する深さを入力しているとき、ラベルに付ける「（◯ドル）」。空欄(0ドル)なら空文字。
 function depthSuffixOf(t) {
-  const d = t.rrDepth ?? 0;
+  if (isBeBase(t)) return "（損益分岐点）";
+  const d = depthDollarOf(t);
   return d > 0 ? `（${d}ドル）` : "";
 }
 
@@ -1244,6 +1261,13 @@ function renderMainAnalysis(t) {
     depthPct,
   }, dates);
 
+  const beBase = isBeBase(t);
+  els.rrDepthInput.disabled = beBase;
+  if (els.beBaseHint) {
+    els.beBaseHint.textContent = beBase
+      ? `判定の基準＝損益分岐点 ${fmtStrike(type.itmWhen === "below" ? todayStrike - depthDollar : todayStrike + depthDollar)}（権利行使価格${fmtStrike(todayStrike)}${type.itmWhen === "below" ? "−" : "＋"}支払いプレミアム${depthDollar}）。「判定する深さ」の入力は使いません`
+      : (t.rrBeBase ? "支払いプレミアム額を入力すると、その額が判定する深さになります" : "");
+  }
   els.rrDepthPct.textContent = depthDollar > 0
     ? `＝ 権利行使価格の約${(depthPct * 100).toFixed(2)}%（現在の権利行使価格${fmtStrike(todayStrike)}に対して）`
     : "＝ 0%（一度でもITMになれば該当）";
@@ -1251,8 +1275,10 @@ function renderMainAnalysis(t) {
   document.querySelectorAll(".dep-sfx").forEach((el) => { el.textContent = depthTitle; });
   // ITM/OTM表示の切替。OTM表示のときの「OTM」は、深さを入力していれば「その深さのITMではなかった」こと
   const otmMode = !!t.otmView;
-  const kindTitle = otmMode ? "OTM" : "ITM";
-  const kindDepth = otmMode ? (depthDollar > 0 ? `（ITM${depthDollar}ドル未満）` : "") : depthTitle;
+  // 損益分岐点を基準にしているときは、見出しも「損益分岐点以上の確率」のようにする(プット系は以下)
+  const beWord = type.itmWhen === "below" ? "以下" : "以上";
+  const kindTitle = beBase ? (otmMode ? `損益分岐点${type.itmWhen === "below" ? "超" : "未満"}の` : `損益分岐点${beWord}の`) : (otmMode ? "OTM" : "ITM");
+  const kindDepth = beBase ? "" : (otmMode ? (depthDollar > 0 ? `（ITM${depthDollar}ドル未満）` : "") : depthTitle);
   els.dayProbKind.textContent = kindTitle;
   els.heatmapKind.textContent = kindTitle;
   els.dayProbDepth.textContent = kindDepth;
@@ -1893,7 +1919,7 @@ function renderRatioCard(t) {
     const r = K / price;
     const an = computeItmAnalysis(closes, { ratio: r, itmWhen: type.itmWhen, window: days, group, depthPct }, dates);
     if (k === 0) trials = Math.max(1, Math.round(an.entryCount / days));
-    const th = hv === null ? null : hvTheory({ price, strike: K, depthDollar: t.rrDepth ?? 0, itmWhen: type.itmWhen, days, hv });
+    const th = hv === null ? null : hvTheory({ price, strike: K, depthDollar: depthDollarOf(t), itmWhen: type.itmWhen, days, hv });
     let prem = null;
     if (ivs) {
       const bs = buyStrikeOf(K);
@@ -2036,7 +2062,7 @@ function renderIvHv(t, price, itmWhen) {
 
   const ratio = iv / hv;
   const judge = judgeIvHv(ratio);
-  const depthDollar = t.rrDepth ?? 0;
+  const depthDollar = depthDollarOf(t);
   const thIv = hvTheory({ price, strike: strikeSell, depthDollar, itmWhen, days, hv: iv });
   const thHv = hvTheory({ price, strike: strikeSell, depthDollar, itmWhen, days, hv });
   const pos = hvPosition(closes, days);
@@ -2478,7 +2504,7 @@ function renderPlanCard(t) {
   const { depthPct } = depthInfo(t, closes);
   const an = computeItmAnalysis(closes, { ratio: effRatioOf(t, latest), itmWhen: type.itmWhen, window: days, group: "sell", depthPct }, dates);
   const hv = computeHv(viewDataOf(t).closes, days);
-  const th = hv === null ? null : hvTheory({ price: latest, strike: strikeSell, depthDollar: t.rrDepth ?? 0, itmWhen: type.itmWhen, days, hv });
+  const th = hv === null ? null : hvTheory({ price: latest, strike: strikeSell, depthDollar: depthDollarOf(t), itmWhen: type.itmWhen, days, hv });
   const basis = [
     `ITM発生率（過去の実績） ${an.overallItmProb === null ? "―" : (an.overallItmProb * 100).toFixed(1) + "%"}（判定：${an.badge}）`,
     th ? `満期時ITM率（HV換算） ${(th.probItmAtExpiry * 100).toFixed(1)}%` : null,
@@ -3172,6 +3198,7 @@ function init() {
   els.openDetailBtn.addEventListener("click", onOpenDetail);
   if (PAGE === "buy") {
     if (els.buyAtrMultSelect) els.buyAtrMultSelect.addEventListener("change", onFormChange);
+    if (els.beBaseCheck) els.beBaseCheck.addEventListener("change", onFormChange);
     // 「買う条件の過去の結果」の表の「この値にする」ボタン: 下落率(上昇率)の入力に反映して、再計算する
     els.buyStudyBody.addEventListener("click", (e) => {
       const b = e.target.closest("[data-use-x]");
