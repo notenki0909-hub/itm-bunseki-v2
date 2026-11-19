@@ -321,8 +321,6 @@ const els = {
   hvTheoryNote: document.getElementById("hvTheoryNote"),
   expiryNote: document.getElementById("expiryNote"),
   latestPrice: document.getElementById("latestPrice"),
-  todayTitle: document.getElementById("todayTitle"),
-  todayStrike: document.getElementById("todayStrike"),
   condResultCard: document.getElementById("condResultCard"),
   volDetails: document.getElementById("volDetails"),
   conclBody: document.getElementById("conclBody"),
@@ -1208,7 +1206,6 @@ function renderTodayCard(t) {
   els.todayRange.textContent = `${dates[0]} 〜 ${dates[latestIdx]}`;
   els.todayClose.textContent = latestClose.toFixed(2);
   els.todayCloseDate.textContent = dates[latestIdx];
-  els.todayStrike.textContent = fmtStrike(strike);
 
   els.todayCard.hidden = false;
 }
