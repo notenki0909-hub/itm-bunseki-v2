@@ -130,7 +130,7 @@ export function computeBuyStudy({ closes, highs, lows, kind, ratio, window, xLis
  * オプションの価値は、満期までの日数・IVはそのままで、株価だけが線に動いた(時間の経過なし)としたBlack-Scholesの目安。
  * @param {object} p {price, atr, kind, strike, days, premium, iv(年率。nullならpremiumから逆算), capital(null可), mults}
  */
-export function computeFixedLineTable({ price, atr, kind, strike, days, premium, iv, capital, mults = BUY_ATR_MULTS }) {
+export function computeFixedLineTable({ price, atr, kind, strike, days, premium, iv, capital, contracts = null, mults = BUY_ATR_MULTS }) {
   const T = days / TRADING_DAYS_PER_YEAR;
   let useIv = iv;
   let ivSource = "input";
@@ -140,8 +140,32 @@ export function computeFixedLineTable({ price, atr, kind, strike, days, premium,
   }
   const pay = premium > 0 ? premium : (useIv > 0 ? bsPrice(kind, price, strike, T, useIv) : null);
   const riskMoney = capital > 0 ? capital * 0.02 : null;
+  // 資金の2%の損切り: 発注する枚数(未入力なら1枚)で、オプションの損失が資金の2%になる株価の位置(線)。
+  // 全損しても2%に収まる(1株あたりの損失の上限が、支払いプレミアム以上)ときは、2%の線はない。
+  let riskRow = null;
+  if (riskMoney !== null && useIv > 0 && pay > 0 && atr > 0) {
+    const nCon = contracts > 0 ? contracts : 1;
+    const allowed = riskMoney / (100 * nCon);
+    if (allowed < pay) {
+      const f = (L) => pay - bsPrice(kind, L, strike, T, useIv) - allowed; // 損失が上限を超えているほど正
+      let lo = kind === "call" ? price * 0.05 : price;
+      let hi = kind === "call" ? price : price * 5;
+      for (let i = 0; i < 80; i++) {
+        const mid = (lo + hi) / 2;
+        if (kind === "call") { if (f(mid) > 0) lo = mid; else hi = mid; }
+        else if (f(mid) > 0) hi = mid; else lo = mid;
+      }
+      const L2 = kind === "call" ? Math.min(price, (lo + hi) / 2) : Math.max(price, (lo + hi) / 2);
+      const move2 = Math.abs(price - L2);
+      riskRow = {
+        isRisk: true, contracts: nCon, mult: move2 / atr, line: L2, movePct: L2 / price - 1, moveAmount: move2,
+        value: bsPrice(kind, L2, strike, T, useIv), optLoss: allowed, optLossPct: allowed / pay,
+        maxContracts: nCon, maxShares: move2 > 0 ? Math.floor(riskMoney / move2) : null,
+      };
+    }
+  }
   return {
-    iv: useIv > 0 ? useIv : null, ivSource, premium: pay,
+    iv: useIv > 0 ? useIv : null, ivSource, premium: pay, riskRow,
     rows: mults.map((m) => {
       const line = fixedLinePrice(price, atr, m, kind);
       const move = Math.abs(price - line);

@@ -532,3 +532,5 @@ details.mini#volDetails[hidden]{display:none}
 .bs-sub{color:var(--muted);font-size:11.5px}
 .bs-table tr.bs-sel td{background:color-mix(in srgb, var(--accent) 12%, transparent)}
 .be-check{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;cursor:pointer}
+#ratioEffHint{font-weight:700;color:var(--fg)}
+.bs-table tr.bs-risk td{background:color-mix(in srgb, var(--gradOrange) 14%, transparent)}

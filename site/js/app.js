@@ -1148,6 +1148,12 @@ function drawCone(t, iv) {
   const ivSigma = iv && iv.thIv ? iv.thIv.sigmaPct : null;
   const pc = periodClosesOf(t);
   const emp = computeEmpiricalCone(pc, days);
+  // 損益分岐点＝権利行使価格±プレミアム(売りは受取、買いは支払い)。プレミアムが未入力なら、線は引かない
+  const grp = typeGroup(t.typeKey);
+  const premBe = grp === "sell" ? t.rrPremium : t.rrPayPremium;
+  const strikeBe = grp === "sell" ? sellStrikeOf(t, cb.price) : effStrikeOf(t, cb.price);
+  const beVal = premBe !== null && premBe > 0 ? strikeBe + (cb.type.itmWhen === "below" ? -premBe : premBe) : null;
+  const beIsBarrier = isBeBase(t); // 判定の基準が損益分岐点のときは、赤い破線が損益分岐点
   const side = theory.zScore >= 0 ? "外" : "内";
   const sigmaText = ivSigma !== null
     ? `HV ${Math.abs(theory.zScore).toFixed(2)}σ／IV ${Math.abs(iv.thIv.zScore).toFixed(2)}σ${side}`
@@ -1155,13 +1161,15 @@ function drawCone(t, iv) {
   wrap.innerHTML = renderConeChart({
     pastCloses: cb.pastCloses, price: cb.price, days, sigmaPct: theory.sigmaPct, barrier: theory.barrier, itmWhen: cb.type.itmWhen,
     nowLabel: `いま（${cb.asOfDate.slice(5)}）`, expiryLabel: `満期 ${cb.expiryDate.slice(5)}（${days}営業日後）`,
-    barrierLabel: `ITMの水準 ${theory.barrier.toFixed(2)}（${dist >= 0 ? "+" : ""}${pct(dist)}・${sigmaText}）`,
+    barrierLabel: `${beIsBarrier ? "損益分岐点（判定の基準）" : "ITMの水準"} ${theory.barrier.toFixed(2)}（${dist >= 0 ? "+" : ""}${pct(dist)}・${sigmaText}）`,
     markBefore: days > MARK_BEFORE_EXPIRY ? MARK_BEFORE_EXPIRY : null,
     markLabel: `満期${MARK_BEFORE_EXPIRY}営業日前 ${shiftTradingDays(cb.expiryDate, MARK_BEFORE_EXPIRY).slice(5)}`,
     ivSigmaPct: ivSigma,
     empCone: emp,
     focus: coneFocus,
+    breakEven: beVal !== null && !beIsBarrier ? beVal : null,
   });
+  const beText = beVal !== null && !beIsBarrier ? `紫の点線＝損益分岐点（権利行使価格${cb.type.itmWhen === "below" ? "−" : "＋"}${grp === "sell" ? "受取" : "支払い"}プレミアム＝${beVal.toFixed(2)}、現在値から${((beVal / cb.price - 1) * 100).toFixed(1)}%）。` : "";
   const markText = days > MARK_BEFORE_EXPIRY ? `灰色の縦線＝満期の${MARK_BEFORE_EXPIRY}営業日前（その日の日付と、そのときのHV・IVの±1σの株価）。` : "";
   const ivText = !sell ? ""
     : ivSigma !== null
@@ -1176,7 +1184,7 @@ function drawCone(t, iv) {
   btnF.textContent = coneFocus ? "全体表示に戻す" : "ITMの水準の拡大図を見る";
   btnF.setAttribute("aria-pressed", String(coneFocus));
   const focusText = coneFocus ? "【拡大図】縦軸を、ITMの水準と、満期時の各線（HV・IVの1σ、実績の帯と最小・最大）が近い範囲に絞っています。範囲の外の線や、いまの株価は見えません。「全体表示に戻す」で、全体に戻ります。" : "";
-  legend.textContent = `${focusText}${markText}青の帯＝HV基準の±1σ（満期時に約68%がこの範囲）、薄い青＝±2σ（約95%）。${ivText}${empText}赤い破線＝ITMの水準、その先の薄い赤＝ITM側。HVの帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
+  legend.textContent = `${focusText}${markText}${beText}青の帯＝HV基準の±1σ（満期時に約68%がこの範囲）、薄い青＝±2σ（約95%）。${ivText}${empText}赤い破線＝ITMの水準、その先の薄い赤＝ITM側。HVの帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
 }
 
 function renderTodayCard(t) {
@@ -1268,9 +1276,13 @@ function renderMainAnalysis(t) {
       ? `判定の基準＝損益分岐点 ${fmtStrike(type.itmWhen === "below" ? todayStrike - depthDollar : todayStrike + depthDollar)}（権利行使価格${fmtStrike(todayStrike)}${type.itmWhen === "below" ? "−" : "＋"}支払いプレミアム${depthDollar}）。「判定する深さ」の入力は使いません`
       : (t.rrBeBase ? "支払いプレミアム額を入力すると、その額が判定する深さになります" : "");
   }
+  // 深さが0なら「ITM」、深さがあれば「ITM＋(−)◯ドル」、深さが支払いプレミアム(損益分岐点)なら「損益分岐点」
+  const depthWord = depthDollar > 0
+    ? (beBase ? "損益分岐点" : `ITM${type.itmWhen === "below" ? "−" : "＋"}${depthDollar}ドル`)
+    : "ITM";
   els.rrDepthPct.textContent = depthDollar > 0
-    ? `＝ 権利行使価格の約${(depthPct * 100).toFixed(2)}%（現在の権利行使価格${fmtStrike(todayStrike)}に対して）`
-    : "＝ 0%（一度でもITMになれば該当）";
+    ? `＝ 権利行使価格の約${(depthPct * 100).toFixed(2)}%（現在の権利行使価格${fmtStrike(todayStrike)}に対して）（一度でも${depthWord}になれば該当）`
+    : `＝ 0%（一度でも${depthWord}になれば該当）`;
   const depthTitle = depthSuffixOf(t);
   document.querySelectorAll(".dep-sfx").forEach((el) => { el.textContent = depthTitle; });
   // ITM/OTM表示の切替。OTM表示のときの「OTM」は、深さを入力していれば「その深さのITMではなかった」こと
@@ -2934,7 +2946,7 @@ function renderBuyRisk(t, price, strike, asOfDate) {
   const assumed = assumedIvAt(v.closes, v.closes.length - 1);
   const capital = riskCapital();
   const tbl = computeFixedLineTable({
-    price, atr, kind, strike, days: t.windowDays, premium, capital: capital > 0 ? capital : null,
+    price, atr, kind, strike, days: t.windowDays, premium, capital: capital > 0 ? capital : null, contracts: t.planQty,
     iv: ivIn !== null ? ivIn : (premium !== null ? null : assumed), mults: BUY_ATR_MULTS.includes(t.buyAtrMult) ? BUY_ATR_MULTS : [...BUY_ATR_MULTS, t.buyAtrMult].sort((a, b) => a - b),
   });
   const dirWord = kind === "call" ? "下がった" : "上がった";
@@ -2947,19 +2959,28 @@ function renderBuyRisk(t, price, strike, asOfDate) {
     { name: `手仕舞いの線（ATR×${sel.mult}）`, value: sel.line.toFixed(2), sub: `買った日の終値${price.toFixed(2)}から ${sel.moveAmount.toFixed(2)}ドル（${pctTxt(sel.movePct, 1)}）${dirWord}価格`, note: "買った時点で決めて動かさない、1本の固定の線です。トレンドの判定や、日々の切り上げはしません。終値がこの線に届いたら手仕舞う、という目安です。" },
   ].map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
   const money = (x) => (x === null || x === undefined ? "―" : x.toLocaleString("ja-JP", { maximumFractionDigits: 2 }));
-  els.buyRiskBody.innerHTML = tbl.rows.map((r) => {
-    const isSel = r.mult === t.buyAtrMult;
+  // 資金の2%の損切りの線が、ATR×2(表の最小の倍率)より近いときは、その行を一番上に出す
+  const showRisk = tbl.riskRow && tbl.riskRow.mult < Math.min(...BUY_ATR_MULTS);
+  const rowsAll = showRisk ? [tbl.riskRow, ...tbl.rows] : tbl.rows;
+  els.buyRiskBody.innerHTML = rowsAll.map((r) => {
+    const isSel = !r.isRisk && r.mult === t.buyAtrMult;
     const qtyShares = r.maxShares === null ? "―（資金を入力）" : `${r.maxShares.toLocaleString("ja-JP")}株`;
     const qtyOpt = r.maxContracts === null ? "―（資金を入力）" : r.maxContracts === 0 ? "0枚（1枚でも2%超）" : `${r.maxContracts.toLocaleString("ja-JP")}枚`;
-    return `<tr class="${isSel ? "bs-sel" : ""}"><td>ATR×${r.mult}${isSel ? '<br><span class="bs-sub">いまの設定</span>' : ""}</td>`
+    const head = r.isRisk
+      ? `<b>資金2%の損切り</b><br><span class="bs-sub">${r.contracts}枚の場合・ATR×${r.mult.toFixed(2)}</span>`
+      : `ATR×${r.mult}${isSel ? '<br><span class="bs-sub">いまの設定</span>' : ""}`;
+    return `<tr class="${isSel ? "bs-sel" : ""}${r.isRisk ? " bs-risk" : ""}"><td>${head}</td>`
       + `<td>${r.line.toFixed(2)}<br><span class="bs-sub">${pctTxt(r.movePct, 1)}</span></td>`
       + `<td>${money(r.moveAmount)}ドル<br><span class="bs-sub">資金2%なら ${qtyShares}</span></td>`
       + `<td>${r.value === null ? "―" : money(r.value)}<br><span class="bs-sub">プレミアム${tbl.premium === null ? "―" : money(tbl.premium)}</span></td>`
       + `<td>${r.optLoss === null ? "―" : `${money(r.optLoss)}ドル（${(r.optLossPct * 100).toFixed(0)}%）<br><span class="bs-sub">1枚 ${money(r.optLoss * 100)}ドル・資金2%なら ${qtyOpt}</span>`}</td></tr>`;
   }).join("");
+  const riskNote = showRisk
+    ? `<br>・一番上の「資金2%の損切り」は、${tbl.riskRow.contracts}枚${t.planQty ? "" : "（枚数が未入力のため1枚）"}で、損失が資金の2%になる株価の位置です。ATR×2より近い（${tbl.riskRow.mult.toFixed(2)}倍）ため、表に出しています。この線より先まで待つと、資金の2%を超えます。`
+    : "";
   const warn = premium === null && ivIn === null ? "支払いプレミアム額（またはIV）が未入力のため、IVは仮定の値です。「2 注文プラン」に支払いプレミアム額を入れると、実際の価格に近づきます。 " : "";
   const capNote = capital > 0 ? `資金（${money(capital)}ドル）の2%＝${money(capital * 0.02)}ドルが、1回の手仕舞いで許せる損失の上限です。` : "「2 注文プラン」にトータル資金額を入れると、資金の2%に収まる株数・枚数を出します。";
-  els.buyRiskNote.innerHTML = `${warn}${capNote}<br>・オプションの価格は、満期までの日数・IV（${ivSrc}${tbl.iv !== null ? `：${(tbl.iv * 100).toFixed(1)}%` : ""}）はそのままで、株価だけが線まで動いたとしたBlack-Scholes（金利0・配当なし）の目安です。実際は、IVの変化や時間の経過、売買の差でずれます。`
+  els.buyRiskNote.innerHTML = `${warn}${capNote}${riskNote}<br>・オプションの価格は、満期までの日数・IV（${ivSrc}${tbl.iv !== null ? `：${(tbl.iv * 100).toFixed(1)}%` : ""}）はそのままで、株価だけが線まで動いたとしたBlack-Scholes（金利0・配当なし）の目安です。実際は、IVの変化や時間の経過、売買の差でずれます。`
     + `<br>・オプションの損失は、最大でも支払ったプレミアムです。満期が短い・OTMのとき、線に届く前に全損することがあります。`
     + `<br>・線は、期待値を上げるものではなく、<b>損失の大きさを決めるもの</b>です（過去の検証では、倍率を大きくするほど、平均と勝率は上がり、最悪の損失が深くなりました）。`;
   card.hidden = false;

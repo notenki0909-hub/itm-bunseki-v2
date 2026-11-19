@@ -97,10 +97,11 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
  * @param {string} p.markLabel 縦線の下に出す文字(日付など)
  * @param {number|null} p.ivSigmaPct IV基準の満期までの1σ(割合)。あれば、HV基準の帯(青)にIV基準の±1σの帯(オレンジ)を重ねる
  * @param {number} p.vScale 縦の高さの倍率。1＝基準の高さ(300)。初期は2
+ * @param {number|null} p.breakEven 損益分岐点の株価(権利行使価格±プレミアム)。あれば、紫の点線で引く
  * @param {boolean} p.focus trueなら、縦軸を「ITMの水準のまわり」に絞った拡大図にする(ITMの水準と、満期時の各線が近い範囲)
  * @param {{lo:number[],hi:number[],min:number[],max:number[]}|null} p.empCone 過去の実績の帯(営業日ごとの変化率。k=0〜days)。あれば、約68%の範囲を灰色の帯、最小・最大を点線で重ねる
  */
-export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", ivSigmaPct = null, empCone = null, vScale = 2, focus = false }) {
+export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", ivSigmaPct = null, empCone = null, vScale = 2, focus = false, breakEven = null }) {
   const w = 640;
   const h = Math.round(300 * vScale); // 縦の高さ。基準は300(倍率1)
   const padL = 50;
@@ -117,15 +118,16 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   const spanSig = Math.max(2 * sigmaPct, hasIv ? ivSigmaPct : 0);
   const empMin = empCone ? Math.min(...empCone.min) : 0;
   const empMax = empCone ? Math.max(...empCone.max) : 0;
-  const lo = Math.min(...pastCloses, price * (1 - spanSig), price * (1 + empMin), barrier);
-  const hi = Math.max(...pastCloses, price * (1 + spanSig), price * (1 + empMax), barrier);
+  const beV = breakEven !== null && Number.isFinite(breakEven) ? breakEven : barrier;
+  const lo = Math.min(...pastCloses, price * (1 - spanSig), price * (1 + empMin), barrier, beV);
+  const hi = Math.max(...pastCloses, price * (1 + spanSig), price * (1 + empMax), barrier, beV);
   let yMin;
   let yMax;
   if (focus) {
     // ITMの水準のまわり: ITMの水準と、満期時の、ITM側に近い各線(HV・IVの1σ、実績の16%または84%と最小または最大)を含む範囲
     const sgn = itmWhen === "below" ? -1 : 1;
     const last = (arr) => arr[arr.length - 1];
-    const vals = [barrier, price * (1 + sgn * sigmaPct)];
+    const vals = [barrier, beV, price * (1 + sgn * sigmaPct)];
     if (hasIv) vals.push(price * (1 + sgn * ivSigmaPct));
     if (empCone) vals.push(price * (1 + last(sgn < 0 ? empCone.lo : empCone.hi)), price * (1 + last(sgn < 0 ? empCone.min : empCone.max)));
     const fLo = Math.min(...vals);
@@ -183,6 +185,11 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   const zoneBottom = itmWhen === "below" ? h - padB : yb;
   const zone = `<rect x="${f(xNow)}" y="${f(zoneTop)}" width="${f(xEnd - xNow)}" height="${f(Math.max(0, zoneBottom - zoneTop))}" fill="color-mix(in srgb, var(--gradRed) 12%, transparent)"/>`;
   const barrierLine = `<line x1="${f(xNow)}" y1="${f(yb)}" x2="${f(xEnd)}" y2="${f(yb)}" stroke="var(--gradRed)" stroke-width="1.8" stroke-dasharray="6 4"/>`;
+  // 損益分岐点の線(紫の点線)
+  const ybe = y(beV);
+  const beLine = breakEven !== null && Number.isFinite(breakEven)
+    ? `<line x1="${f(xNow)}" y1="${f(ybe)}" x2="${f(xEnd)}" y2="${f(ybe)}" stroke="var(--gradPurple)" stroke-width="1.8" stroke-dasharray="2 4"/>`
+    : "";
   const barrierText = `<text x="${f(xNow + 6)}" y="${f(itmWhen === "below" ? yb - 5 : yb + 13)}" font-size="11" font-weight="700" fill="var(--gradRed)">${barrierLabel}</text>`;
 
   // 過去の株価
@@ -218,6 +225,9 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
       { v: e(empCone.min), text: `実績最小 ${e(empCone.min).toFixed(1)}`, color: "var(--fg)" },
     );
   }
+  if (breakEven !== null && Number.isFinite(breakEven)) {
+    labItems.push({ v: breakEven, text: `損益分岐点 ${breakEven.toFixed(1)}`, color: "var(--gradPurple)" });
+  }
   const nudge = (items) => {
     const sorted = items.map((it) => ({ ...it, yy: y(it.v) + 3 })).sort((p, q) => p.yy - q.yy);
     for (let i = 1; i < sorted.length; i++) if (sorted[i].yy - sorted[i - 1].yy < 12) sorted[i].yy = sorted[i - 1].yy + 12;
@@ -252,7 +262,7 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
 
   return `<svg viewBox="0 0 ${w} ${h}" class="chart cone-chart" role="img" aria-label="満期までの値動きの目安とITMの水準">`
     + `<defs><clipPath id="coneClip"><rect x="0" y="${padT}" width="${w}" height="${h - padT - padB}"/></clipPath></defs>`
-    + grid + `<g clip-path="url(#coneClip)">` + zone + cone + emp + past + expiryLine + nowDot + barrierLine + mark + `</g>`
+    + grid + `<g clip-path="url(#coneClip)">` + zone + cone + emp + past + expiryLine + nowDot + barrierLine + beLine + mark + `</g>`
     + barrierText + markFoot + rightLabels + bottomLabels
     + `</svg>`;
 }
