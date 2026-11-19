@@ -95,6 +95,8 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
  * @param {string} p.barrierLabel ITMの水準に添える文字
  * @param {number|null} p.markBefore 満期のこの営業日数前に縦線を引く(満期までの日数より小さいときだけ。例: 10＝満期の10営業日前)。その位置の±1σの株価も出す
  * @param {string} p.markLabel 縦線の下に出す文字(日付など)
+ * @param {number|null} p.halfBefore 満期の何営業日前に「満期までの期間の半分」の縦線を引くか(満期までの日数の半分。markBeforeより長いときだけ)
+ * @param {string} p.halfLabel その縦線の下に出す文字
  * @param {number|null} p.ivSigmaPct IV基準の満期までの1σ(割合)。あれば、HV基準の帯(青)にIV基準の±1σの帯(オレンジ)を重ねる
  * @param {number} p.vScale 縦の高さの倍率。1＝基準の高さ(300)。初期は2
  * @param {number|null} p.itmStrike 権利行使価格(ITMの水準)。判定の基準(barrier)と違うとき(深さあり・損益分岐点基準)だけ、細い赤の実線で引く
@@ -102,13 +104,13 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
  * @param {boolean} p.focus trueなら、縦軸を「ITMの水準のまわり」に絞った拡大図にする(ITMの水準と、満期時の各線が近い範囲)
  * @param {{lo:number[],hi:number[],min:number[],max:number[]}|null} p.empCone 過去の実績の帯(営業日ごとの変化率。k=0〜days)。あれば、約68%の範囲を灰色の帯、最小・最大を点線で重ねる
  */
-export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", ivSigmaPct = null, empCone = null, vScale = 2, focus = false, breakEven = null, itmStrike = null }) {
+export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", halfBefore = null, halfLabel = "", ivSigmaPct = null, empCone = null, vScale = 2, focus = false, breakEven = null, itmStrike = null }) {
   const w = 640;
   const h = Math.round(300 * vScale); // 縦の高さ。基準は300(倍率1)
   const padL = 50;
   const padR = 92;
   const padT = 14;
-  const padB = 40;
+  const padB = 58; // 下に、満期までの半分・2週間前の日付を2段で出すため、広く取る
   const nPast = Math.max(1, pastCloses.length - 1);
   const xNow = padL + (w - padL - padR) * 0.3;
   const xEnd = w - padR;
@@ -245,30 +247,47 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   };
   const inPlot = (yy) => yy >= padT + 6 && yy <= h - padB - 2;
   const rightLabels = nudge(labItems).filter((it) => inPlot(it.yy)).map((it) => `<text x="${f(xEnd + 6)}" y="${f(it.yy)}" font-size="10.5" fill="${it.color}">${it.text}</text>`).join("");
-  const bottomLabels = `<text x="${f(xNow)}" y="${h - 20}" font-size="10.5" text-anchor="middle" fill="var(--muted)">${nowLabel}</text>`
-    + `<text x="${f(xEnd)}" y="${h - 20}" font-size="10.5" text-anchor="middle" fill="var(--muted)">${expiryLabel}</text>`
-    + `<text x="${f(padL)}" y="${h - 20}" font-size="10.5" text-anchor="start" fill="var(--muted)">直近${nPast}営業日</text>`;
+  const bottomLabels = `<text x="${f(xNow)}" y="${h - padB + 20}" font-size="10.5" text-anchor="middle" fill="var(--muted)">${nowLabel}</text>`
+    + `<text x="${f(xEnd)}" y="${h - padB + 20}" font-size="10.5" text-anchor="middle" fill="var(--muted)">${expiryLabel}</text>`
+    + `<text x="${f(padL)}" y="${h - padB + 20}" font-size="10.5" text-anchor="start" fill="var(--muted)">直近${nPast}営業日</text>`;
 
-  // 満期のN営業日前の縦線と、その位置(いまからの経過日数＝days−N)の±1σの株価(IVがあれば、HV・IVの両方)
+  // 満期のN営業日前の縦線と、その位置(いまからの経過日数＝days−N)の±1σの株価(IVがあれば、HV・IVの両方)。
+  // 「満期までの期間の半分」(文字・株価は線の左側)と「2週間前＝満期の10営業日前」(右側)の2本。
   let mark = "";
   let markFoot = "";
-  if (markBefore !== null && markBefore > 0 && markBefore < days) {
-    const t = days - markBefore;
+  const addMark = (remain, label, side, footY, dash) => {
+    if (remain === null || !(remain > 0) || !(remain < days)) return;
+    const t = days - remain;
     const x = xFut(t);
     const line = "var(--muted)";
-    const one = (sig, col, pre) => {
+    const dx = side === "left" ? -6 : 6;
+    const anchor = side === "left" ? ' text-anchor="end"' : "";
+    // HVとIVの±1σの文字が近いとき(縦に12未満)は、IVの文字を、重ならない位置までずらす
+    const yHvUp = y(price + price * sigmaPct * Math.sqrt(t / days));
+    const yHvDn = y(price - price * sigmaPct * Math.sqrt(t / days));
+    const one = (sig, col, pre, isIv) => {
       const spread = price * sig * Math.sqrt(t / days);
       const vUp = price + spread;
       const vDn = price - spread;
+      let sUp = 0;
+      let sDn = 0;
+      if (isIv) {
+        const dUp = y(vUp) - yHvUp;
+        if (Math.abs(dUp) < 12) sUp = (dUp <= 0 ? -1 : 1) * (12 - Math.abs(dUp));
+        const dDn = y(vDn) - yHvDn;
+        if (Math.abs(dDn) < 12) sDn = (dDn >= 0 ? 1 : -1) * (12 - Math.abs(dDn));
+      }
       return `<circle cx="${f(x)}" cy="${f(y(vUp))}" r="3.5" fill="${col}"/><circle cx="${f(x)}" cy="${f(y(vDn))}" r="3.5" fill="${col}"/>`
-        + `<text x="${f(x + 6)}" y="${f(y(vUp) - 5)}" font-size="10.5" font-weight="700" fill="${col}">${pre}+1σ ${vUp.toFixed(1)}</text>`
-        + `<text x="${f(x + 6)}" y="${f(y(vDn) + 13)}" font-size="10.5" font-weight="700" fill="${col}">${pre}−1σ ${vDn.toFixed(1)}</text>`;
+        + `<text x="${f(x + dx)}" y="${f(y(vUp) - 5 + sUp)}"${anchor} font-size="10.5" font-weight="700" fill="${col}">${pre}+1σ ${vUp.toFixed(1)}</text>`
+        + `<text x="${f(x + dx)}" y="${f(y(vDn) + 13 + sDn)}"${anchor} font-size="10.5" font-weight="700" fill="${col}">${pre}−1σ ${vDn.toFixed(1)}</text>`;
     };
-    mark = `<line x1="${f(x)}" y1="${padT}" x2="${f(x)}" y2="${h - padB}" stroke="${line}" stroke-width="1.8" stroke-dasharray="5 3"/>`
+    mark += `<line x1="${f(x)}" y1="${padT}" x2="${f(x)}" y2="${h - padB}" stroke="${line}" stroke-width="1.8" stroke-dasharray="${dash}"/>`
       + one(sigmaPct, "var(--accent)", (hasIv || empCone) ? "HV " : "")
-      + (hasIv ? one(ivSigmaPct, "var(--gradOrange)", "IV ") : "");
-    markFoot = `<text x="${f(x)}" y="${h - 6}" font-size="10.5" font-weight="700" text-anchor="middle" fill="${line}">${markLabel}</text>`;
-  }
+      + (hasIv ? one(ivSigmaPct, "var(--gradOrange)", "IV ", true) : "");
+    markFoot += `<text x="${f(x)}" y="${footY}" font-size="10.5" font-weight="700" text-anchor="middle" fill="${line}">${label}</text>`;
+  };
+  addMark(halfBefore, halfLabel, "left", h - 22, "2 3");
+  addMark(markBefore, markLabel, "right", h - 6, "5 3");
 
   return `<svg viewBox="0 0 ${w} ${h}" class="chart cone-chart" role="img" aria-label="満期までの値動きの目安とITMの水準">`
     + `<defs><clipPath id="coneClip"><rect x="0" y="${padT}" width="${w}" height="${h - padT - padB}"/></clipPath></defs>`

@@ -1185,7 +1185,10 @@ function drawCone(t, iv) {
     nowLabel: `いま（${cb.asOfDate.slice(5)}）`, expiryLabel: `満期 ${cb.expiryDate.slice(5)}（${days}営業日後）`,
     barrierLabel: `${beIsBarrier ? "損益分岐点（判定の基準）" : "ITMの水準"} ${theory.barrier.toFixed(2)}（${dist >= 0 ? "+" : ""}${pct(dist)}・${sigmaText}）`,
     markBefore: days > MARK_BEFORE_EXPIRY ? MARK_BEFORE_EXPIRY : null,
-    markLabel: `満期${MARK_BEFORE_EXPIRY}営業日前 ${shiftTradingDays(cb.expiryDate, MARK_BEFORE_EXPIRY).slice(5)}`,
+    markLabel: `2週間前（満期${MARK_BEFORE_EXPIRY}営業日前） ${shiftTradingDays(cb.expiryDate, MARK_BEFORE_EXPIRY).slice(5)}`,
+    // 満期までの期間の半分(2週間前より前にあるときだけ)
+    halfBefore: Math.round(days / 2) > MARK_BEFORE_EXPIRY ? Math.round(days / 2) : null,
+    halfLabel: `満期までの半分（残り${Math.round(days / 2)}営業日） ${shiftTradingDays(cb.expiryDate, Math.round(days / 2)).slice(5)}`,
     ivSigmaPct: ivSigma,
     empCone: emp,
     focus: coneFocus,
@@ -1194,7 +1197,8 @@ function drawCone(t, iv) {
   });
   const beText = beVal !== null && !beIsBarrier ? `紫の点線＝損益分岐点（権利行使価格${cb.type.itmWhen === "below" ? "−" : "＋"}${grp === "sell" ? "受取" : "支払い"}プレミアム＝${beVal.toFixed(2)}、現在値から${((beVal / cb.price - 1) * 100).toFixed(1)}%）。` : "";
   const itmText = Math.abs(strikeBe - theory.barrier) > 0.005 ? `細い赤の実線＝ITMの水準（権利行使価格${strikeBe.toFixed(2)}）。` : "";
-  const markText = days > MARK_BEFORE_EXPIRY ? `灰色の縦線＝満期の${MARK_BEFORE_EXPIRY}営業日前（その日の日付と、そのときのHV・IVの±1σの株価）。` : "";
+  const halfDays = Math.round(days / 2);
+  const markText = days > MARK_BEFORE_EXPIRY ? `灰色の縦線＝${halfDays > MARK_BEFORE_EXPIRY ? `満期までの期間の半分（残り${halfDays}営業日。値は線の左）と、` : ""}2週間前（満期の${MARK_BEFORE_EXPIRY}営業日前。値は線の右）。それぞれ、その日の日付と、そのときのHV・IVの±1σの株価を表示します。` : "";
   const ivText = ivSigma !== null
       ? "オレンジの点線の枠＝IV基準の±1σ（市場が見込む範囲）。IVは、売り建て側の1つの値を全体に当てはめた目安です。"
       : "IV（売り建て側）か受取プレミアム額を入力すると、IV基準の±1σの枠が重なります。";
