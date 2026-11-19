@@ -254,7 +254,7 @@
         </div>
         </div>
         <details class="mini">
-          <summary>分析の詳しい設定（集計期間・判定する深さ・状況を見る日付）</summary>
+          <summary>分析の詳しい設定（集計期間・判定する深さ）</summary>
           <div class="form-row" style="margin-top:8px">
           <div class="field">
             <label for="periodSelect">集計期間</label>
@@ -272,21 +272,6 @@
               <span class="field-hint" id="rrDepthPct"></span>
             </div>
           </div>
-          </div>
-          <div class="form-row">
-      <div class="field">
-        <label for="statusDateInput" data-target="todayExplain"
-          data-note="過去の日付を入力すると、その日(当時)の状況に切り替わります。終値・現在の比率での権利行使価格・直近7営業日の値動きが、その日を基準にした値になります。
-集計期間の営業日日数と期間は、その日を終点とした集計期間になります。
-変動幅の統計・分析結果・注文内容・エントリー条件で絞り込みも、その日までのデータだけで再計算します(その日が最新だったつもりの結果です。その日以降の値動きは使いません)。
-休場日(土日・祝日)を入力した場合は、その直前の営業日を基準にします。
-空欄=本日(最新の営業日)です。">状況を見る日付</label>
-        <div class="field-inline">
-          <input id="statusDateInput" type="date">
-          <button type="button" id="statusDateReset" class="sp-btn" hidden>本日に戻す</button>
-          <span class="field-hint" id="statusDateHint"></span>
-        </div>
-      </div>
           </div>
         </details>
       </div>
@@ -489,7 +474,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   <div id="hvCard" class="card in-sec" hidden>
     <h2 class="card-title-toggle" style="margin:0 0 10px;font-size:16px" data-note="HV（歴史的ボラティリティ）は、過去の日々の値動き（終値の騰落率）のばらつきを、1年あたりの%に換算した値です。大きいほど、株価が大きく動いていたことを表します。
 このツールは終値だけから計算します。オプション価格に織り込まれた将来の変動の大きさ（IV）とは別のもので、IVはここでは取得できません。
-取得済みの全データ（最大800営業日）のうち、基準日（最新の終値の日。日付を指定したときはその日）までを使います。">HV（歴史的ボラティリティ）</h2>
+取得済みの全データ（最大800営業日）のうち、基準日（最新の終値の日）までを使います。">HV（歴史的ボラティリティ）</h2>
     <p class="basis basis-hv"><i></i><b>根拠：HV</b>　過去の実績の「ふだんの荒れ具合」と比べて、いまがどうかを見ます。HVから計算した理論値で、実際に起きたことそのものではありません。</p>
     <p class="sub" style="margin:0 0 10px">過去の値動きの大きさを、年率換算の%で表します。まず、<b>満期と同じ長さのHV</b>（「6 まとめ」のグラフと「1σの値動き」の計算に使う値）を表示します。カードをクリックすると、過去1年のHVの推移グラフが出ます。</p>
     <div class="chart-title" id="hvMatchTitle" style="margin-top:4px">満期と同じ長さのHV（年率）</div>

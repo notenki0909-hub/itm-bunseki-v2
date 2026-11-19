@@ -320,9 +320,6 @@ const els = {
   expiryNote: document.getElementById("expiryNote"),
   latestPrice: document.getElementById("latestPrice"),
   todayTitle: document.getElementById("todayTitle"),
-  statusDateInput: document.getElementById("statusDateInput"),
-  statusDateReset: document.getElementById("statusDateReset"),
-  statusDateHint: document.getElementById("statusDateHint"),
   todayStrike: document.getElementById("todayStrike"),
   condResultCard: document.getElementById("condResultCard"),
   volDetails: document.getElementById("volDetails"),
@@ -459,7 +456,6 @@ function newTabState() {
     id: nextTabId++,
     symbol: null,
     otmView: false,   // 「過去の営業日ごとのITM確率」とエントリー日ごとのITM状況を、OTM表示にしているか。表示だけの一時的な切替で、保存・共有はしない
-    statusDate: null, // 「本日の状況」で見る過去の日付(YYYY-MM-DD)。null=本日。表示だけの一時的な指定で、保存・共有はしない
     fetchedAt: null,  // closesFullをサーバーが取得した時刻(UTCミリ秒)。古いかの判定に使う
     highsFull: null,  // 高値・安値(買いページだけ。ATRに使う)。closesFullと同じ並び
     lowsFull: null,
@@ -544,7 +540,6 @@ function switchTab(id) {
   els.rrBuyStrikeInput.value = t.rrBuyStrike ?? "";
   els.rrPremSellInput.value = t.rrPremSell ?? "";
   els.rrPremBuyInput.value = t.rrPremBuy ?? "";
-  els.statusDateInput.value = t.statusDate ?? "";
   if (els.buyAtrMultSelect) els.buyAtrMultSelect.value = String(t.buyAtrMult);
   updateRiskRewardInputUI(t.typeKey, t.rrVariant);
   syncOrderDerived(t);
@@ -846,22 +841,11 @@ function periodDatesOf(t) {
   return viewDataOf(t).dates.slice(-t.periodDays);
 }
 
-// 「状況を見る日付」を指定しているときは、その日までのデータだけを返す(指定した日が最新だった
-// つもりで、すべてのカードを計算するため)。未指定なら取得済みの全データ。
+// 取得済みの全データ(終値・日付・高値・安値)を返す
 function viewDataOf(t) {
-  const { endIdx } = resolveStatusDate(t);
-  if (endIdx === t.closesFull.length - 1) return { closes: t.closesFull, dates: t.datesFull, highs: t.highsFull, lows: t.lowsFull };
-  return {
-    closes: t.closesFull.slice(0, endIdx + 1), dates: t.datesFull.slice(0, endIdx + 1),
-    highs: t.highsFull ? t.highsFull.slice(0, endIdx + 1) : null, lows: t.lowsFull ? t.lowsFull.slice(0, endIdx + 1) : null,
-  };
+  return { closes: t.closesFull, dates: t.datesFull, highs: t.highsFull, lows: t.lowsFull };
 }
 
-// 日付指定中のとき、見出しに付ける「（◯◯時点）」。本日なら空文字。
-function asOfSuffixOf(t) {
-  const { asOf } = resolveStatusDate(t);
-  return asOf ? `（${asOf}時点）` : "";
-}
 
 // ---- 権利行使価格は整数が基本 ----
 // 権利行使価格(売り建て側)は、入力があればその値。空欄のときは、終値×比率を「整数」に丸めた値。
@@ -1002,7 +986,7 @@ function hvBarHtml(pos) {
   return `<span class="hv-bar" aria-hidden="true"><span class="hv-bar-med" style="left:${med.toFixed(1)}%"></span><span class="hv-bar-now" style="left:${now.toFixed(1)}%"></span></span>`;
 }
 
-// 一番上のパネルに、最新の株価(終値)・日付・前日比を表示する。日付を指定しているときは、その日(基準日)の終値。
+// 一番上のパネルに、最新の株価(終値)・日付・前日比を表示する。
 // データを取得していないタブでは隠す。
 function renderLatestPrice(t) {
   const el = els.latestPrice;
@@ -1015,7 +999,6 @@ function renderLatestPrice(t) {
   const i = closes.length - 1;
   const close = closes[i];
   const date = dates[i];
-  const asOf = resolveStatusDate(t).asOf;
   let change = "";
   if (i >= 1) {
     const diff = close - closes[i - 1];
@@ -1025,8 +1008,8 @@ function renderLatestPrice(t) {
     change = `<span class="lp-change ${cls}">前日比 ${sign}${Math.abs(diff).toFixed(2)}（${sign}${Math.abs(rate * 100).toFixed(2)}%）</span>`;
   }
   el.innerHTML = `<span class="lp-symbol">${t.symbol}</span>`
-    + `<span class="lp-main"><span class="lp-label">${asOf ? "終値" : "最新の終値"}：</span><b class="lp-price">${close.toFixed(2)}</b><span class="lp-unit">ドル</span></span>`
-    + `<span class="lp-date">（${date}${asOf ? "時点" : ""}）</span>${change}`;
+    + `<span class="lp-main"><span class="lp-label">最新の終値：</span><b class="lp-price">${close.toFixed(2)}</b><span class="lp-unit">ドル</span></span>`
+    + `<span class="lp-date">（${date}）</span>${change}`;
   el.hidden = false;
 }
 
@@ -1189,38 +1172,10 @@ function drawCone(t, iv) {
   legend.textContent = `${focusText}${markText}青の帯＝HV基準の±1σ（満期時に約68%がこの範囲）、薄い青＝±2σ（約95%）。${ivText}${empText}赤い破線＝ITMの水準、その先の薄い赤＝ITM側。HVの帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
 }
 
-// 「本日の状況」を、入力された過去の日付の時点で見るための基準日を決める。
-// 入力日が休場日なら、その日以前で最も近い営業日にする。データの最初より前の日付は使えない。
-// 戻り値: {endIdx(closesFull上の基準日の位置), asOf(基準日。本日のときnull), hint(補足文)}
-function resolveStatusDate(t) {
-  const last = t.closesFull.length - 1;
-  const want = t.statusDate;
-  if (!want) return { endIdx: last, asOf: null, hint: "" };
-  const first = t.datesFull[0];
-  if (want < first) {
-    return { endIdx: last, asOf: null, hint: `データは${first}以降です。本日の状況を表示しています` };
-  }
-  let idx = last;
-  while (idx > 0 && t.datesFull[idx] > want) idx--;
-  if (idx === last && t.datesFull[last] <= want) {
-    return { endIdx: last, asOf: null, hint: want === t.datesFull[last] ? "" : `${t.datesFull[last]}が最新のため、本日の状況を表示しています` };
-  }
-  const actual = t.datesFull[idx];
-  return { endIdx: idx, asOf: actual, hint: actual === want ? "" : `${want}は休場日のため、直前の営業日${actual}を表示しています` };
-}
-
 function renderTodayCard(t) {
-  const { endIdx, asOf, hint } = resolveStatusDate(t);
-  // 基準日までのデータだけを使い、集計期間の長さで末尾を切り出す(本日のときは従来と同じ)
-  const upto = t.closesFull.slice(0, endIdx + 1);
-  const uptoDates = t.datesFull.slice(0, endIdx + 1);
-  const closes = upto.slice(-t.periodDays);
-  const dates = uptoDates.slice(-t.periodDays);
-  els.todayTitle.textContent = asOf ? `この実績の前提（${asOf} 時点の状況）` : "この実績の前提（本日の状況）";
-  els.statusDateInput.min = t.datesFull[0];
-  els.statusDateInput.max = t.datesFull[t.datesFull.length - 1];
-  els.statusDateReset.hidden = !t.statusDate;
-  els.statusDateHint.textContent = hint;
+  // 集計期間の長さで、末尾を切り出す
+  const closes = t.closesFull.slice(-t.periodDays);
+  const dates = t.datesFull.slice(-t.periodDays);
   const latestIdx = closes.length - 1;
   const latestClose = closes[latestIdx];
   const strike = effStrikeOf(t, latestClose);
@@ -1307,7 +1262,7 @@ function renderMainAnalysis(t) {
   els.otmToggleBtn.classList.toggle("active", otmMode);
 
   els.symbolLabel.textContent = t.symbol;
-  els.resultTypeLabel.textContent = `：${type.label}、権利行使価格${fmtStrike(todayStrike)}（比率${ratio4(todayStrike, closes[closes.length - 1], type.itmWhen)}）${asOfSuffixOf(t)}`;
+  els.resultTypeLabel.textContent = `：${type.label}、権利行使価格${fmtStrike(todayStrike)}（比率${ratio4(todayStrike, closes[closes.length - 1], type.itmWhen)}）`;
   els.badge.textContent = analysis.badge;
   els.badge.className = "badge " + badgeLevelClass(analysis.badgeLevel);
   els.entryCount.textContent = analysis.entryCount.toLocaleString("ja-JP");
@@ -1632,7 +1587,7 @@ function renderOrderCard(t) {
   // 売りの権利行使価格(入力があればその値。なければ、比率から決めた整数の値)
   const todayStrike = ratioStrike;
 
-  els.orderTypeLabel.textContent = `：${isSp ? labels.spread : labels.naked}${asOfSuffixOf(t)}`;
+  els.orderTypeLabel.textContent = `：${isSp ? labels.spread : labels.naked}`;
 
   const fmt = (v) => v.toFixed(2);
   // 売り系スプレッド(ブルプット/ベアコール)は、最大損失額(差額−受取プレミアム額)を利確割合の右に表示する
@@ -3008,7 +2963,7 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   const qtyNote = t.planQty ? "入力した枚数" : (qty !== null ? "資金の2%に収まる最大枚数" : "");
   const rows = [];
   const add = (k, val) => rows.push([k, val]);
-  add("銘柄・取引", `${t.symbol}　${type.label}い（${kind === "call" ? "コール" : "プット"}）　基準日の終値 ${price.toFixed(2)}${asOfSuffixOf(t)}`);
+  add("銘柄・取引", `${t.symbol}　${type.label}い（${kind === "call" ? "コール" : "プット"}）　基準日の終値 ${price.toFixed(2)}`);
   add("発注する権利行使価格・満期", `権利行使価格 ${fmtStrike(strike)}（終値の${(strike / price * 100).toFixed(1)}%）　満期 ${expiry}（残り${t.windowDays}営業日）`);
   add("支払いプレミアム（買いの指値）", premium === null ? ask("支払いプレミアム額") : `1株 ${money(premium)}ドル　／　1枚 ${money(premium * 100)}ドル`);
   add("枚数", qty === null ? ask("トータル資金額（または枚数）") : qty === 0 ? "0枚（1枚でも、線に届いたときの損失が資金の2%を超えます。枚数を入力するか、資金・線の倍率を見直してください）" : `${qty}枚（${qtyNote}）　／　支払い合計 ${premium === null ? "―" : money(premium * 100 * qty)}ドル`);
@@ -3207,22 +3162,12 @@ function init() {
     }
     setTimeout(() => { els.planCopyHint.textContent = ""; }, 3000);
   });
-  // 「本日の状況」の日付指定は、その表示だけを切り替える(他のカードは再計算しない)
-  const onStatusDateChange = (value) => {
-    const t = activeTab();
-    if (!t || !t.closesFull) return;
-    t.statusDate = value || null;
-    els.statusDateInput.value = t.statusDate ?? "";
-    renderAll(t); // 他のカードも、指定した日までのデータで再計算する
-  };
   els.otmToggleBtn.addEventListener("click", () => {
     const t = activeTab();
     if (!t || !t.closesFull) return;
     t.otmView = !t.otmView;
     renderMainAnalysis(t);
   });
-  els.statusDateInput.addEventListener("change", () => onStatusDateChange(els.statusDateInput.value));
-  els.statusDateReset.addEventListener("click", () => onStatusDateChange(""));
   els.shareBtn.addEventListener("click", onShareLink);
   els.openDetailBtn.addEventListener("click", onOpenDetail);
   if (PAGE === "buy") {
