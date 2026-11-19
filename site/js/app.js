@@ -3005,9 +3005,11 @@ function renderBuyTime(t, price, strike, asOfDate, tbl, kind, capital, ivSrc) {
   const days = t.windowDays;
   const iv0 = tbl.iv;
   const pay = tbl.premium;
+  // 横: いま／満期までの長さの半分(10営業日より長いときだけ)／2週間前(残り10営業日)
+  const half = Math.round(days / 2);
   const cols = [{ remain: days, name: "いま" }];
+  if (half > 10) cols.push({ remain: half, name: "満期までの半分" });
   if (days > 10) cols.push({ remain: 10, name: "2週間前" });
-  if (days > 3) cols.push({ remain: 3, name: "3日前" });
   const qty = t.planQty > 0 ? t.planQty : 1;
   const limit = capital > 0 ? capital * 0.02 : null;
   const money = (v) => v.toFixed(2);

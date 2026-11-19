@@ -320,7 +320,7 @@
 
   <div id="result" class="card in-sec" hidden>
     <div class="result-head">
-      <h2 style="margin:0;font-size:16px"><span id="symbolLabel"></span> の過去の実績（分析結果）<span id="resultTypeLabel" style="font-size:14px;font-weight:400;color:var(--muted)"></span></h2>
+      <h2 style="margin:0;font-size:16px"><span id="symbolLabel"></span> の過去の実績（分析結果）<span id="resultTypeLabel" style="font-size:14px;font-weight:400;color:var(--muted)"></span><span style="font-size:14px;font-weight:400;color:var(--muted)">　集計期間内の全エントリー日でITMになったかを判定</span></h2>
     </div>
     <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　集計期間のデータを使い、「同じ条件でエントリーしていたら、実際にどうなったか」を数えたものです。将来の予測ではありません。</p>
     <p class="sub" style="margin:0 0 10px"><b>判定基準：</b>権利行使価格（各エントリー日の終値 × 比率）だけを基準に、集計期間内の<b>全エントリー日</b>でITMになったかを判定します。「注文プラン」の「判定する深さ」を入力した場合は、権利行使価格から◯ドル以上深いITMになったかを判定します（空欄＝一度でもITM）。</p>
@@ -393,7 +393,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </div>
 
   <div id="condResultCard" class="card in-sec" hidden>
-    <h3 style="margin:0 0 8px;font-size:14px">同じ値動き条件に当てはまった日だけで見た、過去の実績</h3>
+    <h3 style="margin:0 0 8px;font-size:14px">1の「エントリー条件」に当てはまった日だけに絞った、過去の実績</h3>
     <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　上の実績（全エントリー日）のうち、1の「エントリー条件」に当てはまった日だけに絞って数えたものです。</p>
     <div class="summary">
       <div class="stat" data-target="conditionExplain" data-note="集計期間（− 判定期間など）の中で、指定した値動き条件に当てはまった日数です。">
