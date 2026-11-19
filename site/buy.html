@@ -253,6 +253,10 @@
           <span class="field-hint">空欄なら、固定の線に届いたときの損失が資金の2%に収まる最大枚数で計算します</span>
         </div>
         </div>
+        <div class="be-box" data-only="buy">
+          <label class="be-check"><input type="checkbox" id="beBaseCheck"> 深さを損益分岐点（ITM＋支払いプレミアム）にする</label>
+          <span class="field-hint" id="beBaseHint">チェックすると、過去の実績の判定の基準が、損益分岐点（権利行使価格＋支払いプレミアム。プット買いは−）になります。</span>
+        </div>
         <details class="mini">
           <summary>分析の詳しい設定（集計期間・判定する深さ　例：損益分岐点を基準にする）</summary>
           <div class="form-row" style="margin-top:8px">
@@ -271,10 +275,6 @@
               <input id="rrDepthInput" type="number" step="0.01" min="0" placeholder="空欄=0ドル">
               <span class="field-hint" id="rrDepthPct"></span>
             </div>
-          </div>
-          <div class="field">
-            <label class="be-check"><input type="checkbox" id="beBaseCheck"> 深さを損益分岐点（ITM＋支払いプレミアム）にする</label>
-            <span class="field-hint" id="beBaseHint"></span>
           </div>
           </div>
         </details>
@@ -544,7 +544,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
         <p class="basis basis-none"><i></i><b>根拠：ATR（直近の値幅）とBlack-Scholesの理論価格</b>　Pineの「ATR×倍率」の考え方を、<b>買った時点で決める固定の線</b>としてだけ使います。トレンドの判定や、日々の切り上げは使いません。</p>
         <div class="summary" id="buyRiskSummary"></div>
         <div class="volatility-wrap"><table class="volatility-table bs-table">
-          <thead><tr><th>ATR倍率</th><th>線の価格<br>（買った日の終値から）</th><th>株<br>線までの幅・資金2%の株数</th><th>線に届いたときの<br>オプション価格</th><th>オプションの損失<br>（1枚・資金2%の枚数）</th></tr></thead>
+          <thead><tr><th>ATR倍率</th><th>線の価格<br>（買った日の終値から）</th><th>線に届いたときの<br>オプション価格</th><th>オプションの損失<br>（1枚・資金2%の枚数）</th></tr></thead>
           <tbody id="buyRiskBody"></tbody>
         </table></div>
         <p class="sub" id="buyRiskNote" style="margin:8px 0 0"></p>
