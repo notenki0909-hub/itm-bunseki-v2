@@ -2971,13 +2971,16 @@ function renderPeriodCompare(t) {
 }
 
 // 入力したIVから計算した理論価格が、支払いプレミアムと大きく離れているときの注意文(離れていなければ空文字)
-function premiumMismatchText(t, price, strike) {
+function premiumMismatchText(t, price, strike, where = "iv") {
   const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
   const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
   if (premium === null || ivIn === null) return "";
   const theo = bsPrice(buyKindOf(t), price, strike, t.windowDays / TRADING_DAYS_PER_YEAR, ivIn);
   if (Math.abs(theo - premium) <= Math.max(0.05, premium * 0.15)) return "";
-  return `※入力したIV（${(ivIn * 100).toFixed(1)}%）から計算した理論価格は${theo.toFixed(2)}で、支払いプレミアム${premium.toFixed(2)}と離れています。IVを空欄にすると、支払いプレミアムから逆算したIVで計算します。`;
+  const head = `※入力したIV（${(ivIn * 100).toFixed(1)}%）から計算した理論価格は${theo.toFixed(2)}で、支払いプレミアム${premium.toFixed(2)}と離れています。`;
+  return where === "risk"
+    ? `${head}「7 リスク確認」と時間の経過の表は、実際に払った支払いプレミアムを基準にするため、入力したIVは使わず、プレミアムから逆算したIVで計算しています。`
+    : `${head}この「5 IV」の表示は入力したIVを使い、「7 リスク確認」は支払いプレミアムから逆算したIVを使います。`;
 }
 
 // 支払いプレミアムが、高いか安いかの判定(入力欄の下)。支払いプレミアムから逆算したIVが、HV(満期と同じ長さ)の何倍かで見る(1.2倍以上＝割高、0.8倍以下＝割安)。
@@ -3146,13 +3149,13 @@ function renderBuyRisk(t, price, strike, asOfDate) {
   const capital = riskCapital();
   const tbl = computeFixedLineTable({
     price, atr, kind, strike, days: t.windowDays, premium, capital: capital > 0 ? capital : null, contracts: t.planQty,
-    iv: ivIn !== null ? ivIn : (premium !== null ? null : assumed), mults: BUY_ATR_MULTS.includes(t.buyAtrMult) ? BUY_ATR_MULTS : [...BUY_ATR_MULTS, t.buyAtrMult].sort((a, b) => a - b),
+    iv: premium !== null ? null : (ivIn !== null ? ivIn : assumed), mults: BUY_ATR_MULTS.includes(t.buyAtrMult) ? BUY_ATR_MULTS : [...BUY_ATR_MULTS, t.buyAtrMult].sort((a, b) => a - b),
   });
   const dirWord = kind === "call" ? "下がった" : "上がった";
   const sel = tbl.rows.find((r) => r.mult === t.buyAtrMult) || tbl.rows[0];
   band.buyLine = { line: sel.line, movePct: sel.movePct, mult: sel.mult, kind };
   const ivSrc = tbl.iv === null ? "（IVを計算できません）"
-    : ivIn !== null ? "入力したIV" : (premium !== null ? "支払いプレミアムから逆算したIV" : "仮定のIV（直近20営業日のHV×1.15）");
+    : premium !== null ? "支払いプレミアムから逆算したIV" : (ivIn !== null ? "入力したIV" : "仮定のIV（直近20営業日のHV×1.15）");
   els.buyRiskSummary.innerHTML = [
     { name: "ATR", value: atr.toFixed(2), suffix: `（直近${ATR_PERIOD}営業日）`, sub: `株価の${(atr / price * 100).toFixed(1)}%。1日の値幅(高値−安値など)の平均的な大きさ`, note: `ATR(Average True Range)は、直近${ATR_PERIOD}営業日の「1日の値幅」の平均です（前日の終値からの飛びも含めます）。固定の線の幅の単位として使います。` },
     { name: `手仕舞いの線（ATR×${sel.mult}）`, value: sel.line.toFixed(2), sub: `買った日の終値${price.toFixed(2)}から ${sel.moveAmount.toFixed(2)}ドル（${pctTxt(sel.movePct, 1)}）${dirWord}価格`, note: "買った時点で決めて動かさない、1本の固定の線です。トレンドの判定や、日々の切り上げはしません。終値がこの線に届いたら手仕舞う、という目安です。" },
@@ -3180,7 +3183,7 @@ function renderBuyRisk(t, price, strike, asOfDate) {
     : "";
   const warn = premium === null && ivIn === null ? "支払いプレミアム額（またはIV）が未入力のため、IVは仮定の値です。「2 注文プラン」に支払いプレミアム額を入れると、実際の価格に近づきます。 " : "";
   const capNote = capital > 0 ? `資金（${money(capital)}ドル）の2%＝${money(capital * 0.02)}ドルが、1回の手仕舞いで許せる損失の上限です。` : "「2 注文プラン」にトータル資金額を入れると、資金の2%に収まる枚数を出します。";
-  const mism = premiumMismatchText(t, price, strike);
+  const mism = premiumMismatchText(t, price, strike, "risk");
   els.buyRiskNote.innerHTML = `${mism ? mism + "<br>" : ""}${warn}${capNote}${riskNote}<br>・オプションの価格は、満期までの日数・IV（${ivSrc}${tbl.iv !== null ? `：${(tbl.iv * 100).toFixed(1)}%` : ""}）はそのままで、株価だけが線まで動いたとしたBlack-Scholes（金利0・配当なし）の目安です。実際は、IVの変化や時間の経過、売買の差でずれます。`
     + `<br>・オプションの損失は、最大でも支払ったプレミアムです。満期が短い・OTMのとき、線に届く前に全損することがあります。`
     + `<br>・線は、期待値を上げるものではなく、<b>損失の大きさを決めるもの</b>です（過去の検証では、倍率を大きくするほど、平均と勝率は上がり、最悪の損失が深くなりました）。`;
@@ -3247,7 +3250,7 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   let riskRow2 = null; // 損失が資金の2%になる線
   if (bl && premium !== null) {
     const atrArr = v.highs && v.lows ? computeAtr(v.highs, v.lows, v.closes, ATR_PERIOD) : null;
-    const tbl = atrArr ? computeFixedLineTable({ price, atr: atrArr[atrArr.length - 1], kind, strike, days: t.windowDays, premium, iv: t.rrIvSell > 0 ? t.rrIvSell / 100 : null, capital: capital > 0 ? capital : null, contracts: t.planQty, mults: [bl.mult] }) : null;
+    const tbl = atrArr ? computeFixedLineTable({ price, atr: atrArr[atrArr.length - 1], kind, strike, days: t.windowDays, premium, iv: null, capital: capital > 0 ? capital : null, contracts: t.planQty, mults: [bl.mult] }) : null;
     optLoss = tbl ? tbl.rows[0] : null;
     riskRow2 = tbl ? tbl.riskRow : null;
   }
