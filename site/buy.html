@@ -20,17 +20,17 @@
     <nav class="c2-nav" id="bandNav" aria-label="セクションへ移動">
       <a href="#s1"><span class="n">1</span>最低条件</a>
       <a href="#s2"><span class="n">2</span>注文プラン</a>
-      <a href="#s3" hidden><span class="n">3</span>過去の実績</a>
-      <a href="#s4" hidden><span class="n">4</span>HV</a>
-      <a href="#s5" hidden><span class="n">5</span>IV</a>
-      <a href="#s6" hidden><span class="n">6</span>まとめ</a>
-      <a href="#sb7" hidden><span class="n">7</span>リスク確認</a>
+      <a href="#sb7" hidden><span class="n">3</span>リスク確認</a>
+      <a href="#s3" hidden><span class="n">4</span>過去の実績</a>
+      <a href="#s4" hidden><span class="n">5</span>HV</a>
+      <a href="#s5" hidden><span class="n">6</span>IV</a>
+      <a href="#s6" hidden><span class="n">7</span>まとめ</a>
       <a href="#sb8" hidden><span class="n">8</span>注文まとめ</a>
     </nav>
   </div>
 
   <div class="flow">
-    <b>使い方の流れ</b>：①<b>最低条件</b>（買う条件＝直近7営業日の値動き）を確認し、「何%下落したら買うか」を、この銘柄の過去の結果を見て決める → ②いま考えている<b>注文プラン</b>を入れる → ③<b>過去の実績</b>（実際に起きたこと。判断の土台）→ ④<b>HV</b>（過去の値動きの大きさ）→ ⑤<b>IV</b>（市場のこれからの見込み。買い手は、IVが高いほど割高）→ ⑥<b>まとめ</b>で見方がそろっているか確認 → ⑦<b>リスク確認</b>（固定の手仕舞い線：ここまで下がったら手仕舞う）→ ⑧<b>注文まとめ</b>
+    <b>使い方の流れ</b>：①<b>最低条件</b>（買う条件＝直近7営業日の値動き）を確認し、「何%下落したら買うか」を、この銘柄の過去の結果を見て決める → ②いま考えている<b>注文プラン</b>を入れる → ③<b>リスク確認</b>（固定の手仕舞い線：ここまで下がったら手仕舞う）で、損失の大きさを先に確かめる → 次の3つを、この順に見る：④<b>過去の実績</b>（実際に起きたこと。判断の土台）→ ⑤<b>HV</b>（過去の値動きの大きさ）→ ⑥<b>IV</b>（市場のこれからの見込み。買い手は、IVが高いほど割高）→ ⑦<b>まとめ</b>で見方がそろっているか確認 → ⑧<b>注文まとめ</b>
   </div>
 
   <details class="sec" id="s1" open>
@@ -51,7 +51,7 @@
 
   <div id="conditionCard" class="card in-sec" hidden>
     <h2 style="margin:0 0 10px;font-size:16px">エントリー条件（最低条件）と、直近7営業日の値動き</h2>
-    <p class="sub" style="margin:0 0 10px">いまが、エントリーの前提になる値動きかを、直近の値動きで確認します。一番上の「本日」の行が、本日が何%変動したか（過去N営業日比較）です。この条件で絞り込んだ過去の結果は、「3 過去の実績」に出します。</p>
+    <p class="sub" style="margin:0 0 10px">いまが、エントリーの前提になる値動きかを、直近の値動きで確認します。一番上の「本日」の行が、本日が何%変動したか（過去N営業日比較）です。この条件で絞り込んだ過去の結果は、「4 過去の実績」に出します。</p>
     <div class="form-row">
       <div class="field">
         <label for="conditionModeSelect" data-target="conditionExplain"
@@ -133,6 +133,8 @@
           <input id="ratioInput" type="number" step="0.01" min="0.01">
           <span class="field-hint" id="ratioEffHint"></span>
         </div>
+        </div>
+        <div class="form-row">
         <div class="field">
           <label for="windowDateInput" data-note="オプションの満期日を、日付で入力します（日付の欄をクリックすると、カレンダーから選べます）。
   入力した日付までの営業日数が、分析の「判定期間」になります（例：満期日まで25営業日なら、判定期間は25営業日）。
@@ -144,6 +146,62 @@
             <input id="windowDateInput" type="date">
             <span class="field-hint" id="windowHint"></span>
           </div>
+        </div>
+        </div>
+        <div class="form-row">
+        <div class="field">
+          <label for="planQtyInput">発注する枚数</label>
+          <input id="planQtyInput" type="number" step="1" min="1" placeholder="例: 2">
+          <span class="field-hint">空欄なら、固定の線に届いたときの損失が資金の2%に収まる最大枚数で計算します</span>
+        </div>
+        </div>
+        <div class="form-row">
+      <div class="field" data-only="buy">
+        <label for="rrPayPremiumInput" data-target="orderExplain"
+          data-note="オプションの買い手として支払うプレミアム額（1株あたりの合計額）です。
+スプレッドの場合は、差し引き後の正味の額（支払い−受取）を入力してください。
+買い系は、支払いプレミアム額がそのまま最大損失額になります。">支払いプレミアム額</label>
+        <input id="rrPayPremiumInput" type="number" step="0.01" min="0" placeholder="例: 4.00">
+        <span class="field-hint" id="premJudge"></span>
+      </div>
+        </div>
+        <div class="form-row">
+      <div class="field" data-only="buy">
+        <label for="rrIvSellInput" data-target="orderExplain"
+          data-note="買うオプションのIV（年率%）です。任意です。証券会社のオプションチェーンで、その権利行使価格の行に出ているIVを入力してください。
+「6 IV」の表示（IV・IV÷HV・1σ・コーン図のIVの帯）に使います。
+「3 リスク確認」と時間の経過の表は、支払いプレミアム額が入力されているときは、実際に払った金額を基準にするため、入力したIVではなく、支払いプレミアム額から逆算したIVで計算します（プレミアム未入力のときだけ、入力したIVを使います）。
+空欄の場合は、入力した支払いプレミアム額に合うIVをツールが逆算して使います（支払いプレミアム額も空欄なら、リスク確認では、直近20営業日のHV×1.15を仮定します）。">IV（任意）(%)</label>
+        <input id="rrIvSellInput" type="number" step="0.1" min="0" placeholder="例: 38（空欄=自動）">
+      </div>
+        </div>
+        <div class="form-row">
+      <div class="field" data-only="buy">
+        <label for="buyRateInput" data-target="orderExplain"
+          data-note="金利（年%）です。米国債の利回り（無リスク金利）が目安です。
+コールは、満期に権利行使価格を払うのが先になるため、金利が高いほど価格が高くなります（プットは逆に安くなります）。満期が長いほど影響が大きくなります（満期が約7ヶ月のコールで、金利4%なら、約7ドル）。
+IVとプレミアムの両方を入力しているときは、金利は使いません（証券会社のIVは、金利を含めて計算された値のため、入力できません）。IVとプレミアムの片方だけのときは、より正確な分析が必要な場合に、金利を入力してください。">金利（年%）</label>
+        <div class="field-inline">
+          <input id="buyRateInput" type="number" step="0.01" min="0" placeholder="空欄＝0">
+          <button type="button" class="sp-btn" id="buyRateBtn" hidden>米国債利回りを入れる</button>
+        </div>
+        <span class="field-hint" id="buyRateHint"></span>
+      </div>
+        </div>
+        <div class="form-row">
+      <div class="field" data-only="buy">
+        <label for="buyAtrMultSelect" data-target="orderExplain"
+          data-note="「ここまで下がったら手仕舞う」固定の線の幅を、ATR（直近10営業日の1日の値幅の平均）の何倍にするかを選びます（初期値は3倍）。
+線は、買った日の終値から、ATR×倍率だけ下（プット買いは上）に引きます。買った時点で決めて、動かしません。トレンドの判定はしません。
+倍率を大きくすると、手仕舞いになりにくく、平均と勝率は上がりますが、最悪の損失は深くなります（過去の検証）。1〜2倍は、すぐに手仕舞いになりやすく、あまり使われません。">手仕舞いの線（ATR倍率）</label>
+        <select id="buyAtrMultSelect"><option value="2">2倍</option><option value="3" selected>3倍</option><option value="4">4倍</option><option value="5">5倍</option></select>
+      </div>
+        </div>
+        <div class="form-row">
+        <div class="field">
+          <label for="riskCapitalInput">投資に回せるトータル資金額（ドル）</label>
+          <input id="riskCapitalInput" type="number" step="100" min="0" placeholder="例: 50000">
+          <span class="field-hint">1回の手仕舞いで許せる損失の上限＝この2%</span>
         </div>
         </div>
     <div class="form-row ord-strikes" data-only="sell">
@@ -204,32 +262,6 @@
 下の注文内容の1行表示（◯割利確）と、「決済の目安」の利確の支払い価格・利益額の計算に使います。">利確割合(%)</label>
         <input id="rrProfitRatioInput" type="number" step="1" min="0" max="100" placeholder="未入力=80%">
       </div>
-      <div class="field" data-only="buy">
-        <label for="rrIvSellInput" data-target="orderExplain"
-          data-note="買うオプションのIV（年率%）です。任意です。証券会社のオプションチェーンで、その権利行使価格の行に出ているIVを入力してください。
-「5 IV」の表示（IV・IV÷HV・1σ・コーン図のIVの帯）に使います。
-「7 リスク確認」と時間の経過の表は、支払いプレミアム額が入力されているときは、実際に払った金額を基準にするため、入力したIVではなく、支払いプレミアム額から逆算したIVで計算します（プレミアム未入力のときだけ、入力したIVを使います）。
-空欄の場合は、入力した支払いプレミアム額に合うIVをツールが逆算して使います（支払いプレミアム額も空欄なら、リスク確認では、直近20営業日のHV×1.15を仮定します）。">IV（任意）(%)</label>
-        <input id="rrIvSellInput" type="number" step="0.1" min="0" placeholder="例: 38（空欄=自動）">
-      </div>
-      <div class="field" data-only="buy">
-        <label for="buyAtrMultSelect" data-target="orderExplain"
-          data-note="「ここまで下がったら手仕舞う」固定の線の幅を、ATR（直近10営業日の1日の値幅の平均）の何倍にするかを選びます（初期値は3倍）。
-線は、買った日の終値から、ATR×倍率だけ下（プット買いは上）に引きます。買った時点で決めて、動かしません。トレンドの判定はしません。
-倍率を大きくすると、手仕舞いになりにくく、平均と勝率は上がりますが、最悪の損失は深くなります（過去の検証）。1〜2倍は、すぐに手仕舞いになりやすく、あまり使われません。">手仕舞いの線（ATR倍率）</label>
-        <select id="buyAtrMultSelect"><option value="2">2倍</option><option value="3" selected>3倍</option><option value="4">4倍</option><option value="5">5倍</option></select>
-      </div>
-      <div class="field" data-only="buy">
-        <label for="buyRateInput" data-target="orderExplain"
-          data-note="金利（年%）です。米国債の利回り（無リスク金利）が目安です。
-コールは、満期に権利行使価格を払うのが先になるため、金利が高いほど価格が高くなります（プットは逆に安くなります）。満期が長いほど影響が大きくなります（満期が約7ヶ月のコールで、金利4%なら、約7ドル）。
-IVとプレミアムの両方を入力しているときは、金利は使いません（証券会社のIVは、金利を含めて計算された値のため、入力できません）。IVとプレミアムの片方だけのときは、より正確な分析が必要な場合に、金利を入力してください。">金利（年%）</label>
-        <div class="field-inline">
-          <input id="buyRateInput" type="number" step="0.01" min="0" placeholder="空欄＝0">
-          <button type="button" class="sp-btn" id="buyRateBtn" hidden>米国債利回りを入れる</button>
-        </div>
-        <span class="field-hint" id="buyRateHint"></span>
-      </div>
       <div data-only="sell">
         <div class="field" data-only="sp">
           <label for="rrIvBuyInput" data-target="orderExplain"
@@ -246,27 +278,7 @@ IVとプレミアムの両方を入力しているときは、金利は使いま
 利確割合の影響は受けません。">最大損失額</label>
         <div class="field-inline"><b id="orderMaxLoss" class="order-ticker">―</b><span class="field-hint" id="orderMaxLossHint"></span></div>
       </div>
-      <div class="field" data-only="buy">
-        <label for="rrPayPremiumInput" data-target="orderExplain"
-          data-note="オプションの買い手として支払うプレミアム額（1株あたりの合計額）です。
-スプレッドの場合は、差し引き後の正味の額（支払い−受取）を入力してください。
-買い系は、支払いプレミアム額がそのまま最大損失額になります。">支払いプレミアム額</label>
-        <input id="rrPayPremiumInput" type="number" step="0.01" min="0" placeholder="例: 4.00">
-        <span class="field-hint" id="premJudge"></span>
-      </div>
     </div>
-        <div class="form-row">
-        <div class="field">
-          <label for="riskCapitalInput">投資に回せるトータル資金額（ドル）</label>
-          <input id="riskCapitalInput" type="number" step="100" min="0" placeholder="例: 50000">
-          <span class="field-hint">1回の手仕舞いで許せる損失の上限＝この2%</span>
-        </div>
-        <div class="field">
-          <label for="planQtyInput">発注する枚数</label>
-          <input id="planQtyInput" type="number" step="1" min="1" placeholder="例: 2">
-          <span class="field-hint">空欄なら、固定の線に届いたときの損失が資金の2%に収まる最大枚数で計算します</span>
-        </div>
-        </div>
         <div class="be-box" data-only="buy">
           <label class="be-check"><input type="checkbox" id="beBaseCheck"> 深さを損益分岐点（ITM＋支払いプレミアム）にする</label>
           <span class="field-hint" id="beBaseHint">チェックすると、過去の実績の判定の基準が、損益分岐点（権利行使価格＋支払いプレミアム。プット買いは−）になります。</span>
@@ -315,8 +327,31 @@ IVとプレミアムの両方を入力しているときは、金利は使いま
     </div>
   </details>
 
+  <details class="sec" id="sb7" data-only="buy" open hidden>
+    <summary><span class="t"><span class="n">3</span>リスク確認：ここまで下がったら手仕舞う（固定の線）</span><span class="d">買った時点で決めて動かさない線。線に届いたときの損失と、資金の2%に収まる数量を、ATR倍率ごとに並べます</span></summary>
+    <div class="body">
+      <div id="buyRiskCard" class="card in-sec" hidden>
+        <p class="basis basis-none"><i></i><b>根拠：ATR（直近の値幅）とBlack-Scholesの理論価格</b>　Pineの「ATR×倍率」の考え方を、<b>買った時点で決める固定の線</b>としてだけ使います。トレンドの判定や、日々の切り上げは使いません。</p>
+        <div class="summary" id="buyRiskSummary"></div>
+        <div class="volatility-wrap"><table class="volatility-table bs-table">
+          <thead><tr><th>ATR倍率</th><th>線の価格<br>（買った日の終値から）</th><th>線に届いたときの<br>オプション価格</th><th>オプションの損失<br>（1枚・資金2%の枚数）</th></tr></thead>
+          <tbody id="buyRiskBody"></tbody>
+        </table></div>
+        <p class="sub" id="buyRiskNote" style="margin:8px 0 0"></p>
+
+        <h3 style="margin:18px 0 8px;font-size:14px">株価が変わらず、時間が経った場合のオプション価格（IVの変化別）</h3>
+        <p class="sub" id="buyTimeIntro" style="margin:0 0 8px"></p>
+        <div class="volatility-wrap"><table class="volatility-table stress-table">
+          <thead id="buyTimeHead"></thead>
+          <tbody id="buyTimeBody"></tbody>
+        </table></div>
+        <p class="sub" id="buyTimeNote" style="margin:8px 0 0"></p>
+      </div>
+    </div>
+  </details>
+
   <details class="sec" id="s3" open hidden>
-    <summary><span class="t"><span class="n">3</span>過去の実績：この条件で、過去に実際どうだったか</span><span class="d">根拠＝過去の実績。ここがすべての土台です（ITM発生率・総合判定・ヒートマップ。他の権利行使価格の実績を見て「採用」もここで）</span></summary>
+    <summary><span class="t"><span class="n">4</span>過去の実績：この条件で、過去に実際どうだったか</span><span class="d">根拠＝過去の実績。ここがすべての土台です（ITM発生率・総合判定・ヒートマップ。他の権利行使価格の実績を見て「採用」もここで）</span></summary>
     <div class="body">
   <div id="result" class="card in-sec" hidden>
     <div class="result-head">
@@ -488,14 +523,14 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </details>
 
   <details class="sec" id="s4" open hidden>
-    <summary><span class="t"><span class="n">4</span>HV：過去の値動きの大きさ（実績の背景）</span><span class="d">根拠＝HV。いまは、実績を調べた期間より荒れているか。権利行使価格は、満期までの値動きの何σ先か</span></summary>
+    <summary><span class="t"><span class="n">5</span>HV：過去の値動きの大きさ（実績の背景）</span><span class="d">根拠＝HV。いまは、実績を調べた期間より荒れているか。権利行使価格は、満期までの値動きの何σ先か</span></summary>
     <div class="body">
   <div id="hvCard" class="card in-sec" hidden>
     <h2 class="card-title-toggle" style="margin:0 0 10px;font-size:16px" data-note="HV（歴史的ボラティリティ）は、過去の日々の値動き（終値の騰落率）のばらつきを、1年あたりの%に換算した値です。大きいほど、株価が大きく動いていたことを表します。
 このツールは終値だけから計算します。オプション価格に織り込まれた将来の変動の大きさ（IV）とは別のもので、IVはここでは取得できません。
 取得済みの全データ（最大800営業日）のうち、基準日（最新の終値の日）までを使います。">HV（歴史的ボラティリティ）</h2>
     <p class="basis basis-hv"><i></i><b>根拠：HV</b>　過去の実績の「ふだんの荒れ具合」と比べて、いまがどうかを見ます。HVから計算した理論値で、実際に起きたことそのものではありません。</p>
-    <p class="sub" style="margin:0 0 10px">過去の値動きの大きさを、年率換算の%で表します。まず、<b>満期と同じ長さのHV</b>（「6 まとめ」のグラフと「1σの値動き」の計算に使う値）を表示します。カードをクリックすると、過去1年のHVの推移グラフが出ます。</p>
+    <p class="sub" style="margin:0 0 10px">過去の値動きの大きさを、年率換算の%で表します。まず、<b>満期と同じ長さのHV</b>（「7 まとめ」のグラフと「1σの値動き」の計算に使う値）を表示します。カードをクリックすると、過去1年のHVの推移グラフが出ます。</p>
     <div class="chart-title" id="hvMatchTitle" style="margin-top:4px">満期と同じ長さのHV（年率）</div>
     <div class="summary" id="hvMatchSummary"></div>
     <div class="summary" id="hvTheorySummary"></div>
@@ -507,7 +542,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </details>
 
   <details class="sec" id="s5" open hidden>
-    <summary><span class="t"><span class="n">5</span>IV：市場のこれからの見込み</span><span class="d">根拠＝IV。市場は、過去（HV）より大きな動きを見込んでいるか。支払うプレミアムは、割高か割安か</span></summary>
+    <summary><span class="t"><span class="n">6</span>IV：市場のこれからの見込み</span><span class="d">根拠＝IV。市場は、過去（HV）より大きな動きを見込んでいるか。支払うプレミアムは、割高か割安か</span></summary>
     <div class="body">
       <div class="card in-sec" id="compareCard">
         <p class="basis basis-iv"><i></i><b>根拠：IV</b>　オプション価格に織り込まれた、市場のこれからの見込みです。実際に起きたこと（実績）ではなく、将来への見方です。</p>
@@ -519,7 +554,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </details>
 
   <details class="sec" id="s6" open hidden>
-    <summary><span class="t"><span class="n">6</span>まとめ：見方を並べて、納得できるか確認する</span><span class="d">最低条件・実績・HV・IVを1枚に並べ、ITM確率の3点比較で、見方がそろっているかを見ます</span></summary>
+    <summary><span class="t"><span class="n">7</span>まとめ：見方を並べて、納得できるか確認する</span><span class="d">最低条件・実績・HV・IVを1枚に並べ、ITM確率の3点比較で、見方がそろっているかを見ます</span></summary>
     <div class="body">
       <div class="card in-sec" id="conclusionCard">
         <h3 style="margin:0 0 8px;font-size:14px">ここまでの見方を、1枚にまとめる</h3>
@@ -547,29 +582,6 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
           <p class="sub" style="margin:8px 0 0">※IV・HV換算は「満期時に」ITMになる理論上の確率、実績は「期間中に一度でも」ITMに届いた割合です。定義が違うため、数字をそのまま同じものとして比べないでください。いずれも将来を保証するものではありません。</p>
         </div>
         </div>
-      </div>
-    </div>
-  </details>
-
-  <details class="sec" id="sb7" data-only="buy" open hidden>
-    <summary><span class="t"><span class="n">7</span>リスク確認：ここまで下がったら手仕舞う（固定の線）</span><span class="d">買った時点で決めて動かさない線。線に届いたときの損失と、資金の2%に収まる数量を、ATR倍率ごとに並べます</span></summary>
-    <div class="body">
-      <div id="buyRiskCard" class="card in-sec" hidden>
-        <p class="basis basis-none"><i></i><b>根拠：ATR（直近の値幅）とBlack-Scholesの理論価格</b>　Pineの「ATR×倍率」の考え方を、<b>買った時点で決める固定の線</b>としてだけ使います。トレンドの判定や、日々の切り上げは使いません。</p>
-        <div class="summary" id="buyRiskSummary"></div>
-        <div class="volatility-wrap"><table class="volatility-table bs-table">
-          <thead><tr><th>ATR倍率</th><th>線の価格<br>（買った日の終値から）</th><th>線に届いたときの<br>オプション価格</th><th>オプションの損失<br>（1枚・資金2%の枚数）</th></tr></thead>
-          <tbody id="buyRiskBody"></tbody>
-        </table></div>
-        <p class="sub" id="buyRiskNote" style="margin:8px 0 0"></p>
-
-        <h3 style="margin:18px 0 8px;font-size:14px">株価が変わらず、時間が経った場合のオプション価格（IVの変化別）</h3>
-        <p class="sub" id="buyTimeIntro" style="margin:0 0 8px"></p>
-        <div class="volatility-wrap"><table class="volatility-table stress-table">
-          <thead id="buyTimeHead"></thead>
-          <tbody id="buyTimeBody"></tbody>
-        </table></div>
-        <p class="sub" id="buyTimeNote" style="margin:8px 0 0"></p>
       </div>
     </div>
   </details>

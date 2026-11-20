@@ -38,6 +38,10 @@ const priceCache = new Map();
 const PAGE = document.body.dataset.page === "buy" ? "buy" : "sell";
 const PAGE_TYPES = PAGE === "buy" ? ["call_buy", "put_buy"] : ["put_sell", "call_sell"];
 const OTHER_PAGE = PAGE === "buy" ? "index.html" : "buy.html";
+// 画面の節の名前(番号つき)。買いページは、リスク確認が3番目に来るため、売りページと番号が違う
+const SEC = PAGE === "buy"
+  ? { risk: "3 リスク確認", past: "4 過去の実績", hv: "5 HV", iv: "6 IV", summary: "7 まとめ" }
+  : { risk: "7 リスク確認", past: "3 過去の実績", hv: "4 HV", iv: "5 IV", summary: "6 まとめ" };
 const isPageType = (k) => PAGE_TYPES.includes(k);
 const SELL_STORAGE_KEY = "itm-tool-state-v1";
 const BUY_STORAGE_KEY = "itm-tool-state-buy-v1";
@@ -1144,7 +1148,7 @@ function renderHvCard(t) {
     if (posN.percentile >= 0.8) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より荒れている時期です。実績を調べた期間とは、荒れ具合が違う可能性があります。`;
     else if (posN.percentile <= 0.2) regime = `直近${days}営業日のHV（${pct(hvN)}）について、${hvPositionText(posN)}。過去の平均より穏やかな時期です。実績を調べた期間とは、荒れ具合が違う可能性があります。`;
   }
-  els.hvTheoryNote.textContent = `${regime}${regime ? " " : ""}ITMになる確率（HV換算）は、「6 まとめ」で、IV換算・過去の実績と並べて見ます。※HVは過去の値動きの大きさで、IV（オプション価格に織り込まれた将来の変動の大きさ）ではありません。`;
+  els.hvTheoryNote.textContent = `${regime}${regime ? " " : ""}ITMになる確率（HV換算）は、「${SEC.summary}」で、IV換算・過去の実績と並べて見ます。※HVは過去の値動きの大きさで、IV（オプション価格に織り込まれた将来の変動の大きさ）ではありません。`;
   els.hvCard.hidden = false;
   setupStatExplain();
 }
@@ -3058,8 +3062,8 @@ function premiumMismatchText(t, price, strike, where = "iv") {
   if (Math.abs(theo - premium) <= Math.max(0.05, premium * 0.15) + rateAllow) return "";
   const head = `※入力したIV（${(ivIn * 100).toFixed(1)}%）から計算した理論価格は${theo.toFixed(2)}で、支払いプレミアム${premium.toFixed(2)}と離れています。`;
   return where === "risk"
-    ? `${head}「7 リスク確認」と時間の経過の表は、実際に払った支払いプレミアムを基準にするため、入力したIVは使わず、プレミアムから逆算したIVで計算しています。`
-    : `${head}この「5 IV」の表示は入力したIVを使い、「7 リスク確認」は支払いプレミアムから逆算したIVを使います。`;
+    ? `${head}「${SEC.risk}」と時間の経過の表は、実際に払った支払いプレミアムを基準にするため、入力したIVは使わず、プレミアムから逆算したIVで計算しています。`
+    : `${head}この「${SEC.iv}」の表示は入力したIVを使い、「${SEC.risk}」は支払いプレミアムから逆算したIVを使います。`;
 }
 
 // 支払いプレミアムが、高いか安いかの判定(入力欄の下)。支払いプレミアムから逆算したIVが、HV(満期と同じ長さ)の何倍かで見る(1.2倍以上＝割高、0.8倍以下＝割安)。
@@ -3136,7 +3140,7 @@ function renderBuyIv(t, price, strike) {
     },
     {
       name: "IV÷HV", value: `${ratio.toFixed(2)}倍`,
-      sub: `HV ${pct(hv)}（満期と同じ長さ・「4 HV」と同じ値）で割った倍率。${judge.word}（1.2倍以上＝高め、0.8倍以下＝低め）`,
+      sub: `HV ${pct(hv)}（満期と同じ長さ・「${SEC.hv}」と同じ値）で割った倍率。${judge.word}（1.2倍以上＝高め、0.8倍以下＝低め）`,
       note: `IVがHVの何倍かを見て、市場のこれからの見込み（IV）が、過去の実際の値動き（HV）より高めか低めかを判断する目安です。\n1.2倍以上＝高め／0.8倍以下＝低め／その間＝同程度。この基準は、このツールの簡易的なものです（一般に、IVはHVより少し高めになりやすいため、「同程度」の幅を広めに取っています）。\n買い手は、高めのとき、オプションが割高です。決算発表などの予定された出来事をまたぐ場合は、IVが高いのは自然です。`,
     },
   ];
@@ -3144,7 +3148,7 @@ function renderBuyIv(t, price, strike) {
     items.push({
       name: "1σの値動き", value: `±${thIv.sigmaAmount.toFixed(2)}ドル`, suffix: "（IV基準）",
       sub: `満期まで。±${pct(thIv.sigmaPct)}（IV ${pct(iv)}×√(${days}/252)）`,
-      note: `市場の見込み（IV）から見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。\n1σ＝現在値×IV×√(営業日数÷252)。「4 HV」の1σの値動き（HV基準）と同じ計算で、HVの代わりにIVを使っています。\nIVは、1つの値を全体に当てはめた目安です。将来を保証するものではありません。`,
+      note: `市場の見込み（IV）から見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。\n1σ＝現在値×IV×√(営業日数÷252)。「${SEC.hv}」の1σの値動き（HV基準）と同じ計算で、HVの代わりにIVを使っています。\nIVは、1つの値を全体に当てはめた目安です。将来を保証するものではありません。`,
     });
   }
   const hvPrice = bsPrice(kind, price, strike, T, hv, rateOf(t));
@@ -3159,7 +3163,7 @@ function renderBuyIv(t, price, strike) {
   }
   els.ivHvSummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
   els.ivHvNote.textContent = `${premiumMismatchText(t, price, strike)}IV${pct(iv)}は、満期と同じ長さのHV${pct(hv)}の${ratio.toFixed(2)}倍（${judge.word}）です。${meaning}。`
-    + "※IVは、これからの値動きの見込みです（実際の値動きではありません）。HVは、過去に実際に動いた大きさです。決算発表などの予定された出来事をまたぐ場合は、IVが高いのは自然で、買い手に不利とは限りません。判定の基準（1.2倍以上＝高め、0.8倍以下＝低め）は、このツールの簡易的なものです。ITMになる確率の3点比較（IV換算・HV換算・実績）は、「6 まとめ」にあります。";
+    + `※IVは、これからの値動きの見込みです（実際の値動きではありません）。HVは、過去に実際に動いた大きさです。決算発表などの予定された出来事をまたぐ場合は、IVが高いのは自然で、買い手に不利とは限りません。判定の基準（1.2倍以上＝高め、0.8倍以下＝低め）は、このツールの簡易的なものです。ITMになる確率の3点比較（IV換算・HV換算・実績）は、「${SEC.summary}」にあります。`;
   // ITMになる確率の3点比較(IV換算・HV換算・過去の実績)
   const thHv = hvTheory({ price, strike, depthDollar, itmWhen, days, hv });
   els.ivHvCompare.innerHTML = thIv && thHv ? ivHvCompareHtml(t, thIv, thHv, days, itmWhen, "buy") : "";
