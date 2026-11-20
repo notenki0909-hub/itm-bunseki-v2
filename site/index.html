@@ -20,17 +20,17 @@
     <nav class="c2-nav" id="bandNav" aria-label="セクションへ移動">
       <a href="#s1"><span class="n">1</span>最低条件</a>
       <a href="#s2"><span class="n">2</span>注文プラン</a>
-      <a href="#s3" hidden><span class="n">3</span>過去の実績</a>
-      <a href="#s4" hidden><span class="n">4</span>HV</a>
-      <a href="#s5" hidden><span class="n">5</span>IV</a>
-      <a href="#s6" hidden><span class="n">6</span>まとめ</a>
-      <a href="#s7" hidden><span class="n">7</span>リスク確認</a>
+      <a href="#s7" hidden><span class="n">3</span>リスク確認</a>
+      <a href="#s3" hidden><span class="n">4</span>過去の実績</a>
+      <a href="#s4" hidden><span class="n">5</span>HV</a>
+      <a href="#s5" hidden><span class="n">6</span>IV</a>
+      <a href="#s6" hidden><span class="n">7</span>まとめ</a>
       <a href="#s8" hidden><span class="n">8</span>注文まとめ</a>
     </nav>
   </div>
 
   <div class="flow">
-    <b>使い方の流れ</b>：①<b>最低条件</b>（直近7営業日の値動き）を確認する → ②いま考えている<b>注文プラン</b>を入れる → 次の3つを、この順に見る：③<b>過去の実績</b>（実際に起きたこと。判断の土台。他の権利行使価格の実績を見て、よりよい内容を<b>採用</b>することもここでできる。採用すると②の注文プランに反映され、分析がやり直される）→ ④<b>HV</b>（過去の値動きの大きさ。いまは実績の頃より荒れているか）→ ⑤<b>IV</b>（これからの市場の見込み）→ ⑥<b>まとめ</b>で3つの見方がそろっているかを確認 → ⑦リスクを確認して、⑧<b>注文まとめ</b>にする
+    <b>使い方の流れ</b>：①<b>最低条件</b>（直近7営業日の値動き）を確認する → ②いま考えている<b>注文プラン</b>を入れる（集計期間の比較と、他の権利行使価格の実績を見て、よりよい内容を<b>採用</b>することもここでできる。採用すると注文プランに反映され、分析がやり直される） → ③<b>リスク確認</b>（ストレステストと、損切りの目安。選んだ損切りの場面は、コーン図に出る）で、損失の大きさを先に確かめる → 次の3つを、この順に見る：④<b>過去の実績</b>（実際に起きたこと。判断の土台）→ ⑤<b>HV</b>（過去の値動きの大きさ。いまは実績の頃より荒れているか）→ ⑥<b>IV</b>（これからの市場の見込み）→ ⑦<b>まとめ</b>で3つの見方がそろっているかを確認 → ⑧<b>注文まとめ</b>にする
   </div>
 
   <details class="sec" id="s1" open>
@@ -51,7 +51,7 @@
 
   <div id="conditionCard" class="card in-sec" hidden>
     <h2 style="margin:0 0 10px;font-size:16px">エントリー条件（最低条件）と、直近7営業日の値動き</h2>
-    <p class="sub" style="margin:0 0 10px">いまが、エントリーの前提になる値動きかを、直近の値動きで確認します。一番上の「本日」の行が、本日が何%変動したか（過去N営業日比較）です。この条件で絞り込んだ過去の結果は、「3 過去の実績」に出します。</p>
+    <p class="sub" style="margin:0 0 10px">いまが、エントリーの前提になる値動きかを、直近の値動きで確認します。一番上の「本日」の行が、本日が何%変動したか（過去N営業日比較）です。この条件で絞り込んだ過去の結果は、「4 過去の実績」に出します。</p>
     <div class="form-row">
       <div class="field">
         <label for="conditionModeSelect" data-target="conditionExplain"
@@ -326,8 +326,49 @@
     </div>
   </details>
 
+  <details class="sec" id="s7" data-only="sell" open hidden>
+    <summary><span class="t"><span class="n">3</span>リスク確認と、損切りの目安</span><span class="d">採用したプランについて、ストレステストと、IV×時間の表をタブで切り替えて見ます。損切りは、資金の2%まで</span></summary>
+    <div class="body">
+      <div class="card in-sec" id="riskCard">
+        <div class="risk-tabs" role="tablist">
+          <button type="button" class="sp-btn active" id="riskTabStress" role="tab" aria-selected="true">株価が動いた場合（ストレステスト）</button>
+          <button type="button" class="sp-btn" id="riskTabTime" role="tab" aria-selected="false">株価が変わらず時間が経った場合</button>
+        </div>
+        <div id="stressWrap">
+        <h3 style="margin:10px 0 8px;font-size:14px" id="stressTitle">株価が動いたときの現在値の目安（ストレステスト）</h3>
+        <p class="sub" id="stressIntro" style="margin:0 0 8px"></p>
+        <div class="volatility-wrap">
+          <table class="volatility-table stress-table" id="stressTable">
+            <thead id="stressHead"></thead>
+            <tbody id="stressBody"></tbody>
+          </table>
+        </div>
+        <p class="sub" id="stressNote" style="margin:8px 0 0"></p>
+
+        </div>
+        <div id="ivTimeWrap" hidden>
+        <h3 style="margin:10px 0 8px;font-size:14px" id="ivTimeTitle">IVの変化と時間の経過の影響（株価が変わらない場合）</h3>
+        <p class="sub" id="ivTimeIntro" style="margin:0 0 8px"></p>
+        <div class="volatility-wrap">
+          <table class="volatility-table stress-table" id="ivTimeTable">
+            <thead id="ivTimeHead"></thead>
+            <tbody id="ivTimeBody"></tbody>
+          </table>
+        </div>
+        <p class="sub" id="ivTimeNote" style="margin:8px 0 0"></p>
+        </div>
+      <h3 style="margin:18px 0 8px;font-size:14px" id="riskTitle">損切りの目安（資金の2%まで）とリスクリワード</h3>
+      <p class="sub" style="margin:0 0 8px">1回の損切りで許せる損失を、投資に回せるトータル資金額の2%とします。2の注文プランで、トータル資金額と発注する枚数を入れると、損失が2%になる買い戻し価格（損切りの目安の上限）が決まり、リスクリワードを出します。この価格以上になる場面には、2つの表（上のタブで切り替え）のどちらにも、「資金2%超」の印が付きます。表のセルをクリックして、損切りの場面を選ぶこともできます（任意）。</p>
+      <div class="summary" id="riskSummary"></div>
+      <p style="margin:8px 0 0"><button type="button" id="riskClearPick" class="btn-outline" hidden>場面の選択を外す</button></p>
+      <p class="sub" id="riskNote" style="margin:8px 0 0"></p>
+
+      </div>
+    </div>
+  </details>
+
   <details class="sec" id="s3" open hidden>
-    <summary><span class="t"><span class="n">3</span>過去の実績：この条件で、過去に実際どうだったか</span><span class="d">根拠＝過去の実績。ここがすべての土台です（ITM発生率・総合判定・ヒートマップ。他の権利行使価格の実績を見て「採用」もここで）</span></summary>
+    <summary><span class="t"><span class="n">4</span>過去の実績：この条件で、過去に実際どうだったか</span><span class="d">根拠＝過去の実績。ここがすべての土台です（ITM発生率・総合判定・ヒートマップ。他の権利行使価格の実績を見て「採用」もここで）</span></summary>
     <div class="body">
   <div id="result" class="card in-sec" hidden>
     <div class="result-head">
@@ -453,14 +494,14 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </details>
 
   <details class="sec" id="s4" open hidden>
-    <summary><span class="t"><span class="n">4</span>HV：過去の値動きの大きさ（実績の背景）</span><span class="d">根拠＝HV。いまは、実績を調べた期間より荒れているか。権利行使価格は、満期までの値動きの何σ先か</span></summary>
+    <summary><span class="t"><span class="n">5</span>HV：過去の値動きの大きさ（実績の背景）</span><span class="d">根拠＝HV。いまは、実績を調べた期間より荒れているか。権利行使価格は、満期までの値動きの何σ先か</span></summary>
     <div class="body">
   <div id="hvCard" class="card in-sec" hidden>
     <h2 class="card-title-toggle" style="margin:0 0 10px;font-size:16px" data-note="HV（歴史的ボラティリティ）は、過去の日々の値動き（終値の騰落率）のばらつきを、1年あたりの%に換算した値です。大きいほど、株価が大きく動いていたことを表します。
 このツールは終値だけから計算します。オプション価格に織り込まれた将来の変動の大きさ（IV）とは別のもので、IVはここでは取得できません。
 取得済みの全データ（最大800営業日）のうち、基準日（最新の終値の日）までを使います。">HV（歴史的ボラティリティ）</h2>
     <p class="basis basis-hv"><i></i><b>根拠：HV</b>　過去の実績の「ふだんの荒れ具合」と比べて、いまがどうかを見ます。HVから計算した理論値で、実際に起きたことそのものではありません。</p>
-    <p class="sub" style="margin:0 0 10px">過去の値動きの大きさを、年率換算の%で表します。まず、<b>満期と同じ長さのHV</b>（「6 まとめ」のグラフと「1σの値動き」の計算に使う値）を表示します。カードをクリックすると、過去1年のHVの推移グラフが出ます。</p>
+    <p class="sub" style="margin:0 0 10px">過去の値動きの大きさを、年率換算の%で表します。まず、<b>満期と同じ長さのHV</b>（「7 まとめ」のグラフと「1σの値動き」の計算に使う値）を表示します。カードをクリックすると、過去1年のHVの推移グラフが出ます。</p>
     <div class="chart-title" id="hvMatchTitle" style="margin-top:4px">満期と同じ長さのHV（年率）</div>
     <div class="summary" id="hvMatchSummary"></div>
     <div class="summary" id="hvTheorySummary"></div>
@@ -472,7 +513,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </details>
 
   <details class="sec" id="s5" data-only="sell" open hidden>
-    <summary><span class="t"><span class="n">5</span>IV：市場のこれからの見込み</span><span class="d">根拠＝IV。市場は、過去（HV）より大きな動きを見込んでいるか。受け取るプレミアムは見合うか</span></summary>
+    <summary><span class="t"><span class="n">6</span>IV：市場のこれからの見込み</span><span class="d">根拠＝IV。市場は、過去（HV）より大きな動きを見込んでいるか。受け取るプレミアムは見合うか</span></summary>
     <div class="body">
       <div class="card in-sec" id="compareCard">
         <p class="basis basis-iv"><i></i><b>根拠：IV</b>　オプション価格に織り込まれた、市場のこれからの見込みです。実際に起きたこと（実績）ではなく、将来への見方です。</p>
@@ -484,7 +525,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
   </details>
 
   <details class="sec" id="s6" open hidden>
-    <summary><span class="t"><span class="n">6</span>まとめ：3つの見方を並べて、納得できるか確認する</span><span class="d">最低条件・実績・HV・IVを1枚に並べ、ITM確率の3点比較で、見方がそろっているかを見ます</span></summary>
+    <summary><span class="t"><span class="n">7</span>まとめ：3つの見方を並べて、納得できるか確認する</span><span class="d">最低条件・実績・HV・IVを1枚に並べ、ITM確率の3点比較で、見方がそろっているかを見ます</span></summary>
     <div class="body">
       <div class="card in-sec" id="conclusionCard">
         <h3 style="margin:0 0 8px;font-size:14px">ここまでの見方を、1枚にまとめる</h3>
@@ -512,47 +553,6 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
           <p class="sub" style="margin:8px 0 0">※IV・HV換算は「満期時に」ITMになる理論上の確率、実績は「期間中に一度でも」ITMに届いた割合です。定義が違うため、数字をそのまま同じものとして比べないでください。いずれも将来を保証するものではありません。</p>
         </div>
         </div>
-      </div>
-    </div>
-  </details>
-
-  <details class="sec" id="s7" data-only="sell" open hidden>
-    <summary><span class="t"><span class="n">7</span>リスク確認と、損切りの目安</span><span class="d">採用したプランについて、ストレステストと、IV×時間の表をタブで切り替えて見ます。損切りは、資金の2%まで</span></summary>
-    <div class="body">
-      <div class="card in-sec" id="riskCard">
-        <div class="risk-tabs" role="tablist">
-          <button type="button" class="sp-btn active" id="riskTabStress" role="tab" aria-selected="true">株価が動いた場合（ストレステスト）</button>
-          <button type="button" class="sp-btn" id="riskTabTime" role="tab" aria-selected="false">株価が変わらず時間が経った場合</button>
-        </div>
-        <div id="stressWrap">
-        <h3 style="margin:10px 0 8px;font-size:14px" id="stressTitle">株価が動いたときの現在値の目安（ストレステスト）</h3>
-        <p class="sub" id="stressIntro" style="margin:0 0 8px"></p>
-        <div class="volatility-wrap">
-          <table class="volatility-table stress-table" id="stressTable">
-            <thead id="stressHead"></thead>
-            <tbody id="stressBody"></tbody>
-          </table>
-        </div>
-        <p class="sub" id="stressNote" style="margin:8px 0 0"></p>
-
-        </div>
-        <div id="ivTimeWrap" hidden>
-        <h3 style="margin:10px 0 8px;font-size:14px" id="ivTimeTitle">IVの変化と時間の経過の影響（株価が変わらない場合）</h3>
-        <p class="sub" id="ivTimeIntro" style="margin:0 0 8px"></p>
-        <div class="volatility-wrap">
-          <table class="volatility-table stress-table" id="ivTimeTable">
-            <thead id="ivTimeHead"></thead>
-            <tbody id="ivTimeBody"></tbody>
-          </table>
-        </div>
-        <p class="sub" id="ivTimeNote" style="margin:8px 0 0"></p>
-        </div>
-      <h3 style="margin:18px 0 8px;font-size:14px" id="riskTitle">損切りの目安（資金の2%まで）とリスクリワード</h3>
-      <p class="sub" style="margin:0 0 8px">1回の損切りで許せる損失を、投資に回せるトータル資金額の2%とします。2の注文プランで、トータル資金額と発注する枚数を入れると、損失が2%になる買い戻し価格（損切りの目安の上限）が決まり、リスクリワードを出します。この価格以上になる場面には、2つの表（上のタブで切り替え）のどちらにも、「資金2%超」の印が付きます。表のセルをクリックして、損切りの場面を選ぶこともできます（任意）。</p>
-      <div class="summary" id="riskSummary"></div>
-      <p style="margin:8px 0 0"><button type="button" id="riskClearPick" class="btn-outline" hidden>場面の選択を外す</button></p>
-      <p class="sub" id="riskNote" style="margin:8px 0 0"></p>
-
       </div>
     </div>
   </details>

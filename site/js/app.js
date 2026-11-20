@@ -38,10 +38,8 @@ const priceCache = new Map();
 const PAGE = document.body.dataset.page === "buy" ? "buy" : "sell";
 const PAGE_TYPES = PAGE === "buy" ? ["call_buy", "put_buy"] : ["put_sell", "call_sell"];
 const OTHER_PAGE = PAGE === "buy" ? "index.html" : "buy.html";
-// 画面の節の名前(番号つき)。買いページは、リスク確認が3番目に来るため、売りページと番号が違う
-const SEC = PAGE === "buy"
-  ? { risk: "3 リスク確認", past: "4 過去の実績", hv: "5 HV", iv: "6 IV", summary: "7 まとめ" }
-  : { risk: "7 リスク確認", past: "3 過去の実績", hv: "4 HV", iv: "5 IV", summary: "6 まとめ" };
+// 画面の節の名前(番号つき)。売り・買いとも同じ番号
+const SEC = { risk: "3 リスク確認", past: "4 過去の実績", hv: "5 HV", iv: "6 IV", summary: "7 まとめ" };
 const isPageType = (k) => PAGE_TYPES.includes(k);
 const SELL_STORAGE_KEY = "itm-tool-state-v1";
 const BUY_STORAGE_KEY = "itm-tool-state-buy-v1";
@@ -1134,7 +1132,7 @@ function renderHvCard(t) {
       note: `ITMとみなす水準（${depthText}）が、現在値から何%離れているか、またそれがHVから見て何σ分の距離かを表します。\nσの値が大きいほど、HVから見てITMになりにくい水準です。「OTM側」は現在値よりITMの反対側、「ITM側」はすでにITMの側にあることを表します。\n水準は、現在値×権利行使価格の比率（上の入力欄の比率）から求めています。`,
     },
   ];
-  // グラフ(コーン図)の材料。売り系は「5 IV」の節に、買い系は「4 HV」の節に描く(売り系は、IVがあれば、IV基準の帯も重ねる)
+  // グラフ(コーン図)の材料。売り系は「6 IV」の節に、買い系は「5 HV」の節に描く(売り系は、IVがあれば、IV基準の帯も重ねる)
   const asOfDate = viewDates[viewDates.length - 1];
   const expiryDate = shiftTradingDays(asOfDate, -days);
   coneBase = { pastCloses: closes.slice(-61), price, days, theory, type, dist, asOfDate, expiryDate };
@@ -1155,7 +1153,7 @@ function renderHvCard(t) {
   setupStatExplain();
 }
 
-// コーン図(満期までの値動きの目安と、権利行使価格の位置)。「6 まとめ」に描く。
+// コーン図(満期までの値動きの目安と、権利行使価格の位置)。「7 まとめ」に描く。
 // 3つの見方を重ねる: ①HV基準の±1σ・±2σ(青) ②IV基準の±1σ(オレンジの点線の枠。売り系でIVが分かれば) ③過去の実績の約68%の範囲(灰色の帯)と最小・最大(点線)。
 // 材料(coneBase)は、renderHvCardが置く。IVは、renderIvHvが分かったときに渡す。
 let coneBase = null;
@@ -1189,6 +1187,9 @@ function drawCone(t, iv) {
   const strikeBe = grp === "sell" ? sellStrikeOf(t, cb.price) : effStrikeOf(t, cb.price);
   const beVal = premBe !== null && premBe > 0 ? strikeBe + (cb.type.itmWhen === "below" ? -premBe : premBe) : null;
   const beIsBarrier = isBeBase(t); // 判定の基準が損益分岐点のときは、赤い破線が損益分岐点
+  // 損切りの場面(売りページ。リスク確認の表で選んだセル)。株価が動く場面(ストレステスト)だけ、その株価の線を引く。時間の経過の場面は、株価が変わらないため、線は引かない
+  const pickedStop = grp === "sell" && lastStress && lastStress.picked ? lastStress.picked : null;
+  const stopPrice = pickedStop && pickedStop.scene !== "time" && pickedStop.price > 0 ? pickedStop.price : null;
   const side = theory.zScore >= 0 ? "外" : "内";
   const sigmaText = ivSigma !== null
     ? `HV ${Math.abs(theory.zScore).toFixed(2)}σ／IV ${Math.abs(iv.thIv.zScore).toFixed(2)}σ${side}`
@@ -1207,9 +1208,15 @@ function drawCone(t, iv) {
     focus: coneFocus,
     breakEven: beVal !== null && !beIsBarrier ? beVal : null,
     itmStrike: Math.abs(strikeBe - theory.barrier) > 0.005 ? strikeBe : null,
+    stopLine: stopPrice,
   });
   const beText = beVal !== null && !beIsBarrier ? `紫の点線＝損益分岐点（権利行使価格${cb.type.itmWhen === "below" ? "−" : "＋"}${grp === "sell" ? "受取" : "支払い"}プレミアム＝${beVal.toFixed(2)}、現在値から${((beVal / cb.price - 1) * 100).toFixed(1)}%）。` : "";
   const itmText = Math.abs(strikeBe - theory.barrier) > 0.005 ? `細い赤の実線＝ITMの水準（権利行使価格${strikeBe.toFixed(2)}）。` : "";
+  const stopText = pickedStop
+    ? (stopPrice !== null
+      ? `緑の太い破線＝「${SEC.risk}」で選んだ損切りの場面の株価（${stopPrice.toFixed(2)}、現在値から${pickedStop.shock >= 0 ? "+" : "−"}${Math.abs(pickedStop.shock * 100).toFixed(1)}%）。この株価まで動いたら損切りする、という場面です。`
+      : `「${SEC.risk}」で選んだ損切りの場面は、株価が変わらない（時間の経過による）場面のため、この図には線を引きません。`)
+    : "";
   const halfDays = Math.round(days / 2);
   const markText = days > MARK_BEFORE_EXPIRY ? `灰色の縦線＝${halfDays > MARK_BEFORE_EXPIRY ? `満期までの期間の半分（残り${halfDays}営業日。値は線の左）と、` : ""}2週間前（満期の${MARK_BEFORE_EXPIRY}営業日前。値は線の右）。それぞれ、その日の日付と、そのときのHV・IVの±1σの株価を表示します。` : "";
   const ivText = ivSigma !== null
@@ -1224,7 +1231,7 @@ function drawCone(t, iv) {
   btnF.textContent = coneFocus ? "全体表示に戻す" : "ITMの水準の拡大図を見る";
   btnF.setAttribute("aria-pressed", String(coneFocus));
   const focusText = coneFocus ? "【拡大図】縦軸を、ITMの水準と、満期時の各線（HV・IVの1σ、実績の帯と最小・最大）が近い範囲に絞っています。範囲の外の線や、いまの株価は見えません。「全体表示に戻す」で、全体に戻ります。" : "";
-  legend.textContent = `${focusText}${markText}${itmText}${beText}青の帯＝HV基準の±1σ（満期時に約68%がこの範囲）、薄い青＝±2σ（約95%）。${ivText}${empText}赤い破線＝ITMの水準、その先の薄い赤＝ITM側。HVの帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
+  legend.textContent = `${focusText}${stopText}${markText}${itmText}${beText}青の帯＝HV基準の±1σ（満期時に約68%がこの範囲）、薄い青＝±2σ（約95%）。${ivText}${empText}赤い破線＝ITMの水準、その先の薄い赤＝ITM側。HVの帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
 }
 
 function renderTodayCard(t) {
@@ -2148,18 +2155,18 @@ function renderIvHv(t, price, itmWhen) {
     },
     {
       name: "IV÷HV", value: `${ratio.toFixed(2)}倍`,
-      sub: `HV ${pct(hv)}（「4 HV」と同じ値）で割った倍率。${judge.phrase}／${meaningShort}`,
+      sub: `HV ${pct(hv)}（「5 HV」と同じ値）で割った倍率。${judge.phrase}／${meaningShort}`,
       note: `IVがHVの何倍かを見て、市場のこれからの見込み（IV）が、過去の実際の値動き（HV）より高めか低めかを判断する目安です。IVが高いほど、オプションの価格（プレミアム）も高くなります。\n1.2倍以上＝高め（受け取るプレミアムは多め。ただし、市場は大きな動きを見込んでいるので、リスクも高め）／0.8倍以下＝低め（受け取るプレミアムは少なめ。ただし、市場は穏やかな動きを見込んでいる）／その間＝同程度。この基準は、このツールの簡易的なものです。
 「受け取る額が多い」ことと「取引が得になる」ことは別です。実際の値動きが、IVの見込みより小さく収まれば、売りは得になります。\n一般に、IVはHVより少し高めになりやすいため、「同程度」の幅を広めに取っています。`,
     },
   ];
-  // 1σの値動き(IV基準)。「4 HV」の同名のカードと同じ計算で、HVの代わりにIVを使う。
+  // 1σの値動き(IV基準)。「5 HV」の同名のカードと同じ計算で、HVの代わりにIVを使う。
   if (thIv) {
     items.push({
       name: "1σの値動き", value: `±${thIv.sigmaAmount.toFixed(2)}ドル`, suffix: "（IV基準）",
       sub: `満期まで。±${pct(thIv.sigmaPct)}（IV ${pct(iv)}×√(${days}/252)）`,
       note: `市場の見込み（IV）から見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。
-1σ＝現在値×IV×√(営業日数÷252)。「4 HV」の1σの値動き（HV基準）と同じ計算で、HVの代わりにIVを使っています。IVのほうが大きければ、1σも広くなります。
+1σ＝現在値×IV×√(営業日数÷252)。「5 HV」の1σの値動き（HV基準）と同じ計算で、HVの代わりにIVを使っています。IVのほうが大きければ、1σも広くなります。
 IVは、売り建て側の1つの値を全体に当てはめた目安です。将来を保証するものではありません。`,
     });
   }
@@ -2479,6 +2486,7 @@ function renderRiskPlan(t) {
   els.riskSummary.innerHTML = items.map((it) => statCardHtml(it)).join("");
   els.riskClearPick.hidden = !ctx.picked;
   els.riskNote.textContent = "損切りの目安は、判断の材料のひとつです。実際に損切りするかどうかは、ご自身で決めてください。" + (ctx.qtyInput !== null ? ` 発注枚数は、入力した${ctx.qtyInput}枚で計算しています。` : "");
+  if (lastCone) drawCone(lastCone.t, lastCone.iv); // 選んだ損切りの場面を、コーン図に反映する
 }
 
 // 「注文まとめ」: 分析結果をもとに、最終的にどのようなP売り注文をして、利確・損切りの指値をどうするかを、1か所にまとめる
@@ -2879,7 +2887,7 @@ function renderTopBand(t) {
   els.bandRow2.innerHTML = parts.join("");
 }
 
-// 「6 まとめ」の表。1〜5で見たことを、思考の順(前提の値動き → 過去の実績 → HV → IV)に1行ずつ並べる。
+// 「7 まとめ」の表。1〜5で見たことを、思考の順(前提の値動き → 過去の実績 → HV → IV)に1行ずつ並べる。
 // 数字は、各カードが計算したものをそのまま使う(ここでは再計算しない)。確率の比較(IV換算・HV換算・実績)は、同じ節の「3点比較」に任せる。
 function renderConclusion(t) {
   const body = els.conclBody;
@@ -3099,7 +3107,7 @@ function renderPremiumJudge(t, price, strike, hv) {
   el.className = "field-hint";
 }
 
-// 買いページの「5 IV」: IVの水準・IV÷HV・IV基準の1σ・理論プレミアム価格(HV計算)を、買い手向けの読み方で出す。
+// 買いページの「6 IV」: IVの水準・IV÷HV・IV基準の1σ・理論プレミアム価格(HV計算)を、買い手向けの読み方で出す。
 // IVは、入力(任意)があればその値、なければ支払いプレミアム額から逆算した値。どちらもなければ表示しない(コーン図のIVの帯も出ない)。
 function renderBuyIv(t, price, strike) {
   if (!els.ivHvSummary) return;
