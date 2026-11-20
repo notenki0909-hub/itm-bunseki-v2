@@ -324,6 +324,51 @@ IVとプレミアムの両方を入力しているときは、金利は使いま
     <h3 style="margin:14px 0 8px;font-size:14px">損益分岐点（満期時の株価）</h3>
     <div class="summary" id="rrBreakEvenSummary"></div>
       </div>
+  <div id="periodCompareCard" class="card in-sec" hidden>
+    <h3 style="margin:0 0 8px;font-size:14px">集計期間を変えると、ITM発生率はどう変わるか（慎重な見方の基準）</h3>
+    <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　いまの注文プラン（権利行使価格・満期・判定の基準）のまま、集計期間だけを変えた結果です。</p>
+    <div class="volatility-wrap"><table class="volatility-table bs-table">
+      <thead><tr><th>集計期間</th><th>エントリー件数</th><th>期間中に一度でもITM<br>（ITM発生率）</th><th>満期時にITM</th><th></th></tr></thead>
+      <tbody id="periodCompareBody"></tbody>
+    </table></div>
+    <p class="sub" id="periodCompareNote" style="margin:8px 0 0"></p>
+  </div>
+
+  <div id="ratioCard" class="card in-sec" hidden>
+    <h2 style="margin:0 0 6px;font-size:16px">他の権利行使価格なら、実績はどうか（推奨比率の逆算・採用）</h2>
+    <p class="basis basis-act"><i></i><b>基準：過去の実績</b>　この逆算で使う「ITM発生率」は、下の「過去の実績」（分析結果）と同じ計算です。<b>IV・HVは基準に使っていません</b>（右の列に、参考として並べています）。</p>
+    <p class="sub" style="margin:0 0 10px">「ITM発生率を◯%以下にしたい」から、<b>条件に合う権利行使価格（整数）</b>を探します。1%刻みの比率に当たる整数の権利行使価格を、現在値に近い側から並べ、過去の実績（分析結果と同じ計算）でITM発生率を求めて、条件を満たす<b>最も現在値に近い権利行使価格</b>（受取が多くなる側）を選びます。満期日・判定する深さ・集計期間は、いまの入力のままです。</p>
+    <div class="form-row">
+      <div class="field">
+        <label for="ratioTargetInput">目標：ITM発生率（%以下：過去データから算出）</label>
+        <input id="ratioTargetInput" type="number" step="0.5" min="0" max="100" value="5">
+      </div>
+      <div class="field">
+        <label for="ratioMinPremInput">受取プレミアムの下限（講座は0.45）</label>
+        <input id="ratioMinPremInput" type="number" step="0.01" min="0" value="0.45">
+      </div>
+    </div>
+    <p class="sub" id="ratioPremHint" style="margin:-4px 0 10px"></p>
+    <div class="summary" id="ratioSummary"></div>
+    <div id="ratioActions" style="margin:0 0 12px"></div>
+    <div class="chart-title">比率ごとの一覧</div>
+    <div class="ratio-step" id="ratioStepBtns" role="group" aria-label="一覧の権利行使価格の刻み">
+      <span class="field-hint">表示する権利行使価格の刻み：</span>
+      <button type="button" class="sp-btn" data-step="ratio">比率1%ごと</button>
+      <button type="button" class="sp-btn" data-step="1">1ドル</button>
+      <button type="button" class="sp-btn" data-step="5">5ドル</button>
+      <button type="button" class="sp-btn" data-step="10">10ドル</button>
+    </div>
+    <div class="volatility-wrap ratio-table-wrap">
+      <table class="volatility-table ratio-table">
+        <thead><tr><th>権利行使価格<br>（比率）</th><th>ITM発生率<br>（実績）と判定</th><th>参考（基準外）<br>満期時ITM率(HV換算)<br>受取(理論：IV計算)</th><th></th></tr></thead>
+        <tbody id="ratioBody"></tbody>
+      </table>
+    </div>
+    <p class="sub" id="ratioNote" style="margin:8px 0 0"></p>
+  </div>
+
+  <p id="periodBasisNote" class="sub period-basis-note" hidden></p>
     </div>
   </details>
 
@@ -431,16 +476,6 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
     <p style="margin:14px 0 0"><button id="openDetailBtn" type="button" class="btn-outline">詳細マトリクスを別ページで見る（元Excel形式）</button></p>
   </div>
 
-  <div id="periodCompareCard" class="card in-sec" hidden>
-    <h3 style="margin:0 0 8px;font-size:14px">集計期間を変えると、ITM発生率はどう変わるか（慎重な見方の基準）</h3>
-    <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　いまの注文プラン（権利行使価格・満期・判定の基準）のまま、集計期間だけを変えた結果です。</p>
-    <div class="volatility-wrap"><table class="volatility-table bs-table">
-      <thead><tr><th>集計期間</th><th>エントリー件数</th><th>期間中に一度でもITM<br>（ITM発生率）</th><th>満期時にITM</th><th></th></tr></thead>
-      <tbody id="periodCompareBody"></tbody>
-    </table></div>
-    <p class="sub" id="periodCompareNote" style="margin:8px 0 0"></p>
-  </div>
-
   <div id="condResultCard" class="card in-sec" hidden>
     <h3 style="margin:0 0 8px;font-size:14px">1の「エントリー条件」に当てはまった日だけに絞った、過去の実績</h3>
     <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　上の実績（全エントリー日）のうち、1の「エントリー条件」に当てはまった日だけに絞って数えたものです。</p>
@@ -462,41 +497,6 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
         <div class="stat-head"><span class="stat-name">本日はこの条件に：</span><span class="badge" id="todayMatchBadge">―</span></div></div>
     </div>
   </div>
-
-  <div id="ratioCard" class="card in-sec" hidden>
-    <h2 style="margin:0 0 6px;font-size:16px">他の権利行使価格なら、実績はどうか（推奨比率の逆算・採用）</h2>
-    <p class="basis basis-act"><i></i><b>基準：過去の実績</b>　この逆算で使う「ITM発生率」は、上の実績（分析結果）と同じ計算です。<b>IV・HVは基準に使っていません</b>（右の列に、参考として並べています）。</p>
-    <p class="sub" style="margin:0 0 10px">「ITM発生率を◯%以下にしたい」から、<b>条件に合う権利行使価格（整数）</b>を探します。1%刻みの比率に当たる整数の権利行使価格を、現在値に近い側から並べ、過去の実績（分析結果と同じ計算）でITM発生率を求めて、条件を満たす<b>最も現在値に近い権利行使価格</b>（受取が多くなる側）を選びます。満期日・判定する深さ・集計期間は、いまの入力のままです。</p>
-    <div class="form-row">
-      <div class="field">
-        <label for="ratioTargetInput">目標：ITM発生率（%以下：過去データから算出）</label>
-        <input id="ratioTargetInput" type="number" step="0.5" min="0" max="100" value="5">
-      </div>
-      <div class="field">
-        <label for="ratioMinPremInput">受取プレミアムの下限（講座は0.45）</label>
-        <input id="ratioMinPremInput" type="number" step="0.01" min="0" value="0.45">
-      </div>
-    </div>
-    <p class="sub" id="ratioPremHint" style="margin:-4px 0 10px"></p>
-    <div class="summary" id="ratioSummary"></div>
-    <div id="ratioActions" style="margin:0 0 12px"></div>
-    <div class="chart-title">比率ごとの一覧</div>
-    <div class="ratio-step" id="ratioStepBtns" role="group" aria-label="一覧の権利行使価格の刻み">
-      <span class="field-hint">表示する権利行使価格の刻み：</span>
-      <button type="button" class="sp-btn" data-step="ratio">比率1%ごと</button>
-      <button type="button" class="sp-btn" data-step="1">1ドル</button>
-      <button type="button" class="sp-btn" data-step="5">5ドル</button>
-      <button type="button" class="sp-btn" data-step="10">10ドル</button>
-    </div>
-    <div class="volatility-wrap ratio-table-wrap">
-      <table class="volatility-table ratio-table">
-        <thead><tr><th>権利行使価格<br>（比率）</th><th>ITM発生率<br>（実績）と判定</th><th>参考（基準外）<br>満期時ITM率(HV換算)<br>受取(理論：IV計算)</th><th></th></tr></thead>
-        <tbody id="ratioBody"></tbody>
-      </table>
-    </div>
-    <p class="sub" id="ratioNote" style="margin:8px 0 0"></p>
-  </div>
-
 
   <details class="mini" id="volDetails" hidden>
     <summary>参考：過去の値動きの大きさ（変動幅の統計）を見る</summary>

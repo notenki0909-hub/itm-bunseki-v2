@@ -340,6 +340,7 @@ const els = {
   premJudge: document.getElementById("premJudge"),
   buyStudyCard: document.getElementById("buyStudyCard"),
   periodCompareCard: document.getElementById("periodCompareCard"),
+  periodBasisNote: document.getElementById("periodBasisNote"),
   periodCompareBody: document.getElementById("periodCompareBody"),
   periodCompareNote: document.getElementById("periodCompareNote"),
   buyStudyBody: document.getElementById("buyStudyBody"),
@@ -467,6 +468,7 @@ const els = {
 function hideBuyCards() {
   for (const c of [els.buyStudyCard, els.buyRiskCard, els.buyPlanCard]) if (c) c.hidden = true;
   if (els.periodCompareCard) els.periodCompareCard.hidden = true;
+  if (els.periodBasisNote) els.periodBasisNote.hidden = true;
 }
 
 function activeTab() {
@@ -1763,7 +1765,7 @@ function renderOrderExit(t, asOfDate) {
       note: "利確の支払い価格で決済できた場合に、手元に残る利益額（1株あたり）です。受取プレミアム×利確割合。手数料は含みません。",
     },
     {
-      name: "ロスカットの逆指値価格",
+      name: "ロスカットの目安となる逆指値",
       value: hasPremium ? `${money(premium * STOP_MULTIPLE_MIN)}〜${money(premium * STOP_MULTIPLE_MAX)}` : "―",
       sub: hasPremium ? `受取${money(premium)}の${STOP_MULTIPLE_MIN}〜${STOP_MULTIPLE_MAX}倍` : noInput,
       note: "ロスカット（損切り）を逆指値の注文で出すときの価格の目安です。講座の基準は、受取プレミアムの1.9〜2倍です。\n現在値がこの価格を超えたときに、買い戻しの注文が出ます。\n逆指値は、発動した後に指定価格より不利な価格で約定することがあります。\nロスカットを入れるかどうか、倍率を何倍にするかは、ご自身のリスク許容度で決めてください。",
@@ -3029,7 +3031,7 @@ function renderPeriodCompare(t) {
   const card = els.periodCompareCard;
   if (!card) return;
   const { rows, basis, group, type } = periodCompareRows(t);
-  if (!rows.length) { card.hidden = true; return; }
+  if (!rows.length) { card.hidden = true; if (els.periodBasisNote) els.periodBasisNote.hidden = true; return; }
   const f = (v) => (v === null || v === undefined ? "―" : (v * 100).toFixed(1) + "%");
   const tag = group === "sell" ? "最も高い（慎重な見方）" : "最も低い（慎重な見方）";
   els.periodCompareBody.innerHTML = rows.map((r) => {
@@ -3049,6 +3051,10 @@ function renderPeriodCompare(t) {
   }
   els.periodCompareNote.textContent = `${note}6ヶ月は、期間が短く、独立した場面が少ないため、基準から除いています。集計期間を自分で選ばないときは、分析のたびに、基準の期間を初期値にします。`;
   card.hidden = false;
+  if (els.periodBasisNote) {
+    els.periodBasisNote.textContent = `※「${SEC.past}」以下の、過去の実績（全エントリー日・「1 最低条件」に当てはまった日だけに絞った実績・コーン図の灰色の帯）は、ここで選んだ集計期間（いまは${(PERIOD_OPTIONS.find((p) => p.days === t.periodDays) || { label: t.periodDays + '営業日' }).label}）を元に算出します。HVは、集計期間とは別に、取得済みのデータから計算します。`;
+    els.periodBasisNote.hidden = false;
+  }
 }
 
 // 入力したIVから計算した理論価格が、支払いプレミアムと大きく離れているときの注意文(離れていなければ空文字)
