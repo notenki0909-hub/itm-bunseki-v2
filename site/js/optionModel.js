@@ -12,15 +12,17 @@ export const TRADING_DAYS_PER_YEAR = 252;
  * @param {number} K 権利行使価格
  * @param {number} T 満期までの年数
  * @param {number} sigma IV(年率。0.3=30%)
+ * @param {number} [r=0] 金利(年率。0.04=4%)。買いページが、米国債利回りを入れるときに使う。既定は0(従来どおり)
  */
-export function bsPrice(kind, S, K, T, sigma) {
+export function bsPrice(kind, S, K, T, sigma, r = 0) {
   if (!(T > 0) || !(sigma > 0)) return Math.max(0, kind === "call" ? S - K : K - S);
   const v = sigma * Math.sqrt(T);
-  const d1 = (Math.log(S / K) + 0.5 * sigma * sigma * T) / v;
+  const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / v;
   const d2 = d1 - v;
+  const disc = Math.exp(-r * T);
   return kind === "call"
-    ? S * normalCdf(d1) - K * normalCdf(d2)
-    : K * normalCdf(-d2) - S * normalCdf(-d1);
+    ? S * normalCdf(d1) - K * disc * normalCdf(d2)
+    : K * disc * normalCdf(-d2) - S * normalCdf(-d1);
 }
 
 /**
@@ -28,10 +30,10 @@ export function bsPrice(kind, S, K, T, sigma) {
  * 単体は売り脚のみ。スプレッド(ブルプット/ベアコール)は、売り脚の価格−買い脚の価格(買い脚は買い建て側)。
  * @param {{kind:'put'|'call', S:number, strikeSell:number, strikeBuy:number|null, T:number, ivSell:number, ivBuy:number}} p
  */
-export function positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell, ivBuy }) {
-  const sell = bsPrice(kind, S, strikeSell, T, ivSell);
+export function positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell, ivBuy, r = 0 }) {
+  const sell = bsPrice(kind, S, strikeSell, T, ivSell, r);
   if (strikeBuy === null) return sell;
-  return sell - bsPrice(kind, S, strikeBuy, T, ivBuy);
+  return sell - bsPrice(kind, S, strikeBuy, T, ivBuy, r);
 }
 
 /**
@@ -40,9 +42,9 @@ export function positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell, ivBuy
  * (スプレッドの価格はIVが非常に高いと下がるため、低い方の解を採用する。)
  * 見つからない(受取プレミアムがモデルで再現できない)ときはnull。
  */
-export function solveFlatIv({ kind, S, strikeSell, strikeBuy, T, premium }) {
+export function solveFlatIv({ kind, S, strikeSell, strikeBuy, T, premium, r = 0 }) {
   if (!(premium > 0) || !(T > 0)) return null;
-  const f = (iv) => positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell: iv, ivBuy: iv });
+  const f = (iv) => positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell: iv, ivBuy: iv, r });
   let lo = 0.01;
   if (f(lo) >= premium) return lo;
   let hi = null;

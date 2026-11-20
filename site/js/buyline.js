@@ -130,15 +130,15 @@ export function computeBuyStudy({ closes, highs, lows, kind, ratio, window, xLis
  * オプションの価値は、満期までの日数・IVはそのままで、株価だけが線に動いた(時間の経過なし)としたBlack-Scholesの目安。
  * @param {object} p {price, atr, kind, strike, days, premium, iv(年率。nullならpremiumから逆算), capital(null可), mults}
  */
-export function computeFixedLineTable({ price, atr, kind, strike, days, premium, iv, capital, contracts = null, mults = BUY_ATR_MULTS }) {
+export function computeFixedLineTable({ price, atr, kind, strike, days, premium, iv, capital, contracts = null, mults = BUY_ATR_MULTS, rate = 0 }) {
   const T = days / TRADING_DAYS_PER_YEAR;
   let useIv = iv;
   let ivSource = "input";
   if (!(useIv > 0) && premium > 0) {
-    useIv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: null, T, premium });
+    useIv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: null, T, premium, r: rate });
     ivSource = "calibrated";
   }
-  const pay = premium > 0 ? premium : (useIv > 0 ? bsPrice(kind, price, strike, T, useIv) : null);
+  const pay = premium > 0 ? premium : (useIv > 0 ? bsPrice(kind, price, strike, T, useIv, rate) : null);
   const riskMoney = capital > 0 ? capital * 0.02 : null;
   // 資金の2%の損切り: 発注する枚数(未入力なら1枚)で、オプションの損失が資金の2%になる株価の位置(線)。
   // 全損しても2%に収まる(1株あたりの損失の上限が、支払いプレミアム以上)ときは、2%の線はない。
@@ -147,7 +147,7 @@ export function computeFixedLineTable({ price, atr, kind, strike, days, premium,
     const nCon = contracts > 0 ? contracts : 1;
     const allowed = riskMoney / (100 * nCon);
     if (allowed < pay) {
-      const f = (L) => pay - bsPrice(kind, L, strike, T, useIv) - allowed; // 損失が上限を超えているほど正
+      const f = (L) => pay - bsPrice(kind, L, strike, T, useIv, rate) - allowed; // 損失が上限を超えているほど正
       // いまの価格で、すでに損失が上限を超えているとき(入力したIVの理論価格が、支払いプレミアムより、ずっと低いとき)
       const already = f(price) > 0;
       let lo = kind === "call" ? price * 0.05 : price;
@@ -159,9 +159,9 @@ export function computeFixedLineTable({ price, atr, kind, strike, days, premium,
       }
       const L2 = kind === "call" ? Math.min(price, (lo + hi) / 2) : Math.max(price, (lo + hi) / 2);
       const move2 = Math.abs(price - L2);
-      riskRow = already ? { isRisk: true, alreadyOver: true, contracts: nCon, nowLoss: pay - bsPrice(kind, price, strike, T, useIv) } : {
+      riskRow = already ? { isRisk: true, alreadyOver: true, contracts: nCon, nowLoss: pay - bsPrice(kind, price, strike, T, useIv, rate) } : {
         isRisk: true, contracts: nCon, mult: move2 / atr, line: L2, movePct: L2 / price - 1, moveAmount: move2,
-        value: bsPrice(kind, L2, strike, T, useIv), optLoss: allowed, optLossPct: allowed / pay,
+        value: bsPrice(kind, L2, strike, T, useIv, rate), optLoss: allowed, optLossPct: allowed / pay,
         maxContracts: nCon, maxShares: move2 > 0 ? Math.floor(riskMoney / move2) : null,
       };
     }
@@ -171,7 +171,7 @@ export function computeFixedLineTable({ price, atr, kind, strike, days, premium,
     rows: mults.map((m) => {
       const line = fixedLinePrice(price, atr, m, kind);
       const move = Math.abs(price - line);
-      const value = useIv > 0 && line > 0 ? bsPrice(kind, line, strike, T, useIv) : null;
+      const value = useIv > 0 && line > 0 ? bsPrice(kind, line, strike, T, useIv, rate) : null;
       const optLoss = value !== null && pay !== null ? Math.max(0, pay - value) : null; // 1株あたり(オプション)
       return {
         mult: m, line, movePct: line / price - 1, moveAmount: move,

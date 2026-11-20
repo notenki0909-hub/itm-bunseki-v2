@@ -219,6 +219,14 @@
 倍率を大きくすると、手仕舞いになりにくく、平均と勝率は上がりますが、最悪の損失は深くなります（過去の検証）。1〜2倍は、すぐに手仕舞いになりやすく、あまり使われません。">手仕舞いの線（ATR倍率）</label>
         <select id="buyAtrMultSelect"><option value="2">2倍</option><option value="3" selected>3倍</option><option value="4">4倍</option><option value="5">5倍</option></select>
       </div>
+      <div class="field" data-only="buy">
+        <label for="buyRateInput" data-target="orderExplain"
+          data-note="金利（年%）です。米国債の利回り（無リスク金利）を使います。
+コールは、満期に権利行使価格を払うのが先になるため、金利が高いほど、価格が高くなります（プットは逆に安くなります）。満期が長いほど、影響が大きくなります（満期が約7ヶ月のコールで、金利4%なら、約7ドル）。証券会社のオプションチェーンのIVは、金利を含めて計算された値なので、ここに金利を入れると、IV・理論価格・リスク確認が、証券会社の値に近づきます。
+空欄のときは、米国財務省が公表する米国債利回り（Daily Treasury Par Yield Curve Rates）から、満期の長さに合わせて、自動で入れます。手で入れた値は、その値を使います（空欄にすると、自動に戻ります）。">金利（年%）</label>
+        <input id="buyRateInput" type="number" step="0.01" min="0" placeholder="自動（米国債利回り）">
+        <span class="field-hint" id="buyRateHint"></span>
+      </div>
       <div data-only="sell">
         <div class="field" data-only="sp">
           <label for="rrIvBuyInput" data-target="orderExplain"
