@@ -2,12 +2,15 @@
 // 出典: U.S. Department of the Treasury「Daily Treasury Par Yield Curve Rates」(無料・APIキー不要)。
 // 買いページが、満期の長さに合わせて補間し、金利(年%)の入力欄に、自動で入れるために使う。
 //
-// - 取得はサーバー側で行い、KV(PRICE_CACHE)に保存して、6時間は再取得しない(財務省の更新は、営業日に1回)。
+// - 取得はサーバー側で行い、KV(PRICE_CACHE)に保存する。その日(米国東部時間の日付)の最初の利用のときだけ財務省にアクセスし、
+//   同じ日の2回目以降は、保存した値を返す(財務省の更新は、営業日に1回のため)。利用がない日は、アクセスしない。
 // - KVが未設定でも動く(その場合は、毎回取得する)。
 // - 取得に失敗したときは、古い保存値があれば、それを返す。なければ、エラー(クライアントは手入力に戻る)。
 // - 個人情報・入力内容は、一切、外部に送らない(公開の金利を、取得するだけ)。
 const CACHE_KEY = "treasury-yield-curve";
-const CACHE_MS = 6 * 60 * 60 * 1000;
+// 米国東部時間の日付(YYYY-MM-DD)。保存した日と同じなら、再取得しない
+const ET_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+const etDay = (ms) => ET_DAY.format(new Date(ms));
 const BASE = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value_month=";
 
 // タグ名(BC_1MONTH・BC_1_5MONTH・BC_1YEAR など)を、月数に直す
@@ -45,7 +48,7 @@ export async function onRequestGet(context) {
   const kv = env.PRICE_CACHE;
   const now = Date.now();
   const cached = kv ? await kv.get(CACHE_KEY, "json") : null;
-  if (cached && now - cached.fetchedAt < CACHE_MS) return json(cached, 200);
+  if (cached && cached.fetchedDay === etDay(now)) return json(cached, 200);
 
   let result = null;
   try {
@@ -63,7 +66,7 @@ export async function onRequestGet(context) {
     if (cached) return json(cached, 200); // 失敗したときは、古い保存値
     return json({ error: "rates unavailable" }, 502);
   }
-  const body = { ...result, fetchedAt: now, source: "U.S. Treasury Daily Par Yield Curve Rates" };
+  const body = { ...result, fetchedAt: now, fetchedDay: etDay(now), source: "U.S. Treasury Daily Par Yield Curve Rates" };
   if (kv) context.waitUntil(kv.put(CACHE_KEY, JSON.stringify(body), { expirationTtl: 7 * 24 * 60 * 60 }));
   return json(body, 200);
 }
