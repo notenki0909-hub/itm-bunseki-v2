@@ -3175,7 +3175,7 @@ function renderBuyTime(t, price, strike, asOfDate, tbl, kind, capital, ivSrc) {
   const limit = capital > 0 ? capital * 0.02 : null;
   const money = (v) => v.toFixed(2);
   const dateOf = (remain) => shiftTradingDays(asOfDate, -(days - remain)).slice(5);
-  els.buyTimeIntro.textContent = `株価は今の水準（${money(price)}）のまま動かず、IVだけが変わり、時間が経った場合の、買ったオプションの価格（太字）と、支払ったプレミアム（${money(pay)}）に対する損益です（1枚＝100株あたり）。買い手は、時間が経つと、株価が動かなくても価格が下がります（時間価値の減少）。`
+  els.buyTimeIntro.textContent = `株価は今の水準（${money(price)}）のまま動かず、IVだけが変わり、時間が経った場合の、買ったオプションの価格（太字）と、支払ったプレミアム（${money(pay)}）に対する損益です（1枚＝100株あたり）。買い手は、時間が経つと、株価が動かなくても価格が下がります（時間価値の減少）。価格は、残り日数ごとにBlack-Scholesで計算し直した値で、日ごとのセータ（1日あたりの減少額。満期に近いほど大きくなります）を足し合わせた値と一致します。`
     + (limit !== null ? `「資金2%超」は、${qty}枚${t.planQty > 0 ? "" : "（枚数が未入力のため1枚）"}で、損失が資金の2%（${limit.toLocaleString("ja-JP", { maximumFractionDigits: 0 })}ドル）以上になるセルです。` : "");
   els.buyTimeHead.innerHTML = `<tr><th>IVの変化</th>${cols.map((c) => `<th>${c.name}<br><span class="stress-sub">残り${c.remain}営業日（${dateOf(c.remain)}）</span></th>`).join("")}</tr>`;
   els.buyTimeBody.innerHTML = BUY_TIME_IV_CHANGES.filter((up) => iv0 + up >= 0.02).map((up) => {
