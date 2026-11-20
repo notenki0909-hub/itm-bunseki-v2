@@ -1159,6 +1159,26 @@ function renderHvCard(t) {
 let coneBase = null;
 // 「ITMの水準の拡大図」の表示状態(ボタンで切り替える)。ITMの水準のまわり(満期時の各線が重なりやすい範囲)に、縦軸を絞る。
 let coneFocus = false;
+// 損失が資金の2%になる買い戻し価格(オプションの価格)を、株価に換算する。
+// リスク確認の表と同じ計算(IV・残り営業日数は、いまのまま)で、いまの株価から不利な向き(プット売り=下、コール売り=上)へ動かし、
+// ポジションの買い戻し価格(positionValue)が、その価格に届く株価を二分法で求める。届かない(スプレッドの最大損失でも2%以内など)ときはnull。
+function stopPriceFromLimit(model, ivSell, ivBuy, target) {
+  if (!model || !(target > 0)) return null;
+  const { kind, price, strikeSell, strikeBuy, T } = model;
+  const val = (S) => positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell, ivBuy });
+  const down = kind === "put";
+  const far = down ? price * 0.02 : price * 4;
+  if (val(far) < target) return null;
+  if (val(price) >= target) return price;
+  let lo = down ? far : price;
+  let hi = down ? price : far;
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    const reached = val(mid) >= target;
+    if (down ? reached : !reached) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
 let lastCone = null; // 直近のdrawConeの引数(表示の切替での描き直し用)
 function setupConeFocus() {
   const btn = document.getElementById("coneFocusBtn");
@@ -1190,6 +1210,9 @@ function drawCone(t, iv) {
   // 損切りの場面(売りページ。リスク確認の表で選んだセル)。株価が動く場面(ストレステスト)だけ、その株価の線を引く。時間の経過の場面は、株価が変わらないため、線は引かない
   const pickedStop = grp === "sell" && lastStress && lastStress.picked ? lastStress.picked : null;
   const stopPrice = pickedStop && pickedStop.scene !== "time" && pickedStop.price > 0 ? pickedStop.price : null;
+  // 資金2%の線: 損失が資金の2%になる買い戻し価格(リスク確認の「損切りの買い戻し価格（2%の上限）」)を、株価に換算した値
+  const limitOk = grp === "sell" && lastRisk && lastRisk.limitValue > 0 && lastStress && lastStress.meta && lastStressModel;
+  const limitPrice = limitOk ? stopPriceFromLimit(lastStressModel, lastStress.meta.ivSell, lastStress.meta.ivBuy, lastRisk.limitValue) : null;
   const side = theory.zScore >= 0 ? "外" : "内";
   const sigmaText = ivSigma !== null
     ? `HV ${Math.abs(theory.zScore).toFixed(2)}σ／IV ${Math.abs(iv.thIv.zScore).toFixed(2)}σ${side}`
@@ -1209,6 +1232,7 @@ function drawCone(t, iv) {
     breakEven: beVal !== null && !beIsBarrier ? beVal : null,
     itmStrike: Math.abs(strikeBe - theory.barrier) > 0.005 ? strikeBe : null,
     stopLine: stopPrice,
+    limitLine: limitPrice,
   });
   const beText = beVal !== null && !beIsBarrier ? `紫の点線＝損益分岐点（権利行使価格${cb.type.itmWhen === "below" ? "−" : "＋"}${grp === "sell" ? "受取" : "支払い"}プレミアム＝${beVal.toFixed(2)}、現在値から${((beVal / cb.price - 1) * 100).toFixed(1)}%）。` : "";
   const itmText = Math.abs(strikeBe - theory.barrier) > 0.005 ? `細い赤の実線＝ITMの水準（権利行使価格${strikeBe.toFixed(2)}）。` : "";
@@ -1216,6 +1240,11 @@ function drawCone(t, iv) {
     ? (stopPrice !== null
       ? `緑の太い破線＝「${SEC.risk}」で選んだ損切りの場面の株価（${stopPrice.toFixed(2)}、現在値から${pickedStop.shock >= 0 ? "+" : "−"}${Math.abs(pickedStop.shock * 100).toFixed(1)}%）。この株価まで動いたら損切りする、という場面です。`
       : `「${SEC.risk}」で選んだ損切りの場面は、株価が変わらない（時間の経過による）場面のため、この図には線を引きません。`)
+    : "";
+  const limitText = limitOk
+    ? (limitPrice !== null
+      ? `緑の細い点線＝損失が資金の2%になる株価（${limitPrice.toFixed(2)}、現在値から${limitPrice >= cb.price ? "+" : "−"}${Math.abs((limitPrice / cb.price - 1) * 100).toFixed(1)}%）。「${SEC.risk}」の「損切りの買い戻し価格（2%の上限）${lastRisk.limitValue.toFixed(2)}」を、IV・残りの営業日数がいまのままだとして、株価に直した値です。時間が経つ・IVが上がるときは、もっと手前の株価で2%に届きます。`
+      : `「${SEC.risk}」の「損切りの買い戻し価格（2%の上限）」は、株価がどこまで動いても届かない価格（スプレッドの最大損失でも、損失が資金の2%以内に収まる）ため、資金2%の線は引きません。`)
     : "";
   const halfDays = Math.round(days / 2);
   const markText = days > MARK_BEFORE_EXPIRY ? `灰色の縦線＝${halfDays > MARK_BEFORE_EXPIRY ? `満期までの期間の半分（残り${halfDays}営業日。値は線の左）と、` : ""}2週間前（満期の${MARK_BEFORE_EXPIRY}営業日前。値は線の右）。それぞれ、その日の日付と、そのときのHV・IVの±1σの株価を表示します。` : "";
@@ -1231,7 +1260,7 @@ function drawCone(t, iv) {
   btnF.textContent = coneFocus ? "全体表示に戻す" : "ITMの水準の拡大図を見る";
   btnF.setAttribute("aria-pressed", String(coneFocus));
   const focusText = coneFocus ? "【拡大図】縦軸を、ITMの水準と、満期時の各線（HV・IVの1σ、実績の帯と最小・最大）が近い範囲に絞っています。範囲の外の線や、いまの株価は見えません。「全体表示に戻す」で、全体に戻ります。" : "";
-  legend.textContent = `${focusText}${stopText}${markText}${itmText}${beText}青の帯＝HV基準の±1σ（満期時に約68%がこの範囲）、薄い青＝±2σ（約95%）。${ivText}${empText}赤い破線＝ITMの水準、その先の薄い赤＝ITM側。HVの帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
+  legend.textContent = `${focusText}${stopText}${limitText}${markText}${itmText}${beText}青の帯＝HV基準の±1σ（満期時に約68%がこの範囲）、薄い青＝±2σ（約95%）。${ivText}${empText}赤い破線＝ITMの水準、その先の薄い赤＝ITM側。HVの帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
 }
 
 function renderTodayCard(t) {
@@ -2325,6 +2354,7 @@ const riskCapital = () => ratioSetting(RISK_CAPITAL_KEY, 0, 1e9);
 
 // ストレステスト・リスクリワード・注文まとめの間で受け渡す、直近の計算結果
 let lastStress = null; // {picked, received, meta, limitValue}。計算できなかったときはnull
+let lastStressModel = null; // コーン図の株価換算用 {kind, price, strikeSell, strikeBuy, T}
 let lastRisk = null;
 
 // 損失が資金の2%になる買い戻し価格(=損切りの目安の上限)。表の「資金2%超」の印に使う。
@@ -2604,6 +2634,7 @@ function renderStressTest(t, price, itmWhen) {
   const dirText = kind === "put" ? "下がった" : "上がった";
   els.stressIntro.textContent = `株価が${dirText}とき（IVも同時に上がる場合を含む）に、いま買い戻すのに必要な価格（現在値）と、そのときの損益の目安です。満期まで${t.windowDays}営業日の状態を基準にしています。`;
   lastStress = null;
+  lastStressModel = null;
   const clear = (msg) => {
     els.stressHead.innerHTML = "";
     els.stressBody.innerHTML = "";
@@ -2618,6 +2649,7 @@ function renderStressTest(t, price, itmWhen) {
   const strikeSell = sellStrikeOf(t, price);
   const strikeBuy = isSp ? (kind === "put" ? strikeSell - t.rrSpreadWidth : strikeSell + t.rrSpreadWidth) : null;
   if (strikeBuy !== null && !(strikeBuy > 0)) { clear("権利行使価格の差額が大きすぎます（買い建て側の権利行使価格が0以下になります）。"); return; }
+  lastStressModel = { kind, price, strikeSell, strikeBuy, T: t.windowDays / TRADING_DAYS_PER_YEAR };
   const entries = STRESS_SHOCK_STEPS.map((s) => ({ shock: s * sign, key: String(s * sign) }));
   const res = stressTest({
     kind, price, strikeSell, strikeBuy, days: t.windowDays, premium, ivSell, ivBuy,

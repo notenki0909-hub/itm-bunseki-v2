@@ -101,11 +101,12 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
  * @param {number} p.vScale 縦の高さの倍率。1＝基準の高さ(300)。初期は2
  * @param {number|null} p.itmStrike 権利行使価格(ITMの水準)。判定の基準(barrier)と違うとき(深さあり・損益分岐点基準)だけ、細い赤の実線で引く
  * @param {number|null} p.stopLine 損切りの場面の株価(リスク確認で選んだ場面)。あれば、緑の太い破線で引く
+ * @param {number|null} p.limitLine 損失が資金の2%になる株価(買い戻し価格の上限を、株価に換算した値)。あれば、緑の細い点線で引く
  * @param {number|null} p.breakEven 損益分岐点の株価(権利行使価格±プレミアム)。あれば、紫の点線で引く
  * @param {boolean} p.focus trueなら、縦軸を「ITMの水準のまわり」に絞った拡大図にする(ITMの水準と、満期時の各線が近い範囲)
  * @param {{lo:number[],hi:number[],min:number[],max:number[]}|null} p.empCone 過去の実績の帯(営業日ごとの変化率。k=0〜days)。あれば、約68%の範囲を灰色の帯、最小・最大を点線で重ねる
  */
-export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", halfBefore = null, halfLabel = "", ivSigmaPct = null, empCone = null, vScale = 2, focus = false, breakEven = null, itmStrike = null, stopLine = null }) {
+export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", halfBefore = null, halfLabel = "", ivSigmaPct = null, empCone = null, vScale = 2, focus = false, breakEven = null, itmStrike = null, stopLine = null, limitLine = null }) {
   const w = 640;
   const h = Math.round(300 * vScale); // 縦の高さ。基準は300(倍率1)
   const padL = 50;
@@ -126,15 +127,17 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   const itmV = itmStrike !== null && Number.isFinite(itmStrike) ? itmStrike : barrier;
   const hasStop = stopLine !== null && Number.isFinite(stopLine);
   const stopV = hasStop ? stopLine : barrier;
-  const lo = Math.min(...pastCloses, price * (1 - spanSig), price * (1 + empMin), barrier, beV, itmV, stopV);
-  const hi = Math.max(...pastCloses, price * (1 + spanSig), price * (1 + empMax), barrier, beV, itmV, stopV);
+  const hasLimit = limitLine !== null && Number.isFinite(limitLine);
+  const limitV = hasLimit ? limitLine : barrier;
+  const lo = Math.min(...pastCloses, price * (1 - spanSig), price * (1 + empMin), barrier, beV, itmV, stopV, limitV);
+  const hi = Math.max(...pastCloses, price * (1 + spanSig), price * (1 + empMax), barrier, beV, itmV, stopV, limitV);
   let yMin;
   let yMax;
   if (focus) {
     // ITMの水準のまわり: ITMの水準と、満期時の、ITM側に近い各線(HV・IVの1σ、実績の16%または84%と最小または最大)を含む範囲
     const sgn = itmWhen === "below" ? -1 : 1;
     const last = (arr) => arr[arr.length - 1];
-    const vals = [barrier, beV, itmV, stopV, price * (1 + sgn * sigmaPct)];
+    const vals = [barrier, beV, itmV, stopV, limitV, price * (1 + sgn * sigmaPct)];
     if (hasIv) vals.push(price * (1 + sgn * ivSigmaPct));
     if (empCone) vals.push(price * (1 + last(sgn < 0 ? empCone.lo : empCone.hi)), price * (1 + last(sgn < 0 ? empCone.min : empCone.max)));
     const fLo = Math.min(...vals);
@@ -207,6 +210,11 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   const stopLineSvg = hasStop
     ? `<line x1="${f(xNow)}" y1="${f(ystop)}" x2="${f(xEnd)}" y2="${f(ystop)}" stroke="#16a34a" stroke-width="2.4" stroke-dasharray="9 4"/>`
     : "";
+  // 損失が資金の2%になる株価の線(緑の細い点線)
+  const ylim = y(limitV);
+  const limitLineSvg = hasLimit
+    ? `<line x1="${f(xNow)}" y1="${f(ylim)}" x2="${f(xEnd)}" y2="${f(ylim)}" stroke="#16a34a" stroke-width="1.6" stroke-dasharray="2 4"/>`
+    : "";
   const barrierText = `<text x="${f(xNow + 6)}" y="${f(itmWhen === "below" ? yb - 5 : yb + 13)}" font-size="11" font-weight="700" fill="var(--gradRed)">${barrierLabel}</text>`;
 
   // 過去の株価
@@ -247,6 +255,9 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   }
   if (breakEven !== null && Number.isFinite(breakEven)) {
     labItems.push({ v: breakEven, text: `損益分岐点 ${breakEven.toFixed(1)}`, color: "var(--gradPurple)" });
+  }
+  if (hasLimit) {
+    labItems.push({ v: limitLine, text: `資金2%の線 ${limitLine.toFixed(1)}`, color: "#16a34a" });
   }
   if (hasStop) {
     labItems.push({ v: stopLine, text: `損切りの場面 ${stopLine.toFixed(1)}`, color: "#16a34a" });
@@ -302,7 +313,7 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
 
   return `<svg viewBox="0 0 ${w} ${h}" class="chart cone-chart" role="img" aria-label="満期までの値動きの目安とITMの水準">`
     + `<defs><clipPath id="coneClip"><rect x="0" y="${padT}" width="${w}" height="${h - padT - padB}"/></clipPath></defs>`
-    + grid + `<g clip-path="url(#coneClip)">` + zone + cone + emp + past + expiryLine + nowDot + barrierLine + itmLine + beLine + stopLineSvg + mark + `</g>`
+    + grid + `<g clip-path="url(#coneClip)">` + zone + cone + emp + past + expiryLine + nowDot + barrierLine + itmLine + beLine + stopLineSvg + limitLineSvg + mark + `</g>`
     + barrierText + markFoot + rightLabels + bottomLabels
     + `</svg>`;
 }
