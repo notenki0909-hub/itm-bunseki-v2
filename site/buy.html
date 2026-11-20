@@ -221,10 +221,13 @@
       </div>
       <div class="field" data-only="buy">
         <label for="buyRateInput" data-target="orderExplain"
-          data-note="金利（年%）です。米国債の利回り（無リスク金利）を使います。
-コールは、満期に権利行使価格を払うのが先になるため、金利が高いほど、価格が高くなります（プットは逆に安くなります）。満期が長いほど、影響が大きくなります（満期が約7ヶ月のコールで、金利4%なら、約7ドル）。証券会社のオプションチェーンのIVは、金利を含めて計算された値なので、ここに金利を入れると、IV・理論価格・リスク確認が、証券会社の値に近づきます。
-空欄のときは、米国財務省が公表する米国債利回り（Daily Treasury Par Yield Curve Rates）から、満期の長さに合わせて、自動で入れます。手で入れた値は、その値を使います（空欄にすると、自動に戻ります）。">金利（年%）</label>
-        <input id="buyRateInput" type="number" step="0.01" min="0" placeholder="自動（米国債利回り）">
+          data-note="金利（年%）です。米国債の利回り（無リスク金利）が目安です。
+コールは、満期に権利行使価格を払うのが先になるため、金利が高いほど価格が高くなります（プットは逆に安くなります）。満期が長いほど影響が大きくなります（満期が約7ヶ月のコールで、金利4%なら、約7ドル）。
+IVとプレミアムの両方を入力しているときは、金利は使いません（証券会社のIVは、金利を含めて計算された値のため、入力できません）。IVとプレミアムの片方だけのときは、より正確な分析が必要な場合に、金利を入力してください。">金利（年%）</label>
+        <div class="field-inline">
+          <input id="buyRateInput" type="number" step="0.01" min="0" placeholder="空欄＝0">
+          <button type="button" class="sp-btn" id="buyRateBtn" hidden>米国債利回りを入れる</button>
+        </div>
         <span class="field-hint" id="buyRateHint"></span>
       </div>
       <div data-only="sell">

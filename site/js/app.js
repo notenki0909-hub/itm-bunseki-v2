@@ -77,7 +77,6 @@ function tabRecipe(t) {
     planQty: t.planQty,
     buyAtrMult: t.buyAtrMult,
     buyRate: t.buyRate,
-    buyRateManual: t.buyRateManual,
   };
 }
 
@@ -112,7 +111,6 @@ function applyRecipe(t, rec) {
     planQty: rec.planQty ?? t.planQty,
     buyAtrMult: rec.buyAtrMult ?? t.buyAtrMult,
     buyRate: rec.buyRate ?? t.buyRate,
-    buyRateManual: rec.buyRateManual ?? t.buyRateManual,
   });
   // 買いページは、単体注文のみ(スプレッドは未対応)
   if (PAGE === "buy") t.rrVariant = "naked";
@@ -334,6 +332,7 @@ const els = {
   buyAtrMultSelect: document.getElementById("buyAtrMultSelect"),
   buyRateInput: document.getElementById("buyRateInput"),
   buyRateHint: document.getElementById("buyRateHint"),
+  buyRateBtn: document.getElementById("buyRateBtn"),
   premJudge: document.getElementById("premJudge"),
   buyStudyCard: document.getElementById("buyStudyCard"),
   periodCompareCard: document.getElementById("periodCompareCard"),
@@ -480,7 +479,6 @@ function newTabState() {
     lowsFull: null,
     buyAtrMult: DEFAULT_ATR_MULT, // 買いページ: 固定の手仕舞い線のATR倍率
     buyRate: null,        // 買いページ: 金利(年%)。自動入力(米国債利回り)または手入力
-    buyRateManual: false, // 金利を手で入力したか(手入力なら、自動で上書きしない)
     closesFull: null, // フェッチした生データ(最大件数)。期間セレクターはこれをローカルでスライスするだけ
     datesFull: null,  // closesFullと同じ並びの日付文字列
     typeKey: PAGE_TYPES[0],
@@ -1712,7 +1710,7 @@ function renderOrderCard(t) {
   }
   renderBreakEvenPrice(t, closes, todayStrike);
   if (PAGE === "buy" && group === "buy") {
-    applyAutoRate(t);
+    updateRateUI(t);
     renderBuyIv(t, latest, todayStrike);
     renderBuyRisk(t, latest, todayStrike, dates[dates.length - 1]);
     renderBuyPlan(t, latest, todayStrike, dates[dates.length - 1]);
@@ -2930,22 +2928,19 @@ function renderConclusion(t) {
 // ================= 買いページ専用 =================
 
 // ---- 金利(買いページ) ----
-// 金利は、年%の入力欄。空欄(手入力なし)のときは、米国財務省の米国債利回りを、満期の長さに合わせて補間して、自動で入れる。
-// 理論価格・IVの逆算・リスク確認・時間の経過の表に使う(コールは、金利が高いほど価格が高い。満期が長いほど影響が大きい)。
-let ratesData = null;     // /api/rates の結果 {date, points:[{months, rate}]}
-let ratesState = "none";  // none / loading / ok / fail
-function fetchRatesOnce() {
-  if (ratesState !== "none") return;
-  ratesState = "loading";
-  fetch("/api/rates").then((r) => r.json()).then((d) => {
-    if (d && Array.isArray(d.points) && d.points.length) { ratesData = d; ratesState = "ok"; } else ratesState = "fail";
-    const t = activeTab();
-    if (t && t.closesFull) renderAll(t);
-  }).catch(() => {
-    ratesState = "fail";
-    const t = activeTab();
-    if (t && t.closesFull) renderAll(t);
-  });
+// 金利は、年%の入力欄(空欄＝0)。IVとプレミアムの「両方」が入力されているときは、金利を使わない(入力もできない)。
+//   理由: 証券会社のIVは、金利を含めて計算された値。IVも価格も入力されていれば、IVと価格の換算が要らないため。
+// IVとプレミアムの「片方だけ」のとき(IVから価格を計算する／価格からIVを逆算する)は、金利があると、より正確になる。
+//   満期が長い(90営業日超)ときは、「米国債利回りを入れる」ボタンで、米国財務省の米国債利回りを、満期の長さに合わせて入れる(押したときだけ)。
+let ratesData = null; // /api/rates の結果 {date, points:[{months, rate}]}
+async function loadRates() {
+  if (ratesData) return true;
+  try {
+    const r = await fetch("/api/rates");
+    const d = await r.json();
+    if (d && Array.isArray(d.points) && d.points.length) { ratesData = d; return true; }
+  } catch (e) { /* 取得できなかった */ }
+  return false;
 }
 function rateForCalendarDays(calDays) {
   if (!ratesData) return null;
@@ -2961,33 +2956,46 @@ function rateForCalendarDays(calDays) {
   }
   return pts[pts.length - 1].rate;
 }
-// 手入力がなければ、自動の金利を、タブの値に入れる。入力欄・ヒントも更新する。
-function applyAutoRate(t) {
+const hasPrem = (t) => t.rrPayPremium !== null && t.rrPayPremium > 0;
+const hasIvIn = (t) => t.rrIvSell !== null && t.rrIvSell > 0;
+const bothPremIv = (t) => hasPrem(t) && hasIvIn(t);
+let rateNote = { text: "", days: null }; // ボタンを押した結果の案内(取得できた日付・失敗)。満期の長さを変えたら、出さない
+function updateRateUI(t) {
   if (!els.buyRateInput) return;
-  const lastDate = t.datesFull[t.datesFull.length - 1];
-  const expiry = shiftTradingDays(lastDate, -t.windowDays);
-  const cal = calendarDaysBetween(lastDate, expiry);
-  let hint = "";
-  if (!t.buyRateManual) {
-    fetchRatesOnce();
-    const r = rateForCalendarDays(cal);
-    if (r !== null) {
-      t.buyRate = Math.round(r * 100) / 100;
-      hint = `自動：米国債利回り（${ratesData.date}）を、満期${cal}暦日に合わせて補間した値です。手で入れると、その値を使います`;
-    } else if (ratesState === "fail") {
-      t.buyRate = null;
-      hint = "自動取得できませんでした。満期が長いときは、手で入力してください（米国債の利回りが目安）";
-    } else {
-      hint = "米国債利回りを取得中…";
-    }
+  const both = bothPremIv(t);
+  els.buyRateInput.disabled = both;
+  if (document.activeElement !== els.buyRateInput) els.buyRateInput.value = both ? "" : (t.buyRate !== null && t.buyRate !== undefined ? t.buyRate : "");
+  const longMat = t.windowDays > 90;
+  const single = hasPrem(t) !== hasIvIn(t); // どちらか一方だけ
+  els.buyRateBtn.hidden = !(single && longMat && !both);
+  let hint;
+  if (both) {
+    hint = "IVとプレミアムの両方が入力されているため、金利は使いません（証券会社のIVは、金利を含む値です）。";
+  } else if (single && longMat) {
+    hint = "IVとプレミアムの片方だけで、満期が長いため、金利を入れると、より正確になります。より正確な分析が必要な場合は、金利を入力してください（「米国債利回りを入れる」で、満期に合わせた米国債の利回りが入ります）。";
   } else {
-    hint = "入力した金利を使っています（空欄にすると、自動に戻ります）";
+    hint = "より正確な分析が必要な場合は、金利（米国債の利回りが目安）を入力してください。空欄は、金利0として計算します。";
   }
-  if (document.activeElement !== els.buyRateInput) els.buyRateInput.value = t.buyRate !== null && t.buyRate !== undefined ? t.buyRate : "";
-  if (t.windowDays > 90 && !(t.buyRate > 0)) hint = "満期が長いため、金利が必要です。手で入力してください（米国債の利回りが目安）。" + (hint ? " " + hint : "");
-  els.buyRateHint.textContent = hint;
+  els.buyRateHint.textContent = (rateNote.text && rateNote.days === t.windowDays && !both ? rateNote.text + " " : "") + hint;
 }
-const rateOf = (t) => (t.buyRate > 0 ? t.buyRate / 100 : 0);
+// 「米国債利回りを入れる」: 満期の長さに合わせて補間した利回りを、金利欄に入れる
+async function fillRateFromTreasury() {
+  const t = activeTab();
+  if (!t || !t.closesFull) return;
+  els.buyRateBtn.disabled = true;
+  const ok = await loadRates();
+  els.buyRateBtn.disabled = false;
+  if (!ok) { rateNote = { text: "米国債利回りを取得できませんでした。手で入力してください。", days: t.windowDays }; updateRateUI(t); return; }
+  const lastDate = t.datesFull[t.datesFull.length - 1];
+  const cal = calendarDaysBetween(lastDate, shiftTradingDays(lastDate, -t.windowDays));
+  const r = rateForCalendarDays(cal);
+  t.buyRate = Math.round(r * 100) / 100;
+  rateNote = { text: `米国債利回り（${ratesData.date}）を、満期${cal}暦日に合わせて補間した${t.buyRate}%を入れました。`, days: t.windowDays };
+  persistState();
+  renderAll(t);
+}
+// 計算に使う金利(小数)。IVとプレミアムの両方があるときは0
+const rateOf = (t) => (!bothPremIv(t) && t.buyRate > 0 ? t.buyRate / 100 : 0);
 
 // 集計期間ごとの、ITM発生率(期間中に一度でも・満期時)の比較。売り・買いとも。
 // 慎重な見方の基準＝1年以上の期間のうち、売りはITM発生率が最も高い期間、買いは最も低い期間(6ヶ月は、短く偶然に左右されるため、基準から除く)。
@@ -3045,7 +3053,9 @@ function premiumMismatchText(t, price, strike, where = "iv") {
   const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
   if (premium === null || ivIn === null) return "";
   const theo = bsPrice(buyKindOf(t), price, strike, t.windowDays / TRADING_DAYS_PER_YEAR, ivIn, rateOf(t));
-  if (Math.abs(theo - premium) <= Math.max(0.05, premium * 0.15)) return "";
+  const tYears = t.windowDays / TRADING_DAYS_PER_YEAR;
+  const rateAllow = strike * 0.05 * tYears * 0.6; // 満期が長いときの、金利(約4〜5%)のぶんのずれ(ツールは、IVとプレミアムの両方があるとき、金利0で計算する)
+  if (Math.abs(theo - premium) <= Math.max(0.05, premium * 0.15) + rateAllow) return "";
   const head = `※入力したIV（${(ivIn * 100).toFixed(1)}%）から計算した理論価格は${theo.toFixed(2)}で、支払いプレミアム${premium.toFixed(2)}と離れています。`;
   return where === "risk"
     ? `${head}「7 リスク確認」と時間の経過の表は、実際に払った支払いプレミアムを基準にするため、入力したIVは使わず、プレミアムから逆算したIVで計算しています。`
@@ -3056,19 +3066,25 @@ function premiumMismatchText(t, price, strike, where = "iv") {
 function renderPremiumJudge(t, price, strike, hv) {
   const el = els.premJudge;
   if (!el) return;
-  const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
+  const premium = hasPrem(t) ? t.rrPayPremium : null;
   if (premium === null || hv === null) { el.textContent = ""; el.className = "field-hint"; return; }
   const kind = buyKindOf(t);
   const T = t.windowDays / TRADING_DAYS_PER_YEAR;
-  const ivPrem = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: null, T, premium, r: rateOf(t) });
-  if (ivPrem === null) { el.textContent = "支払いプレミアムに合うIVが見つかりません。入力を確認してください（桁や単位の間違いはありませんか）"; el.className = "field-hint"; return; }
-  const ratio = ivPrem / hv;
+  // IVを入力しているときは、入力したIV(証券会社の値。金利を含む)で判定する。空欄のときだけ、プレミアムから逆算したIV(金利は、入力欄の値)を使う
+  const useInput = hasIvIn(t);
+  const ivJ = useInput ? t.rrIvSell / 100 : solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: null, T, premium, r: rateOf(t) });
+  if (ivJ === null) { el.textContent = "支払いプレミアムに合うIVが見つかりません。入力を確認してください（桁や単位の間違いはありませんか）"; el.className = "field-hint"; return; }
+  const ratio = ivJ / hv;
   const judge = judgeIvHv(ratio);
-  const hvPrice = bsPrice(kind, price, strike, T, hv, rateOf(t));
   const word = judge.level === "rich" ? "割高" : judge.level === "cheap" ? "割安" : "標準";
   const color = judge.level === "rich" ? "var(--gradRed)" : judge.level === "cheap" ? "var(--gradBlue)" : "var(--muted)";
-  const priceRatio = hvPrice > 0.005 ? `HV計算の理論価格${hvPrice.toFixed(2)}の${(premium / hvPrice).toFixed(1)}倍。` : "";
-  el.innerHTML = `判定：<b style="color:${color}">${word}</b>　${priceRatio}逆算IV ${(ivPrem * 100).toFixed(1)}%はHV ${(hv * 100).toFixed(1)}%の${ratio.toFixed(2)}倍（1.2倍以上＝割高、0.8倍以下＝割安）`;
+  // HV計算の理論価格との比較は、IVを入力していないとき(プレミアムだけのとき)に出す(IV入力時は、金利を含む証券会社のIVで判定するため)
+  let priceRatio = "";
+  if (!useInput) {
+    const hvPrice = bsPrice(kind, price, strike, T, hv, rateOf(t));
+    if (hvPrice > 0.005) priceRatio = `HV計算の理論価格${hvPrice.toFixed(2)}の${(premium / hvPrice).toFixed(1)}倍。`;
+  }
+  el.innerHTML = `判定：<b style="color:${color}">${word}</b>　${priceRatio}${useInput ? "入力したIV" : "逆算IV"} ${(ivJ * 100).toFixed(1)}%はHV ${(hv * 100).toFixed(1)}%の${ratio.toFixed(2)}倍（1.2倍以上＝割高、0.8倍以下＝割安）`;
   el.className = "field-hint";
 }
 
@@ -3554,15 +3570,17 @@ function init() {
   if (PAGE === "buy") {
     if (els.buyAtrMultSelect) els.buyAtrMultSelect.addEventListener("change", onFormChange);
     if (els.beBaseCheck) els.beBaseCheck.addEventListener("change", onFormChange);
-    // 金利: 手で入れたら、その値を使う。空欄にしたら、自動(米国債利回り)に戻す
+    // 金利: 手で入力。空欄＝0。「米国債利回りを入れる」ボタン(IVとプレミアムの片方だけで、満期が長いとき)
     els.buyRateInput.addEventListener("input", debounce(() => {
       const t = activeTab();
       if (!t) return;
       const v = els.buyRateInput.value;
-      if (v === "") { t.buyRateManual = false; } else { t.buyRateManual = true; t.buyRate = Math.max(0, Number(v)); }
+      t.buyRate = v === "" ? null : Math.max(0, Number(v));
+      rateNote = { text: "", days: null };
       persistState();
       if (t.closesFull) renderAll(t);
     }, 300));
+    els.buyRateBtn.addEventListener("click", fillRateFromTreasury);
     // 「買う条件の過去の結果」の表の「この値にする」ボタン: 下落率(上昇率)の入力に反映して、再計算する
     els.buyStudyBody.addEventListener("click", (e) => {
       const b = e.target.closest("[data-use-x]");
