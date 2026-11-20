@@ -328,6 +328,7 @@ const els = {
   conclBody: document.getElementById("conclBody"),
   pageNotice: document.getElementById("pageNotice"),
   buyAtrMultSelect: document.getElementById("buyAtrMultSelect"),
+  premJudge: document.getElementById("premJudge"),
   buyStudyCard: document.getElementById("buyStudyCard"),
   periodCompareCard: document.getElementById("periodCompareCard"),
   periodCompareBody: document.getElementById("periodCompareBody"),
@@ -2969,6 +2970,36 @@ function renderPeriodCompare(t) {
   card.hidden = false;
 }
 
+// 入力したIVから計算した理論価格が、支払いプレミアムと大きく離れているときの注意文(離れていなければ空文字)
+function premiumMismatchText(t, price, strike) {
+  const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
+  const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
+  if (premium === null || ivIn === null) return "";
+  const theo = bsPrice(buyKindOf(t), price, strike, t.windowDays / TRADING_DAYS_PER_YEAR, ivIn);
+  if (Math.abs(theo - premium) <= Math.max(0.05, premium * 0.15)) return "";
+  return `※入力したIV（${(ivIn * 100).toFixed(1)}%）から計算した理論価格は${theo.toFixed(2)}で、支払いプレミアム${premium.toFixed(2)}と離れています。IVを空欄にすると、支払いプレミアムから逆算したIVで計算します。`;
+}
+
+// 支払いプレミアムが、高いか安いかの判定(入力欄の下)。支払いプレミアムから逆算したIVが、HV(満期と同じ長さ)の何倍かで見る(1.2倍以上＝割高、0.8倍以下＝割安)。
+function renderPremiumJudge(t, price, strike, hv) {
+  const el = els.premJudge;
+  if (!el) return;
+  const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
+  if (premium === null || hv === null) { el.textContent = ""; el.className = "field-hint"; return; }
+  const kind = buyKindOf(t);
+  const T = t.windowDays / TRADING_DAYS_PER_YEAR;
+  const ivPrem = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: null, T, premium });
+  if (ivPrem === null) { el.textContent = "支払いプレミアムに合うIVが見つかりません。入力を確認してください（桁や単位の間違いはありませんか）"; el.className = "field-hint"; return; }
+  const ratio = ivPrem / hv;
+  const judge = judgeIvHv(ratio);
+  const hvPrice = bsPrice(kind, price, strike, T, hv);
+  const word = judge.level === "rich" ? "割高" : judge.level === "cheap" ? "割安" : "標準";
+  const color = judge.level === "rich" ? "var(--gradRed)" : judge.level === "cheap" ? "var(--gradBlue)" : "var(--muted)";
+  const priceRatio = hvPrice > 0.005 ? `HV計算の理論価格${hvPrice.toFixed(2)}の${(premium / hvPrice).toFixed(1)}倍。` : "";
+  el.innerHTML = `判定：<b style="color:${color}">${word}</b>　${priceRatio}逆算IV ${(ivPrem * 100).toFixed(1)}%はHV ${(hv * 100).toFixed(1)}%の${ratio.toFixed(2)}倍（1.2倍以上＝割高、0.8倍以下＝割安）`;
+  el.className = "field-hint";
+}
+
 // 買いページの「5 IV」: IVの水準・IV÷HV・IV基準の1σ・理論プレミアム価格(HV計算)を、買い手向けの読み方で出す。
 // IVは、入力(任意)があればその値、なければ支払いプレミアム額から逆算した値。どちらもなければ表示しない(コーン図のIVの帯も出ない)。
 function renderBuyIv(t, price, strike) {
@@ -2985,6 +3016,7 @@ function renderBuyIv(t, price, strike) {
   };
   const { closes } = viewDataOf(t);
   const hv = computeHv(closes, days);
+  renderPremiumJudge(t, price, strike, hv);
   if (hv === null) { clear("HVを計算するためのデータが足りないため、表示できません。"); return; }
   const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
   const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
@@ -3038,7 +3070,7 @@ function renderBuyIv(t, price, strike) {
     });
   }
   els.ivHvSummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
-  els.ivHvNote.textContent = `IV${pct(iv)}は、満期と同じ長さのHV${pct(hv)}の${ratio.toFixed(2)}倍（${judge.word}）です。${meaning}。`
+  els.ivHvNote.textContent = `${premiumMismatchText(t, price, strike)}IV${pct(iv)}は、満期と同じ長さのHV${pct(hv)}の${ratio.toFixed(2)}倍（${judge.word}）です。${meaning}。`
     + "※IVは、これからの値動きの見込みです（実際の値動きではありません）。HVは、過去に実際に動いた大きさです。決算発表などの予定された出来事をまたぐ場合は、IVが高いのは自然で、買い手に不利とは限りません。判定の基準（1.2倍以上＝高め、0.8倍以下＝低め）は、このツールの簡易的なものです。ITMになる確率の3点比較（IV換算・HV換算・実績）は、「6 まとめ」にあります。";
   // ITMになる確率の3点比較(IV換算・HV換算・過去の実績)
   const thHv = hvTheory({ price, strike, depthDollar, itmWhen, days, hv });
@@ -3127,9 +3159,12 @@ function renderBuyRisk(t, price, strike, asOfDate) {
   ].map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
   const money = (x) => (x === null || x === undefined ? "―" : x.toLocaleString("ja-JP", { maximumFractionDigits: 2 }));
   // 資金の2%の損切りの線が、ATR×2(表の最小の倍率)より近いときは、その行を一番上に出す
-  const showRisk = tbl.riskRow && tbl.riskRow.mult < Math.min(...BUY_ATR_MULTS);
+  const showRisk = tbl.riskRow && (tbl.riskRow.alreadyOver || tbl.riskRow.mult < Math.min(...BUY_ATR_MULTS));
   const rowsAll = showRisk ? [tbl.riskRow, ...tbl.rows] : tbl.rows;
   els.buyRiskBody.innerHTML = rowsAll.map((r) => {
+    if (r.alreadyOver) {
+      return `<tr class="bs-risk"><td><b>資金2%の損切り</b><br><span class="bs-sub">${r.contracts}枚の場合</span></td><td colspan="3"><b>すでに、いまの価格で、損失が資金の2%を超えています</b>（いまの理論価格との差で、1枚 ${money(r.nowLoss * 100)}ドルの損失。上限は${money(capital * 0.02)}ドル）。入力したIVから計算した理論価格が、支払いプレミアムよりずっと低いためです。IVを空欄にして、支払いプレミアムから逆算させてください</td></tr>`;
+    }
     const isSel = !r.isRisk && r.mult === t.buyAtrMult;
     const qtyOpt = r.maxContracts === null ? "―（資金を入力）" : r.maxContracts === 0 ? "0枚（1枚でも2%超）" : `${r.maxContracts.toLocaleString("ja-JP")}枚`;
     const head = r.isRisk
@@ -3140,12 +3175,13 @@ function renderBuyRisk(t, price, strike, asOfDate) {
       + `<td>${r.value === null ? "―" : money(r.value)}<br><span class="bs-sub">プレミアム${tbl.premium === null ? "―" : money(tbl.premium)}</span></td>`
       + `<td>${r.optLoss === null ? "―" : `1枚 ${money(r.optLoss * 100)}ドル（支払いの${(r.optLossPct * 100).toFixed(0)}%）<br><span class="bs-sub">資金2%なら ${qtyOpt}</span>`}</td></tr>`;
   }).join("");
-  const riskNote = showRisk
+  const riskNote = showRisk && tbl.riskRow.alreadyOver ? "" : showRisk
     ? `<br>・一番上の「資金2%の損切り」は、${tbl.riskRow.contracts}枚${t.planQty ? "" : "（枚数が未入力のため1枚）"}で、損失が資金の2%になる株価の位置です。ATR×2より近い（${tbl.riskRow.mult.toFixed(2)}倍）ため、表に出しています。この線より先まで待つと、資金の2%を超えます。`
     : "";
   const warn = premium === null && ivIn === null ? "支払いプレミアム額（またはIV）が未入力のため、IVは仮定の値です。「2 注文プラン」に支払いプレミアム額を入れると、実際の価格に近づきます。 " : "";
   const capNote = capital > 0 ? `資金（${money(capital)}ドル）の2%＝${money(capital * 0.02)}ドルが、1回の手仕舞いで許せる損失の上限です。` : "「2 注文プラン」にトータル資金額を入れると、資金の2%に収まる枚数を出します。";
-  els.buyRiskNote.innerHTML = `${warn}${capNote}${riskNote}<br>・オプションの価格は、満期までの日数・IV（${ivSrc}${tbl.iv !== null ? `：${(tbl.iv * 100).toFixed(1)}%` : ""}）はそのままで、株価だけが線まで動いたとしたBlack-Scholes（金利0・配当なし）の目安です。実際は、IVの変化や時間の経過、売買の差でずれます。`
+  const mism = premiumMismatchText(t, price, strike);
+  els.buyRiskNote.innerHTML = `${mism ? mism + "<br>" : ""}${warn}${capNote}${riskNote}<br>・オプションの価格は、満期までの日数・IV（${ivSrc}${tbl.iv !== null ? `：${(tbl.iv * 100).toFixed(1)}%` : ""}）はそのままで、株価だけが線まで動いたとしたBlack-Scholes（金利0・配当なし）の目安です。実際は、IVの変化や時間の経過、売買の差でずれます。`
     + `<br>・オプションの損失は、最大でも支払ったプレミアムです。満期が短い・OTMのとき、線に届く前に全損することがあります。`
     + `<br>・線は、期待値を上げるものではなく、<b>損失の大きさを決めるもの</b>です（過去の検証では、倍率を大きくするほど、平均と勝率は上がり、最悪の損失が深くなりました）。`;
   renderBuyTime(t, price, strike, asOfDate, tbl, kind, capital, ivSrc);
@@ -3225,7 +3261,9 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   add("枚数", qty === null ? ask("トータル資金額（または枚数）") : qty === 0 ? "0枚（1枚でも、線に届いたときの損失が資金の2%を超えます。枚数を入力するか、資金・線の倍率を見直してください）" : `${qty}枚（${qtyNote}）　／　支払い合計 ${premium === null ? "―" : money(premium * 100 * qty)}ドル`);
   add("手仕舞いの線（固定）", bl ? `${bl.line.toFixed(2)}（買った日の終値から ${pctTxt(bl.movePct, 1)}・ATR×${bl.mult}）。終値がこの線に届いたら手仕舞う` : "―");
   add("損切り2%の線", capital > 0 && premium !== null
-    ? (riskRow2
+    ? (riskRow2 && riskRow2.alreadyOver
+      ? "すでに、いまの価格で、損失が資金の2%を超えています（入力したIVの理論価格と、支払いプレミアムが食い違っています。IVを空欄にして、支払いプレミアムから逆算させてください）"
+      : riskRow2
       ? `${riskRow2.line.toFixed(2)}（買った日の終値から ${pctTxt(riskRow2.movePct, 1)}・ATR×${riskRow2.mult.toFixed(2)}）。${riskRow2.contracts}枚${t.planQty ? "" : "（枚数が未入力のため1枚）"}で、損失が資金の2%（${money(capital * 0.02)}ドル）になる位置。この線より先まで待つと、資金の2%を超えます`
       : `ありません（全損しても、損失が資金の2%以内に収まります）`)
     : ask("支払いプレミアム額・トータル資金額"));

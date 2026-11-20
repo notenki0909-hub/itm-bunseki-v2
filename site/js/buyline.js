@@ -148,16 +148,18 @@ export function computeFixedLineTable({ price, atr, kind, strike, days, premium,
     const allowed = riskMoney / (100 * nCon);
     if (allowed < pay) {
       const f = (L) => pay - bsPrice(kind, L, strike, T, useIv) - allowed; // 損失が上限を超えているほど正
+      // いまの価格で、すでに損失が上限を超えているとき(入力したIVの理論価格が、支払いプレミアムより、ずっと低いとき)
+      const already = f(price) > 0;
       let lo = kind === "call" ? price * 0.05 : price;
       let hi = kind === "call" ? price : price * 5;
-      for (let i = 0; i < 80; i++) {
+      for (let i = 0; i < (already ? 0 : 80); i++) {
         const mid = (lo + hi) / 2;
         if (kind === "call") { if (f(mid) > 0) lo = mid; else hi = mid; }
         else if (f(mid) > 0) hi = mid; else lo = mid;
       }
       const L2 = kind === "call" ? Math.min(price, (lo + hi) / 2) : Math.max(price, (lo + hi) / 2);
       const move2 = Math.abs(price - L2);
-      riskRow = {
+      riskRow = already ? { isRisk: true, alreadyOver: true, contracts: nCon, nowLoss: pay - bsPrice(kind, price, strike, T, useIv) } : {
         isRisk: true, contracts: nCon, mult: move2 / atr, line: L2, movePct: L2 / price - 1, moveAmount: move2,
         value: bsPrice(kind, L2, strike, T, useIv), optLoss: allowed, optLossPct: allowed / pay,
         maxContracts: nCon, maxShares: move2 > 0 ? Math.floor(riskMoney / move2) : null,
