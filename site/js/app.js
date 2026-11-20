@@ -898,7 +898,7 @@ function roundStrike(price, ratio, itmWhen) {
 }
 function effStrikeOf(t, price) {
   if (!(price > 0)) return null;
-  if (typeGroup(t.typeKey) === "sell" && t.rrSellStrike > 0) return t.rrSellStrike;
+  if (t.rrSellStrike > 0) return t.rrSellStrike; // 入力した権利行使価格(売りは売り建て側。買いは買い建玉の権利行使価格)
   return roundStrike(price, t.ratio, OPTION_TYPES[t.typeKey].itmWhen);
 }
 function effRatioOf(t, price) {
@@ -1572,10 +1572,11 @@ function syncOrderDerived(t) {
   const latest = view && view.closes.length ? view.closes[view.closes.length - 1] : null;
   const itmWhen = OPTION_TYPES[t.typeKey].itmWhen;
   const sellEff = latest !== null ? effStrikeOf(t, latest) : null;
-  const entered = group === "sell" && t.rrSellStrike > 0;
+  const entered = t.rrSellStrike > 0;
+  const sw = PAGE === "buy" ? "" : "売りの"; // 画面の文言: 買いページは「権利行使価格」、売りページは「売りの権利行使価格」
 
   // 売りの権利行使価格の表示(売り系は、単体でもスプレッドでも入力できる)
-  if (group === "sell" && sellEff !== null) {
+  if (sellEff !== null) {
     els.rrSellStrikeHint.textContent = entered
       ? `入力値を使います（終値に対する比率は${ratio4(sellEff, latest, itmWhen)}）。分析のITM確率も、この権利行使価格で計算します`
       : `空欄のときは、比率から決めた ${fmtStrike(sellEff)} を使います（比率は、権利行使価格が${fmtStrike(sellEff)}になるように合わせます）`;
@@ -1584,7 +1585,7 @@ function syncOrderDerived(t) {
   }
   // 比率の入力欄の下: いま使っている権利行使価格
   const ratioHint = sellEff === null ? ""
-    : entered ? `売りの権利行使価格 ${fmtStrike(sellEff)}（入力値）を使用中。比率を変更すると、この入力は消えます`
+    : entered ? `${sw}権利行使価格 ${fmtStrike(sellEff)}（入力値）を使用中。比率を変更すると、この入力は消えます`
       : `権利行使価格 ${fmtStrike(sellEff)} になるように、比率を合わせています`;
   els.ratioEffHint.textContent = ratioHint;
 
@@ -2711,7 +2712,7 @@ function renderBreakEvenPrice(t, closes, todayStrike) {
 
   const items = [
     {
-      name: "現在の権利行使価格", value: fmtStrike(todayStrike), sub: typeGroup(t.typeKey) === "sell" && t.rrSellStrike > 0 ? "入力した売りの権利行使価格" : "比率から決めた整数の値",
+      name: "現在の権利行使価格", value: fmtStrike(todayStrike), sub: t.rrSellStrike > 0 ? (PAGE === "buy" ? "入力した権利行使価格" : "入力した売りの権利行使価格") : "比率から決めた整数の値",
       note: "本日の終値×権利行使価格の比率です。\nスプレッドの場合は、売り系は売り建てる側、買い系は買い建てる側の権利行使価格にあたります(もう一方の権利行使価格との差額は損益分岐点に影響しません)。",
     },
     {
@@ -3451,6 +3452,8 @@ function init() {
   // 比率の入力が終わったとき(別の欄に移ったとき・Enter)、権利行使価格が整数になるように、比率を直す
   const onRatioCommit = () => {
     const t = activeTab();
+    // 打ち終わってすぐ(入力の遅延処理より先)に確定したときも、比率を変えたなら、入力した権利行使価格は消す
+    if (t && Number(els.ratioInput.value) !== t.ratio) els.rrSellStrikeInput.value = "";
     if (t) t.ratioCommit = true; // 入力欄にフォーカスが残っていても(Enterのとき)、比率を直す
     onFormChange();
   };
