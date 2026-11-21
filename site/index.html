@@ -30,7 +30,17 @@
   </div>
 
   <div class="flow">
-    <b>使い方の流れ</b>：①<b>最低条件</b>（直近7営業日の値動き）を確認する → ②いま考えている<b>注文プラン</b>を入れる（集計期間の比較と、他の権利行使価格の実績を見て、よりよい内容を<b>採用</b>することもここでできる。採用すると注文プランに反映され、分析がやり直される） → ③<b>リスク確認</b>（ストレステストと、損切りの目安。選んだ損切りの場面は、コーン図に出る）で、損失の大きさを先に確かめる → 次の3つを、この順に見る：④<b>過去の実績</b>（実際に起きたこと。判断の土台）→ ⑤<b>HV</b>（過去の値動きの大きさ。いまは実績の頃より荒れているか）→ ⑥<b>IV</b>（これからの市場の見込み）→ ⑦<b>まとめ</b>で3つの見方がそろっているかを確認 → ⑧<b>注文まとめ</b>にする
+    <b>使い方の流れ</b><br>
+    ①<b>最低条件</b>（直近7営業日の値動き）を確認する<br>
+    ②いま考えている<b>注文プラン</b>を入れる<br>
+    　（集計期間の比較と、他の権利行使価格の実績を見て、よりよい内容を<b>採用</b>することもここでできる。採用すると注文プランに反映され、分析がやり直される）<br>
+    ③<b>リスク確認</b>（ストレステストと、損切りの目安。設定した損切ラインは、コーン図に出る）で、損失の大きさを先に確かめる<br>
+    次の3つを、この順に見る：<br>
+    　④<b>過去の実績</b>（実際に起きたこと。判断の土台）<br>
+    　⑤<b>HV</b>（過去の値動きの大きさ。いまは実績の頃より荒れているか）<br>
+    　⑥<b>IV</b>（これからの市場の見込み）<br>
+    ⑦<b>まとめ</b>で3つの見方がそろっているかを確認する<br>
+    ⑧<b>注文まとめ</b>にする
   </div>
 
   <details class="sec" id="s1" open>
@@ -234,7 +244,7 @@
         <div class="field">
           <label for="planQtyInput">発注する枚数</label>
           <input id="planQtyInput" type="number" step="1" min="1" placeholder="例: 2">
-          <span class="field-hint">この枚数で、損失が資金の2%になる買い戻し価格を計算します。空欄でも、表で損切りの場面を選ぶと、2%以内に収まる最大枚数で計算します</span>
+          <span class="field-hint">この枚数で、損失が資金の2%になる買い戻し価格を計算します。空欄でも、表で損切ラインを設定すると、2%以内に収まる最大枚数で計算します</span>
         </div>
         </div>
         <details class="mini">
@@ -358,9 +368,9 @@
         <p class="sub" id="ivTimeNote" style="margin:8px 0 0"></p>
         </div>
       <h3 style="margin:18px 0 8px;font-size:14px" id="riskTitle">損切りの目安（資金の2%まで）とリスクリワード</h3>
-      <p class="sub" style="margin:0 0 8px">1回の損切りで許せる損失を、投資に回せるトータル資金額の2%とします。2の注文プランで、トータル資金額と発注する枚数を入れると、損失が2%になる買い戻し価格（損切りの目安の上限）が決まり、リスクリワードを出します。この価格以上になる場面には、2つの表（上のタブで切り替え）のどちらにも、「資金2%超」の印が付きます。表のセルをクリックして、損切りの場面を選ぶこともできます（任意）。</p>
+      <p class="sub" style="margin:0 0 8px">1回の損切りで許せる損失を、投資に回せるトータル資金額の2%とします。2の注文プランで、トータル資金額と発注する枚数を入れると、損失が2%になる買い戻し価格（損切りの目安の上限）が決まり、リスクリワードを出します。この価格以上になる場面には、2つの表（上のタブで切り替え）のどちらにも、「資金2%超」の印が付きます。表のセルをクリックして、設定した損切ラインを選ぶこともできます（任意）。</p>
       <div class="summary" id="riskSummary"></div>
-      <p style="margin:8px 0 0"><button type="button" id="riskClearPick" class="btn-outline" hidden>場面の選択を外す</button></p>
+      <p style="margin:8px 0 0"><button type="button" id="riskClearPick" class="btn-outline" hidden>損切ラインの設定を外す</button></p>
       <p class="sub" id="riskNote" style="margin:8px 0 0"></p>
 
       </div>
@@ -562,7 +572,7 @@ OTM表示のバーの色は、OTM率の7段階（0〜60%、60〜70%、70〜80%�
     <div class="body">
   <div id="planCard" class="card in-sec" hidden>
     <h2 style="margin:0 0 6px;font-size:16px">注文まとめ（P売り注文・利確・損切り）</h2>
-    <p class="sub" style="margin:0 0 10px">分析結果をもとに、最終的にどのような注文を出すかを、1か所にまとめます。受取プレミアム・損切りの場面（ストレステストの表で選択）・トータル資金額を入力すると、利確・損切りの指値、枚数、リスクリワードが埋まります。</p>
+    <p class="sub" style="margin:0 0 10px">分析結果をもとに、最終的にどのような注文を出すかを、1か所にまとめます。受取プレミアム・設定した損切ライン（ストレステストの表で選択）・トータル資金額を入力すると、利確・損切りの指値、枚数、リスクリワードが埋まります。</p>
     <div class="volatility-wrap"><table class="volatility-table plan-table"><tbody id="planBody"></tbody></table></div>
     <div style="margin-top:10px"><button type="button" class="sp-btn" id="planCopyBtn">まとめをコピー</button> <span class="field-hint" id="planCopyHint"></span></div>
   </div>

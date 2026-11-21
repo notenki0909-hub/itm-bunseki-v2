@@ -100,7 +100,7 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
  * @param {number|null} p.ivSigmaPct IV基準の満期までの1σ(割合)。あれば、HV基準の帯(青)にIV基準の±1σの帯(オレンジ)を重ねる
  * @param {number} p.vScale 縦の高さの倍率。1＝基準の高さ(300)。初期は2
  * @param {number|null} p.itmStrike 権利行使価格(ITMの水準)。判定の基準(barrier)と違うとき(深さあり・損益分岐点基準)だけ、細い赤の実線で引く
- * @param {number|null} p.stopLine 損切りの場面の株価(リスク確認で選んだ場面)。あれば、緑の太い破線で引く
+ * @param {number|null} p.stopLine 設定した損切ラインの株価(リスク確認で選んだ場面)。あれば、緑の太い破線で引く
  * @param {number|null} p.limitLine 損失が資金の2%になる株価(買い戻し価格の上限を、株価に換算した値)。あれば、緑の細い点線で引く
  * @param {number|null} p.breakEven 損益分岐点の株価(権利行使価格±プレミアム)。あれば、紫の点線で引く
  * @param {boolean} p.focus trueなら、縦軸を「ITMの水準のまわり」に絞った拡大図にする(ITMの水準と、満期時の各線が近い範囲)
@@ -205,7 +205,7 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   const beLine = breakEven !== null && Number.isFinite(breakEven)
     ? `<line x1="${f(xNow)}" y1="${f(ybe)}" x2="${f(xEnd)}" y2="${f(ybe)}" stroke="var(--gradPurple)" stroke-width="1.8" stroke-dasharray="2 4"/>`
     : "";
-  // 損切りの場面の線(緑の太い破線)
+  // 設定した損切ラインの線(緑の太い破線)
   const ystop = y(stopV);
   const stopLineSvg = hasStop
     ? `<line x1="${f(xNow)}" y1="${f(ystop)}" x2="${f(xEnd)}" y2="${f(ystop)}" stroke="#16a34a" stroke-width="2.4" stroke-dasharray="9 4"/>`
@@ -260,7 +260,7 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
     labItems.push({ v: limitLine, text: `資金2%の線 ${limitLine.toFixed(1)}`, color: "#16a34a" });
   }
   if (hasStop) {
-    labItems.push({ v: stopLine, text: `損切りの場面 ${stopLine.toFixed(1)}`, color: "#16a34a" });
+    labItems.push({ v: stopLine, text: `設定した損切ライン ${stopLine.toFixed(1)}`, color: "#16a34a" });
   }
   const nudge = (items) => {
     const sorted = items.map((it) => ({ ...it, yy: y(it.v) + 3 })).sort((p, q) => p.yy - q.yy);

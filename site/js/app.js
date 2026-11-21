@@ -509,7 +509,7 @@ function newTabState() {
     rrPremMode: "net",
     rrPremSell: null,
     rrPremBuy: null,
-    stopPick: null,   // 表で選んだ損切りの場面("-0.1|1"＝ストレステスト(株価の変化|IV上昇の列番号)、"time|30|0.3"＝IVの変化と時間の経過の表)。null=選んでいない。null=ATRの損切りの目安
+    stopPick: null,   // 表で設定した損切ライン("-0.1|1"＝ストレステスト(株価の変化|IV上昇の列番号)、"time|30|0.3"＝IVの変化と時間の経過の表)。null=選んでいない。null=ATRの損切りの目安
     planQty: 1,       // 発注枚数。新しいタブの初期値は1枚(空欄にすると、損切りの上限＝資金の2%に収まる最大枚数で計算)
   };
 }
@@ -1207,7 +1207,7 @@ function drawCone(t, iv) {
   const strikeBe = grp === "sell" ? sellStrikeOf(t, cb.price) : effStrikeOf(t, cb.price);
   const beVal = premBe !== null && premBe > 0 ? strikeBe + (cb.type.itmWhen === "below" ? -premBe : premBe) : null;
   const beIsBarrier = isBeBase(t); // 判定の基準が損益分岐点のときは、赤い破線が損益分岐点
-  // 損切りの場面(売りページ。リスク確認の表で選んだセル)。株価が動く場面(ストレステスト)だけ、その株価の線を引く。時間の経過の場面は、株価が変わらないため、線は引かない
+  // 設定した損切ライン(売りページ。リスク確認の表で選んだセル)。株価が動く場面(ストレステスト)だけ、その株価の線を引く。時間の経過の場面は、株価が変わらないため、線は引かない
   const pickedStop = grp === "sell" && lastStress && lastStress.picked ? lastStress.picked : null;
   const stopPrice = pickedStop && pickedStop.scene !== "time" && pickedStop.price > 0 ? pickedStop.price : null;
   // 資金2%の線: 損失が資金の2%になる買い戻し価格(リスク確認の「損切りの買い戻し価格（2%の上限）」)を、株価に換算した値
@@ -1238,8 +1238,8 @@ function drawCone(t, iv) {
   const itmText = Math.abs(strikeBe - theory.barrier) > 0.005 ? `細い赤の実線＝ITMの水準（権利行使価格${strikeBe.toFixed(2)}）。` : "";
   const stopText = pickedStop
     ? (stopPrice !== null
-      ? `緑の太い破線＝「${SEC.risk}」で選んだ損切りの場面の株価（${stopPrice.toFixed(2)}、現在値から${pickedStop.shock >= 0 ? "+" : "−"}${Math.abs(pickedStop.shock * 100).toFixed(1)}%）。この株価まで動いたら損切りする、という場面です。`
-      : `「${SEC.risk}」で選んだ損切りの場面は、株価が変わらない（時間の経過による）場面のため、この図には線を引きません。`)
+      ? `緑の太い破線＝「${SEC.risk}」で設定した損切ラインの株価（${stopPrice.toFixed(2)}、現在値から${pickedStop.shock >= 0 ? "+" : "−"}${Math.abs(pickedStop.shock * 100).toFixed(1)}%）。この株価まで動いたら損切りする、という場面です。`
+      : `「${SEC.risk}」で設定した損切ラインは、株価が変わらない（時間の経過による）場面のため、この図には線を引きません。`)
     : "";
   const limitText = limitOk
     ? (limitPrice !== null
@@ -1748,7 +1748,7 @@ function renderOrderCard(t) {
     renderIvHv(t, latest, type.itmWhen);
     renderOrderExit(t, dates[dates.length - 1]);
     renderStressTest(t, latest, type.itmWhen);
-    renderIvTime(t, latest, type.itmWhen, dates[dates.length - 1]); // 時間の経過の表で選んだ場面があれば、ここで損切りの場面を差し替える
+    renderIvTime(t, latest, type.itmWhen, dates[dates.length - 1]); // 時間の経過の表で選んだ場面があれば、ここで設定した損切ラインを差し替える
     renderRiskPlan(t);
   }
   renderBreakEvenPrice(t, closes, todayStrike);
@@ -2282,7 +2282,7 @@ function renderIvTime(t, price, itmWhen, asOfDate) {
   els.ivTimeIntro.textContent = `株価は今の水準（${money(price)}）のまま動かず、IVだけが変わり、時間が経った場合に、いまのポジションを買い戻すのに必要な価格（現在値）と、そのときの損益の目安です。満期まで${days}営業日の状態を基準にしています。`;
   els.ivTimeHead.innerHTML = `<tr><th>IVの変化</th>${cols.map((c) =>
     `<th>${c.name}<br><span class="stress-sub">残り${c.remain}営業日（${dateOf(c.remain)}）</span></th>`).join("")}</tr>`;
-  // 損切りの場面: この表のセルを選んでいるときは、損切りの場面(lastStress.picked)をこのセルに差し替える
+  // 設定した損切ライン: この表のセルを選んでいるときは、設定した損切ライン(lastStress.picked)をこのセルに差し替える
   const pick = parseStopPick(t);
   let pickedCell = null;
   if (pick.type === "time") {
@@ -2308,10 +2308,10 @@ function renderIvTime(t, price, itmWhen, asOfDate) {
       const stop = c.value >= stopMin;
       const profit = c.value <= profitMax;
       const over = limitValue !== null && c.value >= limitValue;
-      const selectable = c.value > received; // 損失が出る場面だけ、損切りの場面に選べる
+      const selectable = c.value > received; // 損失が出る場面だけ、損切ラインに設定できる
       const picked = pickedCell !== null && pickedCell.c === c;
       const cls = [nearMax ? "stress-max" : stop ? "stress-stop" : profit ? "stress-profit" : "", over ? "stress-over" : "", selectable ? "stress-pickable" : "", picked ? "stress-picked" : ""].filter(Boolean).join(" ");
-      return `<td class="${cls}"${selectable ? ` data-stop-pick="time|${c.remain}|${r.ivUp}" title="クリックで、この場面を損切りの場面にします（もう一度クリックすると外れます）"` : ""}><b>${money(c.value)}</b><br><span class="stress-pnl ${c.pnl < 0 ? "neg" : ""}">${pnlText(c.pnl)}</span>${over ? '<br><span class="stress-overtag">資金2%超</span>' : ""}${picked ? '<br><span class="stress-picktag">損切りの場面に選択中</span>' : ""}</td>`;
+      return `<td class="${cls}"${selectable ? ` data-stop-pick="time|${c.remain}|${r.ivUp}" title="クリックで、この場面を損切ラインに設定します（もう一度クリックすると外れます）"` : ""}><b>${money(c.value)}</b><br><span class="stress-pnl ${c.pnl < 0 ? "neg" : ""}">${pnlText(c.pnl)}</span>${over ? '<br><span class="stress-overtag">資金2%超</span>' : ""}${picked ? '<br><span class="stress-picktag">損切ラインに設定中</span>' : ""}</td>`;
     }).join("")}</tr>`;
   }).join("");
   if (pickedCell) {
@@ -2336,7 +2336,7 @@ function renderIvTime(t, price, itmWhen, asOfDate) {
     ivText,
     receivedText,
     `緑のセルは、現在値が利確の目安（受取額×（1−利確割合${profitPercentOf(t)}%）＝${money(profitMax)}）以下になり、利確の条件に届いています。橙のセルは、現在値が${money(stopMin)}以上（受取額の1.9倍以上＝ロスカットの逆指値の水準）です${maxValue !== null ? "。さらに濃い色は、スプレッド幅の上限（最大損失）に近い水準です" : ""}。`,
-    `時間が経つと、株価が動かなくても現在値は下がります（時間の経過による価値の減り）。IVが上がると現在値は上がり、IVが下がると下がります（決算発表のあとは、IVが下がりやすい傾向があります）。株価も動く場合は、「株価が動いた場合」のタブ（ストレステスト）を見てください。損失が出るセル（現在値が受取額より高いセル）は、クリックすると「損切りの場面」として選べます（太い枠のセル。もう一度クリックすると外れます）。選んだ場面は、リスクリワードと、注文まとめに反映されます。`,
+    `時間が経つと、株価が動かなくても現在値は下がります（時間の経過による価値の減り）。IVが上がると現在値は上がり、IVが下がると下がります（決算発表のあとは、IVが下がりやすい傾向があります）。株価も動く場合は、「株価が動いた場合」のタブ（ストレステスト）を見てください。損失が出るセル（現在値が受取額より高いセル）は、クリックすると「設定した損切ライン」として設定できます（太い枠のセル。もう一度クリックすると外れます）。選んだ場面は、リスクリワードと、注文まとめに反映されます。`,
     "金利0・配当なし、IVは全体が一律に動くとして計算した目安です。実際の価格とは、スキュー・流動性などでずれます。",
   ].filter(Boolean).join(" ");
 }
@@ -2346,8 +2346,8 @@ function renderIvTime(t, price, itmWhen, asOfDate) {
 // ・発注する枚数を入れると、損失がこの2%になる買い戻し価格(損切りの目安の上限)が決まる。
 //     損切りの買い戻し価格の上限 ＝ 受取プレミアム ＋ (資金×2% ÷ (100株×枚数))
 // ・ストレステストの表(株価が動いた場合／株価が変わらず時間が経った場合)では、この価格以上になるセルに「2%超」の印を付ける。
-// ・損切りの場面は、表のセルをクリックして選べる(任意)。選ぶと、その場面での損失・枚数の上限・リスクリワードを出す。
-// ・リスクリワード＝利確したときの利益 ÷ 損切りしたときの損失(1株あたり)。場面を選ばないときの損失は、2%の上限。
+// ・設定した損切ラインは、表のセルをクリックして選べる(任意)。選ぶと、その場面での損失・枚数の上限・リスクリワードを出す。
+// ・リスクリワード＝利確したときの利益 ÷ 損切りしたときの損失(1株あたり)。損切ラインを設定しないときの損失は、2%の上限。
 const RISK_PCT = 0.02;
 const RISK_CAPITAL_KEY = "itm-tool-risk-capital-v1";
 const riskCapital = () => ratioSetting(RISK_CAPITAL_KEY, 0, 1e9);
@@ -2377,7 +2377,7 @@ function limitLineText(info, money, maxValue = null) {
   return `【資金2%の目安】資金${usd(info.capital)}の2%＝${usd(info.allowed)}。${info.qty}枚${info.assumed ? "（発注枚数が未入力のため、仮に1枚）" : ""}の場合、現在値（買い戻し価格）が ${money(info.value)} 以上になると、損失が資金の2%を超えます（赤枠の「資金2%超」）。${maxValue !== null && info.value >= maxValue ? "この枚数では、スプレッドの最大損失でも、損失は資金の2%以内に収まるため、印は付きません。" : ""}`;
 }
 
-// 損切りの場面の選択。"time|残り営業日|IVの変化"＝「IVの変化と時間の経過」の表のセル、"キー|IV列の番号"＝ストレステストの表のセル。選んでいないときはkey=null
+// 損切ラインの設定。"time|残り営業日|IVの変化"＝「IVの変化と時間の経過」の表のセル、"キー|IV列の番号"＝ストレステストの表のセル。選んでいないときはkey=null
 function parseStopPick(t) {
   const tm = /^time\|(\d+)\|(-?[\d.]+)$/.exec(t.stopPick || "");
   if (tm) return { type: "time", remain: Number(tm[1]), ivUp: Number(tm[2]) };
@@ -2388,13 +2388,13 @@ function parseStopPick(t) {
 // IVの変化の言い方
 const ivUpWord = (up) => (Math.abs(up) < 1e-9 ? "IVは変わらない" : `IVが${up > 0 ? "＋" : "−"}${Math.abs(Math.round(up * 100))}ポイント`);
 
-// 選んだ損切りの場面の説明(株価・IV・時間)
+// 設定した損切ラインの説明(株価・IV・時間)
 function sceneDesc(p, money) {
   if (p.scene === "time") return `株価は変わらず（${money(p.price)}）・${p.remainName}（残り${p.remain}営業日）・${ivUpWord(p.ivUp)}`;
   return `株価${money(p.price)}（現在値から${p.shock >= 0 ? "+" : "−"}${Math.abs(p.shock * 100).toFixed(1)}%）・${ivUpWord(p.ivUp)}`;
 }
 
-// リスクリワードの数字をまとめる(資金の2%・発注枚数・選んだ損切りの場面・利確から)
+// リスクリワードの数字をまとめる(資金の2%・発注枚数・設定した損切ライン・利確から)
 function riskCtxOf(t) {
   const st = lastStress;
   const capital = riskCapital();
@@ -2404,14 +2404,14 @@ function riskCtxOf(t) {
   const profitPerShare = received !== null ? received * (profitPercentOf(t) / 100) : null;
   const sceneLossPerShare = picked && received !== null ? picked.value - received : null;
   const sceneLossPerContract = sceneLossPerShare !== null ? sceneLossPerShare * SHARES_PER_CONTRACT_ORDER : null;
-  // 選んだ場面で、損失が2%以内に収まる最大の枚数
+  // 設定した損切ラインで、損失が2%以内に収まる最大の枚数
   const maxQty = allowed !== null && sceneLossPerContract !== null && sceneLossPerContract > 0 ? Math.floor(allowed / sceneLossPerContract) : null;
   const qtyInput = t.planQty > 0 ? Math.floor(t.planQty) : null;
   const qty = qtyInput !== null ? qtyInput : (maxQty !== null ? maxQty : null);
   // 損失が2%になる買い戻し価格(損切りの目安の上限)
   const limitLossPerShare = allowed !== null && qty !== null && qty >= 1 ? allowed / (SHARES_PER_CONTRACT_ORDER * qty) : null;
   const limitValue = limitLossPerShare !== null && received !== null ? received + limitLossPerShare : null;
-  // 場面を選んだときはその場面の損失、選んでいないときは2%の上限を損失とみなす
+  // 損切ラインを設定したときはその損失、設定していないときは2%の上限を損失とみなす
   const lossPerShare = sceneLossPerShare !== null ? sceneLossPerShare : limitLossPerShare;
   const lossPerContract = lossPerShare !== null ? lossPerShare * SHARES_PER_CONTRACT_ORDER : null;
   const totalLoss = qty !== null && lossPerContract !== null ? lossPerContract * qty : null;
@@ -2447,7 +2447,7 @@ function renderRiskPlan(t) {
     items.push({
       name: "損切りの買い戻し価格（2%の上限）", value: money(ctx.limitValue),
       suffix: `（受取${money(ctx.received)}＋損失${money(ctx.limitLossPerShare)}）`,
-      sub: `${ctx.qty}枚で、損失が${usd(ctx.allowed)}（資金の${RISK_PCT * 100}%）になる買い戻し価格${ctx.qtyInput === null ? "（選んだ場面から決めた枚数）" : ""}`,
+      sub: `${ctx.qty}枚で、損失が${usd(ctx.allowed)}（資金の${RISK_PCT * 100}%）になる買い戻し価格${ctx.qtyInput === null ? "（設定した損切ラインから決めた枚数）" : ""}`,
       note: "ポジションの買い戻しに必要な価格（現在値）が、この価格に届いたら損切りする、という目安です。受取プレミアム＋（資金の2%÷（100株×枚数））で計算しています。逆指値の注文は、発動後に不利な価格で約定することがあります。\n2つの表（ストレステストと、IVの変化と時間の経過）では、この価格以上になるセルに「2%超」の印を付けています。",
       attrs: `data-target="${T}"`,
     });
@@ -2462,39 +2462,39 @@ function renderRiskPlan(t) {
   if (ctx.picked) {
     const p = ctx.picked;
     items.push({
-      name: "選んだ損切りの場面", value: p.label, suffix: "",
+      name: "設定した損切ライン", value: p.label, suffix: "",
       sub: sceneDesc(p, money),
-      note: "ストレステストの表（株価が動いた場合）、または「IVの変化と時間の経過の影響」の表（株価が変わらない場合）で、クリックして選んだセルです。この場面の「現在値」（買い戻しに必要な価格）が、この場面で損切りしたときの買い戻し価格になります。もう一度同じセルをクリックするか、下の「場面の選択を外す」を押すと、選択が外れます。",
+      note: "ストレステストの表（株価が動いた場合）、または「IVの変化と時間の経過の影響」の表（株価が変わらない場合）で、クリックして選んだセルです。この場面の「現在値」（買い戻しに必要な価格）が、この場面で損切りしたときの買い戻し価格になります。もう一度同じセルをクリックするか、下の「損切ラインの設定を外す」を押すと、選択が外れます。",
       attrs: `data-target="${T}"`,
     });
     items.push({
-      name: "この場面の買い戻し価格", value: money(p.value), suffix: "（目安）",
-      sub: "選んだ場面の現在値",
-      note: "選んだ場面で、ポジションを買い戻すのに必要な価格（Black-Scholes・金利0・配当なしの目安）です。実際の価格とは、ずれます。",
+      name: "設定した損切ラインの買い戻し価格", value: money(p.value), suffix: "（目安）",
+      sub: "設定した損切ラインの現在値",
+      note: "設定した損切ラインで、ポジションを買い戻すのに必要な価格（Black-Scholes・金利0・配当なしの目安）です。実際の価格とは、ずれます。",
       attrs: `data-target="${T}"`,
     });
     if (ctx.sceneLossPerShare !== null) {
       items.push({
-        name: "この場面の損失額", value: money(ctx.sceneLossPerShare), suffix: `（100株で${usd(ctx.sceneLossPerShare * SHARES_PER_CONTRACT_ORDER)}）`,
+        name: "設定した損切ラインの損失額", value: money(ctx.sceneLossPerShare), suffix: `（100株で${usd(ctx.sceneLossPerShare * SHARES_PER_CONTRACT_ORDER)}）`,
         sub: `買い戻し${money(p.value)} − 受取${money(ctx.received)}`,
-        note: "この場面で損切りしたときの損失額（1株あたり）です。買い戻し価格−受取プレミアム額。手数料は含みません。",
+        note: "設定した損切ラインで損切りしたときの損失額（1株あたり）です。買い戻し価格−受取プレミアム額。手数料は含みません。",
         attrs: `data-target="${T}"`,
       });
     }
     items.push({
-      name: "この場面での枚数の上限", value: ctx.maxQty !== null ? `${ctx.maxQty}枚` : "―",
+      name: "設定した損切ラインでの枚数の上限", value: ctx.maxQty !== null ? `${ctx.maxQty}枚` : "―",
       sub: ctx.maxQty === null ? "トータル資金額を入力すると表示"
         : (ctx.maxQty === 0 ? "1枚でも、2%を超えます" : `${usd(ctx.sceneLossPerShare * SHARES_PER_CONTRACT_ORDER)}×${ctx.maxQty}枚＝${usd(ctx.sceneLossPerShare * SHARES_PER_CONTRACT_ORDER * ctx.maxQty)}`),
-      note: "1回の損切りの上限（資金の2%）を、この場面の損失額（1契約あたり）で割って、小数点以下を切り捨てた枚数です。この枚数以内なら、この場面で損切りしても、損失が資金の2%以内に収まります。",
+      note: "1回の損切りの上限（資金の2%）を、設定した損切ラインの損失額（1契約あたり）で割って、小数点以下を切り捨てた枚数です。この枚数以内なら、設定した損切ラインで損切りしても、損失が資金の2%以内に収まります。",
       attrs: `data-target="${T}"`,
     });
   }
   items.push({
     name: "損切りしたときの損失", value: ctx.lossPerShare !== null ? money(ctx.lossPerShare) : "―",
     suffix: ctx.lossPerShare !== null ? `（100株で${usd(ctx.lossPerContract)}${ctx.qty !== null && ctx.qty !== 1 ? `、${ctx.qty}枚で${usd(ctx.totalLoss)}` : ""}）` : "",
-    sub: ctx.lossPerShare === null ? "枚数を入力するか、損切りの場面を選ぶと表示"
-      : (ctx.picked ? "選んだ場面の損失" : "資金の2%の上限どおりに損切りしたとき"),
-    note: "損切りしたときの損失額（1株あたり）です。場面を選んでいないときは、資金の2%の上限どおりに損切りした場合の損失（＝2%の上限÷（100株×枚数））です。手数料は含みません。",
+    sub: ctx.lossPerShare === null ? "枚数を入力するか、損切ラインを設定すると表示"
+      : (ctx.picked ? "設定した損切ラインの損失" : "資金の2%の上限どおりに損切りしたとき"),
+    note: "損切りしたときの損失額（1株あたり）です。損切ラインを設定していないときは、資金の2%の上限どおりに損切りした場合の損失（＝2%の上限÷（100株×枚数））です。手数料は含みません。",
     attrs: `data-target="${T}"`,
   });
   if (ok !== null) {
@@ -2509,14 +2509,14 @@ function renderRiskPlan(t) {
   items.push({
     name: "リスクリワード", value: ctx.rr !== null ? `1：${ctx.rr.toFixed(2)}` : "―",
     suffix: ctx.rr !== null ? "（損失：利益）" : "",
-    sub: ctx.rr !== null ? `損失${money(ctx.lossPerShare)}に対して、利確の利益${money(ctx.profitPerShare)}（受取の${profitPercentOf(t)}%）` : "枚数を入力するか、損切りの場面を選ぶと表示",
+    sub: ctx.rr !== null ? `損失${money(ctx.lossPerShare)}に対して、利確の利益${money(ctx.profitPerShare)}（受取の${profitPercentOf(t)}%）` : "枚数を入力するか、損切ラインを設定すると表示",
     note: "損切りしたときの損失を1としたときの、利確したときの利益の大きさです（1株あたり）。1：0.5なら、損失1に対して、利益は0.5です。\nスプレッド・単体の売りは、利益が受取プレミアムに限られるため、リスクリワードが1を下回ることが多くなります。そのぶん、勝率（ITMになりにくいこと）で補う考え方です。",
     attrs: `data-target="${T}"`,
   });
   els.riskSummary.innerHTML = items.map((it) => statCardHtml(it)).join("");
   els.riskClearPick.hidden = !ctx.picked;
   els.riskNote.textContent = "損切りの目安は、判断の材料のひとつです。実際に損切りするかどうかは、ご自身で決めてください。" + (ctx.qtyInput !== null ? ` 発注枚数は、入力した${ctx.qtyInput}枚で計算しています。` : "");
-  if (lastCone) drawCone(lastCone.t, lastCone.iv); // 選んだ損切りの場面を、コーン図に反映する
+  if (lastCone) drawCone(lastCone.t, lastCone.iv); // 設定した損切ラインを、コーン図に反映する
 }
 
 // 「注文まとめ」: 分析結果をもとに、最終的にどのようなP売り注文をして、利確・損切りの指値をどうするかを、1か所にまとめる
@@ -2543,7 +2543,7 @@ function renderPlanCard(t) {
   const qty = ctx.qty;
   // 1枚のときは「1枚で」と「1枚で」が重なるので、2枚以上のときだけ、枚数分の合計を足す
   const multi = (v) => (qty !== null && qty !== 1 ? `、${qty}枚で${usd(v * qty)}` : "");
-  const qtyText = qty !== null ? `${qty}枚${ctx.qtyInput === null ? "（選んだ損切りの場面で、損失が資金の2%以内に収まる最大枚数）" : ""}` : null;
+  const qtyText = qty !== null ? `${qty}枚${ctx.qtyInput === null ? "（設定した損切ラインで、損失が資金の2%以内に収まる最大枚数）" : ""}` : null;
   const lines = []; // [見出し, HTML, テキスト]
   const add = (h, html, text) => lines.push([h, html, text]);
 
@@ -2578,11 +2578,11 @@ function renderPlanCard(t) {
   }
   if (p) {
     if (p.scene === "time") {
-      add("損切りの場面（選択）", `株価が変わらないまま、<b>${ivUpWord(p.ivUp)}</b>・${p.remainName}（残り${p.remain}営業日）の状態。買い戻し価格は <b>${money(p.value)}</b>`,
-        `場面 株価変わらず・${ivUpWord(p.ivUp)}・残り${p.remain}営業日、買い戻し${money(p.value)}`);
+      add("設定した損切ライン", `株価が変わらないまま、<b>${ivUpWord(p.ivUp)}</b>・${p.remainName}（残り${p.remain}営業日）の状態。買い戻し価格は <b>${money(p.value)}</b>`,
+        `設定した損切ライン 株価変わらず・${ivUpWord(p.ivUp)}・残り${p.remain}営業日、買い戻し${money(p.value)}`);
     } else {
-      add("損切りの場面（選択）", `株価が <b>${money(p.price)}</b>（現在値から${p.shock >= 0 ? "+" : "−"}${Math.abs(p.shock * 100).toFixed(1)}%）まで${isPut ? "下がった" : "上がった"}状態${p.ivUp > 0 ? `・IVが＋${Math.round(p.ivUp * 100)}ポイント` : ""}。買い戻し価格は <b>${money(p.value)}</b>`,
-        `場面 株価${money(p.price)}（${p.shock >= 0 ? "+" : "−"}${Math.abs(p.shock * 100).toFixed(1)}%）${p.ivUp > 0 ? `・IV＋${Math.round(p.ivUp * 100)}pt` : ""}、買い戻し${money(p.value)}`);
+      add("設定した損切ライン", `株価が <b>${money(p.price)}</b>（現在値から${p.shock >= 0 ? "+" : "−"}${Math.abs(p.shock * 100).toFixed(1)}%）まで${isPut ? "下がった" : "上がった"}状態${p.ivUp > 0 ? `・IVが＋${Math.round(p.ivUp * 100)}ポイント` : ""}。買い戻し価格は <b>${money(p.value)}</b>`,
+        `設定した損切ライン 株価${money(p.price)}（${p.shock >= 0 ? "+" : "−"}${Math.abs(p.shock * 100).toFixed(1)}%）${p.ivUp > 0 ? `・IV＋${Math.round(p.ivUp * 100)}pt` : ""}、買い戻し${money(p.value)}`);
     }
   }
   if (ctx.lossPerShare !== null) {
@@ -2669,7 +2669,7 @@ function renderStressTest(t, price, itmWhen) {
   const pnlText = (pnl) => `${pnl >= 0 ? "+" : "−"}${Math.abs(pnl).toFixed(2)}（100株で${pnl >= 0 ? "+" : "−"}${Math.abs(pnl * 100).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}ドル）`;
   els.stressHead.innerHTML = `<tr><th>株価の変化</th><th>株価</th>${STRESS_IV_UPS.map((up) =>
     `<th>${up === 0 ? "IVは変わらない" : `IVが＋${Math.round(up * 100)}ポイント`}<br><span class="stress-sub">IV ${((meta.ivSell + up) * 100).toFixed(1)}%</span></th>`).join("")}</tr>`;
-  // 損切りの場面: クリックしたセル(選んでいなければ、なし)。発注枚数を入れていれば、損失が資金の2%を超えるセルに印を付ける
+  // 設定した損切ライン: クリックしたセル(選んでいなければ、なし)。発注枚数を入れていれば、損失が資金の2%を超えるセルに印を付ける
   const limitInfo = limitInfoOf(t, received);
   const limitValue = limitInfo.value;
   els.stressIntro.textContent += ` ${limitLineText(limitInfo, money, maxValue)}`;
@@ -2686,7 +2686,7 @@ function renderStressTest(t, price, itmWhen) {
       const selectable = e.shock !== 0;
       const picked = selectable && ri === pickEntryIdx && ci === ivIdx;
       const cls = [nearMax ? "stress-max" : stop ? "stress-stop" : "", over ? "stress-over" : "", selectable ? "stress-pickable" : "", picked ? "stress-picked" : ""].filter(Boolean).join(" ");
-      return `<td class="${cls}"${selectable ? ` data-stop-pick="${e.key}|${ci}" title="クリックで、この場面を損切りの場面にします（もう一度クリックすると外れます）"` : ""}><b>${money(c.value)}</b><br><span class="stress-pnl ${c.pnl < 0 ? "neg" : ""}">${pnlText(c.pnl)}</span>${over ? '<br><span class="stress-overtag">資金2%超</span>' : ""}${picked ? '<br><span class="stress-picktag">損切りの場面に選択中</span>' : ""}</td>`;
+      return `<td class="${cls}"${selectable ? ` data-stop-pick="${e.key}|${ci}" title="クリックで、この場面を損切ラインに設定します（もう一度クリックすると外れます）"` : ""}><b>${money(c.value)}</b><br><span class="stress-pnl ${c.pnl < 0 ? "neg" : ""}">${pnlText(c.pnl)}</span>${over ? '<br><span class="stress-overtag">資金2%超</span>' : ""}${picked ? '<br><span class="stress-picktag">損切ラインに設定中</span>' : ""}</td>`;
     }).join("")}</tr>`;
   }).join("");
   if (pickEntryIdx >= 0) {
@@ -2716,7 +2716,7 @@ function renderStressTest(t, price, itmWhen) {
     ivText,
     receivedText,
     `色付きのセルは、現在値が${money(stopMin)}以上（受取額の1.9倍以上＝ロスカットの逆指値の水準）です${maxValue !== null ? "。さらに濃い色は、スプレッド幅の上限（最大損失）に近い水準です" : ""}。`,
-    "表のセルをクリックすると、その場面を「損切りの場面」として選べます（太い枠のセル。もう一度クリックすると外れます）。株価が変わらずに時間が経った場合の損失は、「株価が変わらず時間が経った場合」のタブ（IVの変化と時間の経過の影響）で見られます。選んだ場面は、リスクリワードと、注文まとめに反映されます。",
+    "表のセルをクリックすると、その場面を「設定した損切ライン」として設定できます（太い枠のセル。もう一度クリックすると外れます）。株価が変わらずに時間が経った場合の損失は、「株価が変わらず時間が経った場合」のタブ（IVの変化と時間の経過の影響）で見られます。選んだ場面は、リスクリワードと、注文まとめに反映されます。",
     "金利0・配当なし、株価がすぐに動いたとして（時間の経過なし）計算した目安です。実際の価格とは、スキュー・流動性などでずれます。すでに両方の権利行使価格を超えて動いている場合は、IVが上がるとスプレッドの価格がわずかに下がることがあります。",
   ].filter(Boolean).join(" ");
 }
@@ -3556,7 +3556,7 @@ function init() {
   els.premModeNet.addEventListener("click", () => setPremMode("net"));
   els.premModeLegs.addEventListener("click", () => setPremMode("legs"));
   els.rrIvBuyInput.addEventListener("input", debounce(onFormChange, 250));
-  // 損切りの場面(ストレステストの表のセル)の選択
+  // 設定した損切ライン(ストレステストの表のセル)の選択
   for (const body of [els.stressBody, els.ivTimeBody]) {
     body.addEventListener("click", (e) => {
       const td = e.target.closest("[data-stop-pick]");
