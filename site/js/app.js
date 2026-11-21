@@ -2614,7 +2614,7 @@ function renderPlanCard(t) {
   ].filter(Boolean);
   add("判断の根拠", basis.join("　／　"), `根拠: ${basis.join(" / ")}`);
 
-  els.planBody.innerHTML = lines.map(([h, html]) => `<tr><th>${h}</th><td>${html}</td></tr>`).join("");
+  els.planBody.innerHTML = lines.map(([h, html]) => `<tr><th>${h}</th><td>${html}${jumpHtml(h, SELL_JUMPS)}</td></tr>`).join("");
   lastPlanText = `【${t.symbol} 注文まとめ】\n` + lines.map(([h, , text]) => `${h}：${text}`).join("\n") + "\n※目安です。実際の価格・約定とはずれます。";
   els.planCard.hidden = false;
 }
@@ -3411,7 +3411,7 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   add("満期より前の判断日", `満期の10営業日前（${shiftTradingDays(expiry, MARK_BEFORE_EXPIRY)}）に、利益・損失を見直します`);
   const act = els.overallProb.textContent;
   add("判断の根拠", `ITM発生率（過去の実績）${act}・総合判定 ${els.badge.textContent}${band.hvItm !== null ? `／満期時ITM率（HV換算）${(band.hvItm * 100).toFixed(1)}%` : ""}${band.cond ? `／最低条件 ${band.cond.hitDays >= 1 ? "満たしている" : "満たしていない"}（${band.cond.hitDays}/7日）` : ""}`);
-  els.buyPlanBody.innerHTML = rows.map(([k, val]) => `<tr><th>${k}</th><td>${val}</td></tr>`).join("");
+  els.buyPlanBody.innerHTML = rows.map(([k, val]) => `<tr><th>${k}</th><td>${val}${jumpHtml(k, BUY_JUMPS)}</td></tr>`).join("");
   lastBuyPlanText = rows.map(([k, val]) => `${k}：${val.replace(/<[^>]+>/g, "")}`).join("\n");
   card.hidden = false;
 }
@@ -3450,6 +3450,77 @@ function setRiskTab(which) {
   }
 }
 
+// ---- 注文まとめ: 各設定値を変更する入力欄へ飛ぶボタンと、注文まとめへ戻るボタン ----
+// 行の見出し → [[ボタンの文字, 飛び先のid], ...]。飛び先の入力欄に移動してフォーカスし、画面の右下に「注文まとめに戻る」を出す。
+const SELL_JUMPS = {
+  "銘柄・取引": [["取引タイプ", "typeSelect"]],
+  "発注する権利行使価格・満期": [["権利行使価格", "rrSellStrikeInput"], ["満期日", "windowDateInput"]],
+  "受取プレミアム（売りの指値）": [["受取プレミアム", "rrPremiumInput"]],
+  "枚数": [["枚数", "planQtyInput"]],
+  "利確（買い戻しの指値）": [["利確割合", "rrProfitRatioInput"]],
+  "損切り（資金の2%まで）": [["トータル資金額", "riskCapitalInput"], ["枚数", "planQtyInput"]],
+  "設定した損切ライン": [["損切ラインの表", "riskCard"]],
+  "損切りしたときの損失": [["損切ラインの表", "riskCard"]],
+  "資金に対する損失": [["トータル資金額", "riskCapitalInput"]],
+  "日程の目安": [["満期日", "windowDateInput"]],
+};
+const BUY_JUMPS = {
+  "銘柄・取引": [["取引タイプ", "typeSelect"]],
+  "発注する権利行使価格・満期": [["権利行使価格", "rrSellStrikeInput"], ["満期日", "windowDateInput"]],
+  "支払いプレミアム（買いの指値）": [["支払いプレミアム", "rrPayPremiumInput"]],
+  "枚数": [["枚数", "planQtyInput"]],
+  "手仕舞いの線（固定）": [["手仕舞いの線", "buyAtrMultSelect"]],
+  "損切り2%の線": [["トータル資金額", "riskCapitalInput"], ["枚数", "planQtyInput"]],
+  "線に届いたときのオプションの損失": [["手仕舞いの線", "buyAtrMultSelect"], ["IV", "rrIvSellInput"]],
+  "資金に対する損失": [["トータル資金額", "riskCapitalInput"]],
+  "満期より前の判断日": [["満期日", "windowDateInput"]],
+};
+function jumpHtml(label, map) {
+  const list = map[label];
+  if (!list) return "";
+  return `<div class="plan-jumps">${list.map(([name, id]) => `<button type="button" class="jump-btn" data-jump="${id}" title="入力欄へ移動して、変更できます">✎ ${name}を変更</button>`).join("")}</div>`;
+}
+let jumpAway = false; // 注文まとめから離れて、入力欄にいるか
+let jumpBackBtn = null;
+function setupPlanJump() {
+  const planCardEl = PAGE === "buy" ? els.buyPlanCard : els.planCard;
+  const planSecId = PAGE === "buy" ? "sb8" : "s8";
+  jumpBackBtn = document.createElement("button");
+  jumpBackBtn.type = "button";
+  jumpBackBtn.className = "jump-back";
+  jumpBackBtn.hidden = true;
+  jumpBackBtn.textContent = "↩ 注文まとめに戻る";
+  document.body.appendChild(jumpBackBtn);
+  const hideBack = () => { jumpAway = false; jumpBackBtn.hidden = true; };
+  jumpBackBtn.addEventListener("click", () => {
+    hideBack();
+    const sec = document.getElementById(planSecId);
+    if (sec) { sec.open = true; sec.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  });
+  // 注文まとめが画面に戻ってきたら(自分でスクロールしたときも)、戻るボタンは隠す
+  if ("IntersectionObserver" in window && planCardEl) {
+    new IntersectionObserver((es) => { if (jumpAway && es.some((e) => e.isIntersecting)) hideBack(); }, { threshold: 0.3 }).observe(planCardEl);
+  }
+  const onClick = (e) => {
+    const b = e.target.closest("[data-jump]");
+    if (!b) return;
+    const el = document.getElementById(b.dataset.jump);
+    if (!el) return;
+    let d = el.closest("details");
+    while (d) { d.open = true; d = d.parentElement ? d.parentElement.closest("details") : null; }
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const box = el.closest(".field") || el;
+    box.classList.remove("jump-flash");
+    void box.offsetWidth;
+    box.classList.add("jump-flash");
+    setTimeout(() => box.classList.remove("jump-flash"), 2600);
+    setTimeout(() => { try { if (!el.disabled) el.focus({ preventScroll: true }); } catch (err) { /* フォーカスできない欄 */ } }, 450);
+    jumpBackBtn.hidden = false;
+    setTimeout(() => { jumpAway = true; }, 900); // スクロールが始まってから、「戻ってきた」判定を有効にする
+  };
+  for (const body of [els.planBody, els.buyPlanBody]) if (body) body.addEventListener("click", onClick);
+}
+
 function init() {
   initThemeBar("theme-bar");
   setupCellTip();
@@ -3459,6 +3530,7 @@ function init() {
   setupTickerHistoryDropdown(els.ticker, els.tickerHistoryDropdown);
   setupStatExplain();
   setupConeFocus();
+  setupPlanJump();
 
   // 復元の優先順位: URLの共有パラメータ > 同一端末の保存状態 > 新規タブ
   const shareData = parseShareParam();

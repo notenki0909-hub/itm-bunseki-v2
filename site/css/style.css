@@ -538,3 +538,12 @@ details.mini#volDetails[hidden]{display:none}
 .be-box .be-check{margin:0 0 4px;font-size:14px;font-weight:700;line-height:1.5}
 .be-box .be-check input{flex:0 0 auto}
 .be-box .field-hint{display:block;font-size:12.5px}
+
+/* ---- 注文まとめ: 入力欄へ飛ぶボタン・戻るボタン ---- */
+.plan-jumps{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.jump-btn{padding:2px 10px;font-size:12px;border-radius:999px;background:var(--field);color:var(--accent);border:1px solid var(--line);cursor:pointer}
+.jump-btn:hover{border-color:var(--accent)}
+.jump-back{position:fixed;right:16px;bottom:16px;z-index:60;padding:10px 16px;font-size:14px;font-weight:700;border-radius:999px;background:var(--accent);color:#fff;border:0;box-shadow:0 2px 10px rgba(0,0,0,.3);cursor:pointer}
+.jump-back[hidden]{display:none}
+.jump-flash{animation:jumpflash 2.6s ease-out;border-radius:8px}
+@keyframes jumpflash{0%,60%{outline:3px solid var(--accent);background:color-mix(in srgb, var(--accent) 18%, transparent)}100%{outline:3px solid transparent;background:transparent}}
