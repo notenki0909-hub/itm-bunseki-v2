@@ -9,7 +9,7 @@ import {
   VOLATILITY_PERIODS, computeVolatilityStats, computeRecentVolatilityAmount,
   computeHv, computeHvSeries, hvPosition, hvTheory, computeEmpiricalCone,
 } from "./calc.js";
-import { computeBuyStudy, computeFixedLineTable, computeAtr, assumedIvAt, BUY_X_LIST, BUY_ATR_MULTS, DEFAULT_ATR_MULT, ATR_PERIOD } from "./buyline.js";
+import { computeBuyStudy, computeFixedLineTable, legWorth, computeAtr, assumedIvAt, BUY_X_LIST, BUY_ATR_MULTS, DEFAULT_ATR_MULT, ATR_PERIOD } from "./buyline.js";
 import { renderDayProbChart, DAY_PROB_BANDS, renderConeChart, renderHvHistoryChart, coneSwatch, coneTextColor } from "./chart.js";
 import { renderEntryHeatmap, ENTRY_HEATMAP_BANDS, renderDepthHeatmap, DEPTH_HEATMAP_BANDS, renderOtmHeatmap, OTM_HEATMAP_BANDS, OTM_RATE_BANDS } from "./heatmap.js";
 import { initThemeBar } from "./theme.js";
@@ -114,8 +114,8 @@ function applyRecipe(t, rec) {
     buyAtrMult: rec.buyAtrMult ?? t.buyAtrMult,
     buyRate: rec.buyRate ?? t.buyRate,
   });
-  // 買いページは、単体注文のみ(スプレッドは未対応)
-  if (PAGE === "buy") t.rrVariant = "naked";
+  // 買いページ: 単体、または、買い系スプレッド(ブルコール・ベアプット)
+  if (PAGE === "buy" && t.rrVariant !== "spread") t.rrVariant = "naked";
   // 古い保存状態・共有リンクの引き継ぎ。
   //  - 買い系の支払いプレミアム額は、以前はrrLossBasis(さらに前はrrPremium)に保存していた。
   //    今は専用のrrPayPremiumに保存する(受取プレミアムと意味が違うため、別々に持つ)。
@@ -1625,7 +1625,10 @@ function sellStrikeOf(t, price) {
 // t.rrSpreadWidth / t.rrPremium に、自動の値を入れる(以降の計算は、これまで通り、この2つを使う)。
 function syncOrderDerived(t) {
   const group = typeGroup(t.typeKey);
-  const isSellSp = group === "sell" && t.rrVariant === "spread";
+  const isSellSp = t.rrVariant === "spread"; // 売り系(ブルプット・ベアコール)・買い系(ブルコール・ベアプット)の両方。変数名は従来のまま
+  const mainWord = group === "sell" ? "売り" : "買い"; // 比率・価格で決める権利行使価格の側
+  const otherWord = group === "sell" ? "買い" : "売り"; // 差額で決まる、もう一方の側
+  const spLabel = (RISK_VARIANT_LABELS[t.typeKey] || RISK_VARIANT_LABELS.put_sell).spread;
   const isPut = OPTION_TYPES[t.typeKey].itmWhen === "below";
   const view = t.closesFull && t.closesFull.length ? viewDataOf(t) : null;
   const latest = view && view.closes.length ? view.closes[view.closes.length - 1] : null;
@@ -1673,10 +1676,10 @@ function syncOrderDerived(t) {
     if (ok) {
       t.rrSpreadWidth = Math.round(Math.abs(sellEff - t.rrBuyStrike) * 100) / 100;
       widthAuto = true;
-      els.rrWidthHint.textContent = `売り ${fmtStrike(sellEff)} − 買い ${fmtStrike(t.rrBuyStrike)}（自動計算）`;
+      els.rrWidthHint.textContent = `${mainWord} ${fmtStrike(sellEff)} − ${otherWord} ${fmtStrike(t.rrBuyStrike)}（自動計算）`;
     } else {
       t.rrSpreadWidth = null;
-      warn = isPut ? "買いの権利行使価格は、売りより低い値にしてください（ブルプット）" : "買いの権利行使価格は、売りより高い値にしてください（ベアコール）";
+      warn = `${otherWord}の権利行使価格は、${mainWord}より${isPut ? "低い" : "高い"}値にしてください（${spLabel}）`;
       els.rrWidthHint.textContent = "";
     }
   } else {
@@ -1687,7 +1690,7 @@ function syncOrderDerived(t) {
   if (widthAuto || (isSellSp && t.rrBuyStrike > 0 && warn)) els.rrSpreadWidthInput.value = t.rrSpreadWidth ?? "";
 
   // 受取プレミアム
-  const legs = isSellSp && t.rrPremMode === "legs";
+  const legs = isSellSp && group === "sell" && t.rrPremMode === "legs"; // 「売りと買いを入力」は売りページだけ
   els.premModeNet.classList.toggle("active", !legs);
   els.premModeLegs.classList.toggle("active", legs);
   els.premLegsRow.hidden = !legs;
@@ -2790,6 +2793,29 @@ function renderBreakEvenPrice(t, closes, todayStrike) {
       note: "損益分岐点が、現在の株価(最新の終値)から見て何%離れているかです。\n例えばプット売りで-8%なら、株価が現在より8%下がるまでは(満期時に)損失にならない、という余裕の目安になります。",
     },
   ];
+  // 買い系スプレッド(ブルコール・ベアプット): 最大損失(支払った正味)・最大利益(差額−支払い)。損益分岐点は、買い側の権利行使価格±支払い
+  if (PAGE === "buy" && t.rrVariant === "spread") {
+    const w = t.rrSpreadWidth > 0 ? t.rrSpreadWidth : null;
+    const pay = premium !== null && premium > 0 ? premium : null;
+    const usd = (v) => `${Math.abs(v).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}ドル`;
+    const bad = w !== null && pay !== null && pay >= w;
+    items.splice(1, 0,
+      {
+        name: "最大損失", value: pay === null ? "―" : pay.toFixed(2), suffix: pay === null ? "" : "（1株あたり）",
+        sub: pay === null ? "支払いプレミアム額（差し引き後の正味）を入力すると表示" : `＝ 1枚で${usd(pay * 100)}。支払った正味の額（満期に、買い側がOTMなら全損）`,
+        note: "買い系スプレッド（ブルコール・ベアプット）の、最大損失です。支払った正味のプレミアム（買い側の支払い − 売り側の受取）が、そのまま最大損失になります。1枚＝100株で、手数料は含みません。",
+      },
+      {
+        name: "最大利益", value: w === null || pay === null ? "―" : (bad ? "―" : (w - pay).toFixed(2)), suffix: w === null || pay === null || bad ? "" : "（1株あたり）",
+        sub: w === null ? "売り側の権利行使価格（または差額）を入力すると表示"
+          : pay === null ? "支払いプレミアム額を入力すると表示"
+            : bad ? "支払いプレミアムが、差額以上です。入力を確認してください（差額より多く払うと、最大利益が出ません）"
+              : `＝ 権利行使価格の差額${w.toFixed(2)} − 支払い${pay.toFixed(2)}（1枚で${usd((w - pay) * 100)}）`,
+        note: "買い系スプレッドの、最大利益です。満期に、株価が売り側の権利行使価格を超えて（プットは下回って）、スプレッドが最大の価値（権利行使価格の差額）になったときの利益で、差額 − 支払った正味のプレミアムです。1枚＝100株で、手数料は含みません。",
+      });
+    // 損益分岐点の説明を、スプレッド用に
+    items[3].note = `満期時にこの株価であれば、損益がちょうどゼロになる価格です（買い側の権利行使価格${isPut ? "−" : "＋"}支払った正味のプレミアム）。\n${isPut ? "ベアプットは、満期時の株価がこの価格を下回ると利益になります（売り側の権利行使価格まで）。" : "ブルコールは、満期時の株価がこの価格を上回ると利益になります（売り側の権利行使価格まで）。"}\nプレミアムは、差し引き後の正味の額（買い側の支払い − 売り側の受取）を、1株あたりで入力してください。手数料は含みません。`;
+  }
   els.rrBreakEvenSummary.innerHTML = items.map((it) => statCardHtml({ ...it, attrs: `data-target="${T}"` })).join("");
 }
 
@@ -3148,7 +3174,7 @@ function premiumMismatchText(t, price, strike, where = "iv") {
   const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
   const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
   if (premium === null || ivIn === null) return "";
-  const theo = bsPrice(buyKindOf(t), price, strike, t.windowDays / TRADING_DAYS_PER_YEAR, ivIn, rateOf(t));
+  const theo = legWorth(buyKindOf(t), price, strike, buySecondStrike(t, strike), t.windowDays / TRADING_DAYS_PER_YEAR, ivIn, rateOf(t));
   const tYears = t.windowDays / TRADING_DAYS_PER_YEAR;
   const rateAllow = strike * 0.05 * tYears * 0.6; // 満期が長いときの、金利(約4〜5%)のぶんのずれ(ツールは、IVとプレミアムの両方があるとき、金利0で計算する)
   if (Math.abs(theo - premium) <= Math.max(0.05, premium * 0.15) + rateAllow) return "";
@@ -3163,12 +3189,13 @@ function renderPremiumJudge(t, price, strike, hv) {
   const el = els.premJudge;
   if (!el) return;
   const premium = hasPrem(t) ? t.rrPayPremium : null;
-  if (premium === null || hv === null) { el.textContent = ""; el.className = "field-hint"; return; }
+  if (premium === null || hv === null || buySpreadPending(t)) { el.textContent = ""; el.className = "field-hint"; return; }
+  const K2 = buySecondStrike(t, strike);
   const kind = buyKindOf(t);
   const T = t.windowDays / TRADING_DAYS_PER_YEAR;
   // IVを入力しているときは、入力したIV(証券会社の値。金利を含む)で判定する。空欄のときだけ、プレミアムから逆算したIV(金利は、入力欄の値)を使う
   const useInput = hasIvIn(t);
-  const ivJ = useInput ? t.rrIvSell / 100 : solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: null, T, premium, r: rateOf(t) });
+  const ivJ = useInput ? t.rrIvSell / 100 : solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: K2, T, premium, r: rateOf(t) });
   if (ivJ === null) { el.textContent = "支払いプレミアムに合うIVが見つかりません。入力を確認してください（桁や単位の間違いはありませんか）"; el.className = "field-hint"; return; }
   const ratio = ivJ / hv;
   const judge = judgeIvHv(ratio);
@@ -3177,7 +3204,7 @@ function renderPremiumJudge(t, price, strike, hv) {
   // HV計算の理論価格との比較は、IVを入力していないとき(プレミアムだけのとき)に出す(IV入力時は、金利を含む証券会社のIVで判定するため)
   let priceRatio = "";
   if (!useInput) {
-    const hvPrice = bsPrice(kind, price, strike, T, hv, rateOf(t));
+    const hvPrice = legWorth(kind, price, strike, K2, T, hv, rateOf(t));
     if (hvPrice > 0.005) priceRatio = `HV計算の理論価格${hvPrice.toFixed(2)}の${(premium / hvPrice).toFixed(1)}倍。`;
   }
   el.innerHTML = `判定：<b style="color:${color}">${word}</b>　${priceRatio}${useInput ? "入力したIV" : "逆算IV"} ${(ivJ * 100).toFixed(1)}%はHV ${(hv * 100).toFixed(1)}%の${ratio.toFixed(2)}倍（1.2倍以上＝割高、0.8倍以下＝割安）`;
@@ -3201,6 +3228,8 @@ function renderBuyIv(t, price, strike) {
   const { closes } = viewDataOf(t);
   const hv = computeHv(closes, days);
   renderPremiumJudge(t, price, strike, hv);
+  if (buySpreadPending(t)) { clear("売り側の権利行使価格（または差額）を入力すると表示します。"); return; }
+  const K2 = buySecondStrike(t, strike);
   if (hv === null) { clear("HVを計算するためのデータが足りないため、表示できません。"); return; }
   const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
   const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
@@ -3209,7 +3238,7 @@ function renderBuyIv(t, price, strike) {
   let source = "input";
   if (iv === null) {
     if (premium === null) { clear("IV（任意）か、支払いプレミアム額を入力すると表示します。"); return; }
-    iv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: null, T, premium, r: rateOf(t) });
+    iv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: K2, T, premium, r: rateOf(t) });
     source = "calibrated";
     if (iv === null) { clear("支払いプレミアム額に合うIVが見つかりませんでした。支払いプレミアム額や権利行使価格を、確認してください。"); return; }
   }
@@ -3243,7 +3272,7 @@ function renderBuyIv(t, price, strike) {
       note: `市場の見込み（IV）から見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。\n1σ＝現在値×IV×√(営業日数÷252)。「${SEC.hv}」の1σの値動き（HV基準）と同じ計算で、HVの代わりにIVを使っています。\nIVは、1つの値を全体に当てはめた目安です。将来を保証するものではありません。`,
     });
   }
-  const hvPrice = bsPrice(kind, price, strike, T, hv, rateOf(t));
+  const hvPrice = legWorth(kind, price, strike, K2, T, hv, rateOf(t));
   if (hvPrice > 0.005 && premium !== null) {
     const diff = premium - hvPrice;
     const sign = diff >= 0 ? "+" : "−";
@@ -3262,6 +3291,14 @@ function renderBuyIv(t, price, strike) {
   drawCone(t, { thIv });
   setupStatExplain();
 }
+// 買い系スプレッド: 売り側の権利行使価格(差額から決まる。コールは買い側より高く、プットは低い)。単体・未入力はnull
+function buySecondStrike(t, strike) {
+  if (t.rrVariant !== "spread" || !(t.rrSpreadWidth > 0) || !(strike > 0)) return null;
+  const k = OPTION_TYPES[t.typeKey].itmWhen === "below" ? strike - t.rrSpreadWidth : strike + t.rrSpreadWidth;
+  return k > 0 ? k : null;
+}
+// スプレッドを選んだのに、売り側(差額)が未入力
+const buySpreadPending = (t) => PAGE === "buy" && t.rrVariant === "spread" && !(t.rrSpreadWidth > 0);
 const pctTxt = (v, d = 0) => (v === null || v === undefined || Number.isNaN(v) ? "―" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
 const buyKindOf = (t) => (OPTION_TYPES[t.typeKey].itmWhen === "above" ? "call" : "put");
 
@@ -3277,7 +3314,10 @@ function renderBuyStudy(t) {
   const direction = t.momentumDirection;
   const curX = t.momentumThresholdPct;
   const xs = [...new Set([...BUY_X_LIST, ...(curX > 0 ? [curX] : [])])].sort((a, b) => a - b);
-  const rows = computeBuyStudy({ closes: v.closes, highs: v.highs, lows: v.lows, kind, ratio, window: t.windowDays, xList: [null, ...xs], direction, mult: t.buyAtrMult });
+  if (buySpreadPending(t)) { card.hidden = true; return; }
+  const K2 = buySecondStrike(t, effStrikeOf(t, price));
+  const ratio2 = K2 > 0 ? K2 / price : null;
+  const rows = computeBuyStudy({ closes: v.closes, highs: v.highs, lows: v.lows, kind, ratio, ratio2, window: t.windowDays, xList: [null, ...xs], direction, mult: t.buyAtrMult });
   const dirWord = direction === "down" ? "下落" : "上昇";
   const f = (s) => (s ? `${pctTxt(s.mean)}<br><span class="bs-sub">中央${pctTxt(s.median)}・勝率${(s.win * 100).toFixed(0)}%</span>` : "―");
   const body = rows.map((r) => {
@@ -3321,6 +3361,16 @@ function renderBuyRisk(t, price, strike, asOfDate) {
     return;
   }
   lastBuyRisk = null;
+  if (buySpreadPending(t)) {
+    band.buyLine = null;
+    els.buyRiskSummary.innerHTML = "";
+    els.buyRiskBody.innerHTML = "";
+    els.buyRiskNote.textContent = "売り側の権利行使価格（または差額）を入力すると、スプレッドの価格で、固定の線を計算します。";
+    if (els.buyTimeBody) { els.buyTimeHead.innerHTML = ""; els.buyTimeBody.innerHTML = ""; els.buyTimeIntro.textContent = ""; els.buyTimeNote.textContent = ""; }
+    card.hidden = false;
+    return;
+  }
+  const K2 = buySecondStrike(t, strike);
   const kind = buyKindOf(t);
   const atrArr = computeAtr(v.highs, v.lows, v.closes, ATR_PERIOD);
   const atr = atrArr[atrArr.length - 1];
@@ -3330,7 +3380,7 @@ function renderBuyRisk(t, price, strike, asOfDate) {
   const assumed = assumedIvAt(v.closes, v.closes.length - 1);
   const capital = riskCapital();
   const tbl = computeFixedLineTable({
-    price, atr, kind, strike, days: t.windowDays, premium, capital: capital > 0 ? capital : null, contracts: t.planQty,
+    price, atr, kind, strike, strike2: K2, days: t.windowDays, premium, capital: capital > 0 ? capital : null, contracts: t.planQty,
     iv: premium !== null ? null : (ivIn !== null ? ivIn : assumed), rate: rateOf(t), mults: BUY_ATR_MULTS.includes(t.buyAtrMult) ? BUY_ATR_MULTS : [...BUY_ATR_MULTS, t.buyAtrMult].sort((a, b) => a - b),
   });
   const dirWord = kind === "call" ? "下がった" : "上がった";
@@ -3409,7 +3459,7 @@ function renderBuyTime(t, price, strike, asOfDate, tbl, kind, capital, ivSrc) {
   els.buyTimeBody.innerHTML = BUY_TIME_IV_CHANGES.filter((up) => iv0 + up >= 0.02).map((up) => {
     const label = up === 0 ? "変わらない" : `${up > 0 ? "＋" : "−"}${Math.abs(Math.round(up * 100))}ポイント`;
     const tds = cols.map((c) => {
-      const value = bsPrice(kind, price, strike, c.remain / TRADING_DAYS_PER_YEAR, iv0 + up, rateOf(t));
+      const value = legWorth(kind, price, strike, buySecondStrike(t, strike), c.remain / TRADING_DAYS_PER_YEAR, iv0 + up, rateOf(t));
       const pnl = value - pay; // 買い手の損益(1株)
       const over = limit !== null && pnl < 0 && -pnl * 100 * qty >= limit;
       const cls = [pnl >= 0 ? "stress-profit" : "", over ? "stress-over" : ""].filter(Boolean).join(" ");
@@ -3434,12 +3484,16 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   const capital = riskCapital();
   const ask = (m) => `―（${m}を入力）`;
   const money = (x) => x.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
+  const isSpread = t.rrVariant === "spread";
+  const K2 = buySecondStrike(t, strike);
+  const spLabel = (RISK_VARIANT_LABELS[t.typeKey] || RISK_VARIANT_LABELS.call_buy).spread;
+  const pcl = kind === "call" ? "C" : "P";
   // 発注枚数: 入力があればその値。空欄なら、資金の2%に収まる最大枚数
   let optLoss = null;
   let riskRow2 = null; // 損失が資金の2%になる線
   if (bl && premium !== null) {
     const atrArr = v.highs && v.lows ? computeAtr(v.highs, v.lows, v.closes, ATR_PERIOD) : null;
-    const tbl = atrArr ? computeFixedLineTable({ price, atr: atrArr[atrArr.length - 1], kind, strike, days: t.windowDays, premium, iv: null, capital: capital > 0 ? capital : null, contracts: t.planQty, rate: rateOf(t), mults: [bl.mult] }) : null;
+    const tbl = atrArr ? computeFixedLineTable({ price, atr: atrArr[atrArr.length - 1], kind, strike, strike2: K2, days: t.windowDays, premium, iv: null, capital: capital > 0 ? capital : null, contracts: t.planQty, rate: rateOf(t), mults: [bl.mult] }) : null;
     optLoss = tbl ? tbl.rows[0] : null;
     riskRow2 = tbl ? tbl.riskRow : null;
   }
@@ -3447,9 +3501,17 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   const qtyNote = t.planQty ? "入力した枚数" : (qty !== null ? "資金の2%に収まる最大枚数" : "");
   const rows = [];
   const add = (k, val) => rows.push([k, val]);
-  add("銘柄・取引", `${t.symbol}　${type.label}い（${kind === "call" ? "コール" : "プット"}）　基準日の終値 ${price.toFixed(2)}`);
-  add("発注する権利行使価格・満期", `権利行使価格 ${fmtStrike(strike)}（終値の${(strike / price * 100).toFixed(1)}%）　満期 ${expiry}（残り${t.windowDays}営業日）`);
-  add("支払いプレミアム（買いの指値）", premium === null ? ask("支払いプレミアム額") : `指値 ${money(premium)}　（1枚 ${money(premium * 100)}ドル）`);
+  add("銘柄・取引", `${t.symbol}　${isSpread ? spLabel : `${type.label}い（${kind === "call" ? "コール" : "プット"}）`}　基準日の終値 ${price.toFixed(2)}`);
+  if (isSpread) {
+    add("発注する権利行使価格・満期", `買い ${fmtStrike(strike)}${pcl}（終値の${(strike / price * 100).toFixed(1)}%）／売り ${K2 === null ? "―（売り側の権利行使価格を入力）" : `${fmtStrike(K2)}${pcl}`}${t.rrSpreadWidth > 0 ? `（差額 ${money(t.rrSpreadWidth)}）` : ""}　満期 ${expiry}（残り${t.windowDays}営業日）`);
+  } else {
+    add("発注する権利行使価格・満期", `権利行使価格 ${fmtStrike(strike)}（終値の${(strike / price * 100).toFixed(1)}%）　満期 ${expiry}（残り${t.windowDays}営業日）`);
+  }
+  add("支払いプレミアム（買いの指値）", premium === null ? ask("支払いプレミアム額") : `指値 ${money(premium)}${isSpread ? "（差し引き後の正味）" : ""}　（1枚 ${money(premium * 100)}ドル）`);
+  if (isSpread) {
+    const w = t.rrSpreadWidth > 0 ? t.rrSpreadWidth : null;
+    add("最大損失・最大利益", premium === null ? ask("支払いプレミアム額") : `最大損失 ${money(premium)}（1枚 ${money(premium * 100)}ドル）／最大利益 ${w === null ? "―（売り側の権利行使価格を入力）" : (premium >= w ? "―（支払いが差額以上です）" : `${money(w - premium)}（1枚 ${money((w - premium) * 100)}ドル）`)}`);
+  }
   add("枚数", qty === null ? ask("トータル資金額（または枚数）") : qty === 0 ? "0枚（1枚でも、線に届いたときの損失が資金の2%を超えます。枚数を入力するか、資金・線の倍率を見直してください）" : `${qty}枚（${qtyNote}）　／　支払い合計 ${premium === null ? "―" : money(premium * 100 * qty)}ドル`);
   add("手仕舞いの線（固定）", bl ? `${bl.line.toFixed(2)}（買った日の終値から ${pctTxt(bl.movePct, 1)}・ATR×${bl.mult}）。終値がこの線に届いたら手仕舞う` : "―");
   add("損切り2%の線", capital > 0 && premium !== null
@@ -3464,7 +3526,12 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   add("満期より前の判断日", `満期の10営業日前（${shiftTradingDays(expiry, MARK_BEFORE_EXPIRY)}）に、利益・損失を見直します`);
   const act = els.overallProb.textContent;
   add("判断の根拠", `ITM発生率（過去の実績）${act}・総合判定 ${els.badge.textContent}${band.hvItm !== null ? `／満期時ITM率（HV換算）${(band.hvItm * 100).toFixed(1)}%` : ""}${band.cond ? `／最低条件 ${band.cond.hitDays >= 1 ? "満たしている" : "満たしていない"}（${band.cond.hitDays}/7日）` : ""}`);
-  els.buyPlanBody.innerHTML = rows.map(([k, val]) => `<tr><th>${k}</th><td>${val}${jumpHtml(k, BUY_JUMPS)}</td></tr>`).join("");
+  const jm = { ...BUY_JUMPS };
+  if (isSpread) {
+    jm["発注する権利行使価格・満期"] = [["買い側の権利行使価格", "rrSellStrikeInput"], ["売り側の権利行使価格", "rrBuyStrikeInput"], ["満期日", "windowDateInput"]];
+    jm["最大損失・最大利益"] = [["売り側の権利行使価格", "rrBuyStrikeInput"], ["支払いプレミアム", "rrPayPremiumInput"]];
+  }
+  els.buyPlanBody.innerHTML = rows.map(([k, val]) => `<tr><th>${k}</th><td>${val}${jumpHtml(k, jm)}</td></tr>`).join("");
   lastBuyPlanText = rows.map(([k, val]) => `${k}：${val.replace(/<[^>]+>/g, "")}`).join("\n");
   card.hidden = false;
 }

@@ -10,6 +10,16 @@ import { bsPrice, solveFlatIv, TRADING_DAYS_PER_YEAR } from "./optionModel.js";
 export const BUY_X_LIST = [1, 2, 3, 5, 7, 10];      // 比べる下落率(%)
 export const BUY_ATR_MULTS = [2, 3, 4, 5];           // 比べるATR倍率
 export const DEFAULT_ATR_MULT = 2;                   // 初期値(ユーザー指示で、Pineの初期値3から2に変更。2026-11-23)
+// 買い系スプレッド(ブルコール・ベアプット)の価値: 買い側(権利行使価格K)−売り側(K2)。K2=nullなら単体の買い。
+export function legWorth(kind, S, K, K2, T, iv, r = 0) {
+  const a = bsPrice(kind, S, K, T, iv, r);
+  return K2 > 0 ? a - bsPrice(kind, S, K2, T, iv, r) : a;
+}
+// 満期時の価値(本質価値)。スプレッドは、買い側−売り側
+export function legIntrinsic(kind, S, K, K2) {
+  const f = (k) => (kind === "call" ? Math.max(0, S - k) : Math.max(0, k - S));
+  return K2 > 0 ? f(K) - f(K2) : f(K);
+}
 export const ATR_PERIOD = 10;                        // ATRの期間(Pineの初期値。20でもほぼ同じ結果だった)
 export const IV_HV_FACTOR = 1.15;                    // 過去の検証用のIVの仮定: HV×1.15
 
@@ -60,13 +70,14 @@ export function fixedLinePrice(price, atr, mult, kind) {
  * @param {number[]} p.lows
  * @param {'call'|'put'} p.kind 買うオプションの種類(callなら、株価の上昇が利益。線は買った日の終値の下)
  * @param {number} p.ratio 権利行使価格＝買った日の終値×ratio
+ * @param {number|null} p.ratio2 スプレッドの売り側の権利行使価格＝買った日の終値×ratio2(単体はnull)
  * @param {number} p.window 満期までの営業日数
  * @param {number[]} p.xList 比べる率(%)。nullを含めると「毎日買う(条件なし)」の基準も出す
  * @param {'down'|'up'} p.direction 買う条件の方向(1〜7営業日前との比較)
  * @param {number} p.mult ATR倍率(固定の線)
  * @returns {{x:number|null, n:number, trials:number, stock:object|null, opt:object|null, lineRate:number, avgDays:number, optHoldMean:number|null}[]}
  */
-export function computeBuyStudy({ closes, highs, lows, kind, ratio, window, xList, direction, mult, atrPeriod = ATR_PERIOD }) {
+export function computeBuyStudy({ closes, highs, lows, kind, ratio, ratio2 = null, window, xList, direction, mult, atrPeriod = ATR_PERIOD }) {
   const n = closes.length;
   const atr = computeAtr(highs, lows, closes, atrPeriod);
   const first = Math.max(25, atrPeriod);
@@ -92,7 +103,8 @@ export function computeBuyStudy({ closes, highs, lows, kind, ratio, window, xLis
       if (Number.isNaN(atr[i]) || !dirOk(i, x)) continue;
       const S0 = closes[i];
       const K = S0 * ratio;
-      const prem = bsPrice(kind, S0, K, window / TRADING_DAYS_PER_YEAR, assumedIvAt(closes, i));
+      const K2 = ratio2 > 0 ? S0 * ratio2 : null;
+      const prem = legWorth(kind, S0, K, K2, window / TRADING_DAYS_PER_YEAR, assumedIvAt(closes, i));
       if (!(prem > 0)) continue;
       const L = fixedLinePrice(S0, atr[i], mult, kind);
       let exit = -1;
@@ -103,15 +115,15 @@ export function computeBuyStudy({ closes, highs, lows, kind, ratio, window, xLis
       }
       if (exit < 0) continue; // データが足りず、まだ決着していない
       const Sx = closes[exit];
-      const intrinsic = kind === "call" ? Math.max(0, Sx - K) : Math.max(0, K - Sx);
-      const val = byLine ? bsPrice(kind, Sx, K, T(exit - i), assumedIvAt(closes, exit)) : intrinsic;
+      const intrinsic = legIntrinsic(kind, Sx, K, K2);
+      const val = byLine ? legWorth(kind, Sx, K, K2, T(exit - i), assumedIvAt(closes, exit)) : intrinsic;
       stockR.push(sign * (Sx / S0 - 1));
       optR.push(val / prem - 1);
       days.push(exit - i);
       if (byLine) lineHits++;
       if (i + window < n) {
         const Se = closes[i + window];
-        holdR.push((kind === "call" ? Math.max(0, Se - K) : Math.max(0, K - Se)) / prem - 1);
+        holdR.push(legIntrinsic(kind, Se, K, K2) / prem - 1);
       }
     }
     rows.push({
@@ -128,17 +140,18 @@ export function computeBuyStudy({ closes, highs, lows, kind, ratio, window, xLis
 /**
  * 固定の線を、ATR倍率ごとに並べた表(いまの株価を基準)。線に届いたときの、株・オプションの損失と、資金の2%に収まる数量。
  * オプションの価値は、満期までの日数・IVはそのままで、株価だけが線に動いた(時間の経過なし)としたBlack-Scholesの目安。
- * @param {object} p {price, atr, kind, strike, days, premium, iv(年率。nullならpremiumから逆算), capital(null可), mults}
+ * @param {object} p {price, atr, kind, strike, strike2(スプレッドの売り側。単体はnull), days, premium, iv(年率。nullならpremiumから逆算), capital(null可), mults}
  */
-export function computeFixedLineTable({ price, atr, kind, strike, days, premium, iv, capital, contracts = null, mults = BUY_ATR_MULTS, rate = 0 }) {
+export function computeFixedLineTable({ price, atr, kind, strike, strike2 = null, days, premium, iv, capital, contracts = null, mults = BUY_ATR_MULTS, rate = 0 }) {
   const T = days / TRADING_DAYS_PER_YEAR;
+  const val = (S, v) => legWorth(kind, S, strike, strike2, T, v, rate); // 単体、またはスプレッド(買い側−売り側)の価値
   let useIv = iv;
   let ivSource = "input";
   if (!(useIv > 0) && premium > 0) {
-    useIv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: null, T, premium, r: rate });
+    useIv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: strike2, T, premium, r: rate });
     ivSource = "calibrated";
   }
-  const pay = premium > 0 ? premium : (useIv > 0 ? bsPrice(kind, price, strike, T, useIv, rate) : null);
+  const pay = premium > 0 ? premium : (useIv > 0 ? val(price, useIv) : null);
   const riskMoney = capital > 0 ? capital * 0.02 : null;
   // 資金の2%の損切り: 発注する枚数(未入力なら1枚)で、オプションの損失が資金の2%になる株価の位置(線)。
   // 全損しても2%に収まる(1株あたりの損失の上限が、支払いプレミアム以上)ときは、2%の線はない。
@@ -147,7 +160,7 @@ export function computeFixedLineTable({ price, atr, kind, strike, days, premium,
     const nCon = contracts > 0 ? contracts : 1;
     const allowed = riskMoney / (100 * nCon);
     if (allowed < pay) {
-      const f = (L) => pay - bsPrice(kind, L, strike, T, useIv, rate) - allowed; // 損失が上限を超えているほど正
+      const f = (L) => pay - val(L, useIv) - allowed; // 損失が上限を超えているほど正
       // いまの価格で、すでに損失が上限を超えているとき(入力したIVの理論価格が、支払いプレミアムより、ずっと低いとき)
       const already = f(price) > 0;
       let lo = kind === "call" ? price * 0.05 : price;
@@ -159,9 +172,9 @@ export function computeFixedLineTable({ price, atr, kind, strike, days, premium,
       }
       const L2 = kind === "call" ? Math.min(price, (lo + hi) / 2) : Math.max(price, (lo + hi) / 2);
       const move2 = Math.abs(price - L2);
-      riskRow = already ? { isRisk: true, alreadyOver: true, contracts: nCon, nowLoss: pay - bsPrice(kind, price, strike, T, useIv, rate) } : {
+      riskRow = already ? { isRisk: true, alreadyOver: true, contracts: nCon, nowLoss: pay - val(price, useIv) } : {
         isRisk: true, contracts: nCon, mult: move2 / atr, line: L2, movePct: L2 / price - 1, moveAmount: move2,
-        value: bsPrice(kind, L2, strike, T, useIv, rate), optLoss: allowed, optLossPct: allowed / pay,
+        value: val(L2, useIv), optLoss: allowed, optLossPct: allowed / pay,
         maxContracts: nCon, maxShares: move2 > 0 ? Math.floor(riskMoney / move2) : null,
       };
     }
@@ -171,7 +184,7 @@ export function computeFixedLineTable({ price, atr, kind, strike, days, premium,
     rows: mults.map((m) => {
       const line = fixedLinePrice(price, atr, m, kind);
       const move = Math.abs(price - line);
-      const value = useIv > 0 && line > 0 ? bsPrice(kind, line, strike, T, useIv, rate) : null;
+      const value = useIv > 0 && line > 0 ? val(line, useIv) : null;
       const optLoss = value !== null && pay !== null ? Math.max(0, pay - value) : null; // 1株あたり(オプション)
       return {
         mult: m, line, movePct: line / price - 1, moveAmount: move,

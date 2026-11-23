@@ -7,7 +7,7 @@
 <div class="wrap">
   <div class="topbar"><h1>ITM分析ツール <span class="ver-badge">Ver2</span> <span class="ver-badge ver-buy">買い</span></h1><span class="pagenav"><a href="index.html"><b>売りページへ</b></a><button id="shareBtn" type="button" class="link-btn">共有リンクをコピー</button><a href="roll.html">ロールオーバー計算機</a><a href="guide.html">使い方・見方</a></span></div>
   <div id="theme-bar"></div>
-  <p class="sub">このページは<b>買い建玉（コール買い・プット買い）</b>用です（単体注文のみ）。売り建玉（プット売り・コール売り・スプレッド）は、<a href="index.html">売りページ</a>をお使いください。</p>
+  <p class="sub">このページは<b>買い建玉（コール買い・プット買い、ブルコール・ベアプット）</b>用です。売り建玉（プット売り・コール売り・スプレッド）は、<a href="index.html">売りページ</a>をお使いください。</p>
   <p class="sub">ティッカーを入力すると、過去の株価から「権利行使価格に対してどれくらいの確率でITM（権利行使価格を超える/下回る）になったか」を分析します。「買う条件」の下落率の判断材料と、固定の手仕舞い線（ここまで下がったら手仕舞う）も出します。米国株のみ対応。</p>
   <p class="sub" style="margin-top:-14px">入力内容は自動的にブラウザに保存され、次回開いたときも続きから再開できます。「共有リンクをコピー」で、別の端末でも同じ設定を開けます（データは別端末で再取得されます）。</p>
 
@@ -133,9 +133,9 @@
       <div class="card in-sec" id="planInputsCard">
         <div class="order-head">
           <h3 style="margin:0;font-size:14px">注文の内容<span id="orderTypeLabel" style="font-size:14px;font-weight:400;color:var(--muted)"></span></h3>
-          <button id="spBtn" type="button" class="sp-btn" aria-pressed="false" hidden title="単体注文とスプレッド(ブルプット・ベアコール・ブルコール・ベアプット)の注文を切り替えます。使わない側の入力欄は非表示になり、入力値は保持されます">SP</button>
+          <button id="spBtn" type="button" class="sp-btn" aria-pressed="false" title="単体注文と、スプレッド(コール買い→ブルコール、プット買い→ベアプット)の注文を切り替えます。使わない側の入力欄は非表示になり、入力値は保持されます">SP</button>
         </div>
-        <p class="sub" style="margin:0 0 10px">注文の条件を、ここにまとめます（買いページは、単体注文のみです）。ティッカーは、一番上の「1 最低条件」で入力して、「分析する」を押してください。</p>
+        <p class="sub" style="margin:0 0 10px">注文の条件を、ここにまとめます（「ブルコールへ切替」などのボタンで、スプレッド注文と単体注文を切り替えられます）。ティッカーは、一番上の「1 最低条件」で入力して、「分析する」を押してください。</p>
         <div class="form-row">
         <div class="field">
           <label for="typeSelect">取引タイプ</label>
@@ -160,8 +160,8 @@
     <div class="form-row ord-strikes" data-only="sp">
       <div class="field" data-only="sp">
         <label for="rrBuyStrikeInput" data-target="orderExplain"
-          data-note="買い建てる側の権利行使価格です。ブルプット(プット)は売りより低い値、ベアコール(コール)は売りより高い値を入力します。
-売りと買いの権利行使価格を入力すると、その差額を「権利行使価格の差額」に自動で表示します。">買いの権利行使価格</label>
+          data-note="スプレッドの、売り建てる側の権利行使価格です。ブルコール(コール買い)は買い側より高い値、ベアプット(プット買い)は買い側より低い値を入力します。
+買い側(比率・権利行使価格の欄)と売り側の権利行使価格を入力すると、その差額を「権利行使価格の差額」に自動で表示します。">売り側の権利行使価格</label>
         <input id="rrBuyStrikeInput" type="number" step="0.01" min="0" placeholder="例: 600">
         <span class="field-warn" id="rrBuyStrikeWarn"></span>
       </div>
@@ -241,9 +241,9 @@ IVとプレミアムの両方を入力しているときは、金利は使いま
         <label for="rrSpreadWidthInput" data-target="orderExplain"
           data-note="スプレッドで買う側と売る側の、2つの権利行使価格の差額(スプレッド幅)です。
 売り系スプレッド(ブルプット/ベアコール)では、最大損失額＝スプレッド幅−受取プレミアム額の計算に使います。
-買い系スプレッド(ブルコール/ベアプット)では、注文内容の1行表示にだけ使います(最大損失額＝支払いプレミアム額には影響しません)。
+買い系スプレッド(ブルコール/ベアプット)では、最大利益(差額−支払いプレミアム額)と、手仕舞いの線・リスク確認などの、スプレッドの価格の計算に使います(最大損失額＝支払いプレミアム額)。
 権利行使価格は、一方がこのツールの比率で決まる値(売り系は売り建て側、買い系は買い建て側)で、もう一方はそこから差額分だけ離れた値です。
-売り系スプレッドで、売りと買いの権利行使価格を入力したときは、その差額（売り−買い）を自動で表示します（この欄は入力できなくなります）。">権利行使価格の差額</label>
+売りと買いの権利行使価格を入力したときは、その差額を自動で表示します（この欄は入力できなくなります）。">権利行使価格の差額</label>
         <input id="rrSpreadWidthInput" type="number" step="0.01" min="0" placeholder="例: 10.00">
         <span class="field-hint" id="rrWidthHint"></span>
       </div>
