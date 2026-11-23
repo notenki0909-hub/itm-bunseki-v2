@@ -3174,7 +3174,7 @@ function premiumMismatchText(t, price, strike, where = "iv") {
   const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
   const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
   if (premium === null || ivIn === null) return "";
-  const theo = legWorth(buyKindOf(t), price, strike, buySecondStrike(t, strike), t.windowDays / TRADING_DAYS_PER_YEAR, ivIn, rateOf(t));
+  const theo = legWorth(buyKindOf(t), price, strike, buySecondStrike(t, strike), t.windowDays / TRADING_DAYS_PER_YEAR, ivIn, rateOf(t), buySkew(t, strike));
   const tYears = t.windowDays / TRADING_DAYS_PER_YEAR;
   const rateAllow = strike * 0.05 * tYears * 0.6; // 満期が長いときの、金利(約4〜5%)のぶんのずれ(ツールは、IVとプレミアムの両方があるとき、金利0で計算する)
   if (Math.abs(theo - premium) <= Math.max(0.05, premium * 0.15) + rateAllow) return "";
@@ -3195,7 +3195,7 @@ function renderPremiumJudge(t, price, strike, hv) {
   const T = t.windowDays / TRADING_DAYS_PER_YEAR;
   // IVを入力しているときは、入力したIV(証券会社の値。金利を含む)で判定する。空欄のときだけ、プレミアムから逆算したIV(金利は、入力欄の値)を使う
   const useInput = hasIvIn(t);
-  const ivJ = useInput ? t.rrIvSell / 100 : solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: K2, T, premium, r: rateOf(t) });
+  const ivJ = useInput ? t.rrIvSell / 100 : solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: K2, T, premium, r: rateOf(t), ivOffset: buySkew(t, strike) });
   if (ivJ === null) { el.textContent = "支払いプレミアムに合うIVが見つかりません。入力を確認してください（桁や単位の間違いはありませんか）"; el.className = "field-hint"; return; }
   const ratio = ivJ / hv;
   const judge = judgeIvHv(ratio);
@@ -3238,7 +3238,7 @@ function renderBuyIv(t, price, strike) {
   let source = "input";
   if (iv === null) {
     if (premium === null) { clear("IV（任意）か、支払いプレミアム額を入力すると表示します。"); return; }
-    iv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: K2, T, premium, r: rateOf(t) });
+    iv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: K2, T, premium, r: rateOf(t), ivOffset: buySkew(t, strike) });
     source = "calibrated";
     if (iv === null) { clear("支払いプレミアム額に合うIVが見つかりませんでした。支払いプレミアム額や権利行使価格を、確認してください。"); return; }
   }
@@ -3272,6 +3272,13 @@ function renderBuyIv(t, price, strike) {
       note: `市場の見込み（IV）から見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。\n1σ＝現在値×IV×√(営業日数÷252)。「${SEC.hv}」の1σの値動き（HV基準）と同じ計算で、HVの代わりにIVを使っています。\nIVは、1つの値を全体に当てはめた目安です。将来を保証するものではありません。`,
     });
   }
+  const skewD = buySkew(t, strike);
+  if (t.rrVariant === "spread" && K2 !== null && skewD !== 0) {
+    items.push({
+      name: "IV（売り側）", value: pct(Math.max(0.005, iv + skewD)), suffix: "（入力値）", sub: `買い側のIV ${pct(iv)}との差 ${skewD >= 0 ? "+" : "−"}${Math.abs(skewD * 100).toFixed(1)}ポイント`,
+      note: "スプレッドの、売り側の権利行使価格のIVとして入力した値です。権利行使価格ごとにIVが違うことを反映して、スプレッドの価格・リスク確認・時間の経過の表を計算します。支払いプレミアムを入力しているときは、買い側と売り側のIVの差を保ったまま、全体の水準を、プレミアムに合うように逆算します。",
+    });
+  }
   const hvPrice = legWorth(kind, price, strike, K2, T, hv, rateOf(t));
   if (hvPrice > 0.005 && premium !== null) {
     const diff = premium - hvPrice;
@@ -3296,6 +3303,11 @@ function buySecondStrike(t, strike) {
   if (t.rrVariant !== "spread" || !(t.rrSpreadWidth > 0) || !(strike > 0)) return null;
   const k = OPTION_TYPES[t.typeKey].itmWhen === "below" ? strike - t.rrSpreadWidth : strike + t.rrSpreadWidth;
   return k > 0 ? k : null;
+}
+// 買い系スプレッド: 売り側のIV−買い側のIV(小数)。両方のIVを入力したときだけ。ほかは0(同じIVとみなす)
+function buySkew(t, strike) {
+  if (t.rrVariant !== "spread" || !(t.rrIvSell > 0) || !(t.rrIvBuy > 0) || buySecondStrike(t, strike) === null) return 0;
+  return (t.rrIvBuy - t.rrIvSell) / 100;
 }
 // スプレッドを選んだのに、売り側(差額)が未入力
 const buySpreadPending = (t) => PAGE === "buy" && t.rrVariant === "spread" && !(t.rrSpreadWidth > 0);
@@ -3380,7 +3392,7 @@ function renderBuyRisk(t, price, strike, asOfDate) {
   const assumed = assumedIvAt(v.closes, v.closes.length - 1);
   const capital = riskCapital();
   const tbl = computeFixedLineTable({
-    price, atr, kind, strike, strike2: K2, days: t.windowDays, premium, capital: capital > 0 ? capital : null, contracts: t.planQty,
+    price, atr, kind, strike, strike2: K2, ivSkew: buySkew(t, strike), days: t.windowDays, premium, capital: capital > 0 ? capital : null, contracts: t.planQty,
     iv: premium !== null ? null : (ivIn !== null ? ivIn : assumed), rate: rateOf(t), mults: BUY_ATR_MULTS.includes(t.buyAtrMult) ? BUY_ATR_MULTS : [...BUY_ATR_MULTS, t.buyAtrMult].sort((a, b) => a - b),
   });
   const dirWord = kind === "call" ? "下がった" : "上がった";
@@ -3459,7 +3471,7 @@ function renderBuyTime(t, price, strike, asOfDate, tbl, kind, capital, ivSrc) {
   els.buyTimeBody.innerHTML = BUY_TIME_IV_CHANGES.filter((up) => iv0 + up >= 0.02).map((up) => {
     const label = up === 0 ? "変わらない" : `${up > 0 ? "＋" : "−"}${Math.abs(Math.round(up * 100))}ポイント`;
     const tds = cols.map((c) => {
-      const value = legWorth(kind, price, strike, buySecondStrike(t, strike), c.remain / TRADING_DAYS_PER_YEAR, iv0 + up, rateOf(t));
+      const value = legWorth(kind, price, strike, buySecondStrike(t, strike), c.remain / TRADING_DAYS_PER_YEAR, iv0 + up, rateOf(t), buySkew(t, strike));
       const pnl = value - pay; // 買い手の損益(1株)
       const over = limit !== null && pnl < 0 && -pnl * 100 * qty >= limit;
       const cls = [pnl >= 0 ? "stress-profit" : "", over ? "stress-over" : ""].filter(Boolean).join(" ");
@@ -3493,7 +3505,7 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   let riskRow2 = null; // 損失が資金の2%になる線
   if (bl && premium !== null) {
     const atrArr = v.highs && v.lows ? computeAtr(v.highs, v.lows, v.closes, ATR_PERIOD) : null;
-    const tbl = atrArr ? computeFixedLineTable({ price, atr: atrArr[atrArr.length - 1], kind, strike, strike2: K2, days: t.windowDays, premium, iv: null, capital: capital > 0 ? capital : null, contracts: t.planQty, rate: rateOf(t), mults: [bl.mult] }) : null;
+    const tbl = atrArr ? computeFixedLineTable({ price, atr: atrArr[atrArr.length - 1], kind, strike, strike2: K2, ivSkew: buySkew(t, strike), days: t.windowDays, premium, iv: null, capital: capital > 0 ? capital : null, contracts: t.planQty, rate: rateOf(t), mults: [bl.mult] }) : null;
     optLoss = tbl ? tbl.rows[0] : null;
     riskRow2 = tbl ? tbl.riskRow : null;
   }

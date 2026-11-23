@@ -42,9 +42,10 @@ export function positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell, ivBuy
  * (スプレッドの価格はIVが非常に高いと下がるため、低い方の解を採用する。)
  * 見つからない(受取プレミアムがモデルで再現できない)ときはnull。
  */
-export function solveFlatIv({ kind, S, strikeSell, strikeBuy, T, premium, r = 0 }) {
+export function solveFlatIv({ kind, S, strikeSell, strikeBuy, T, premium, r = 0, ivOffset = 0 }) {
   if (!(premium > 0) || !(T > 0)) return null;
-  const f = (iv) => positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell: iv, ivBuy: iv, r });
+  // ivOffset: もう一方の脚(strikeBuy)のIVは、全体のIV＋ivOffset(権利行使価格ごとのIVの差を、保ったまま、水準だけを逆算する)
+  const f = (iv) => positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell: iv, ivBuy: Math.max(0.005, iv + ivOffset), r });
   let lo = 0.01;
   if (f(lo) >= premium) return lo;
   let hi = null;

@@ -11,9 +11,10 @@ export const BUY_X_LIST = [1, 2, 3, 5, 7, 10];      // 比べる下落率(%)
 export const BUY_ATR_MULTS = [2, 3, 4, 5];           // 比べるATR倍率
 export const DEFAULT_ATR_MULT = 2;                   // 初期値(ユーザー指示で、Pineの初期値3から2に変更。2026-11-23)
 // 買い系スプレッド(ブルコール・ベアプット)の価値: 買い側(権利行使価格K)−売り側(K2)。K2=nullなら単体の買い。
-export function legWorth(kind, S, K, K2, T, iv, r = 0) {
+// d: 売り側のIVは、買い側のIV＋d(権利行使価格ごとのIVの差。省略=同じIV)
+export function legWorth(kind, S, K, K2, T, iv, r = 0, d = 0) {
   const a = bsPrice(kind, S, K, T, iv, r);
-  return K2 > 0 ? a - bsPrice(kind, S, K2, T, iv, r) : a;
+  return K2 > 0 ? a - bsPrice(kind, S, K2, T, Math.max(0.005, iv + d), r) : a;
 }
 // 満期時の価値(本質価値)。スプレッドは、買い側−売り側
 export function legIntrinsic(kind, S, K, K2) {
@@ -140,15 +141,15 @@ export function computeBuyStudy({ closes, highs, lows, kind, ratio, ratio2 = nul
 /**
  * 固定の線を、ATR倍率ごとに並べた表(いまの株価を基準)。線に届いたときの、株・オプションの損失と、資金の2%に収まる数量。
  * オプションの価値は、満期までの日数・IVはそのままで、株価だけが線に動いた(時間の経過なし)としたBlack-Scholesの目安。
- * @param {object} p {price, atr, kind, strike, strike2(スプレッドの売り側。単体はnull), days, premium, iv(年率。nullならpremiumから逆算), capital(null可), mults}
+ * @param {object} p {price, atr, kind, strike, strike2(スプレッドの売り側。単体はnull), ivSkew(売り側IV−買い側IV。省略=0), days, premium, iv(年率。nullならpremiumから逆算), capital(null可), mults}
  */
-export function computeFixedLineTable({ price, atr, kind, strike, strike2 = null, days, premium, iv, capital, contracts = null, mults = BUY_ATR_MULTS, rate = 0 }) {
+export function computeFixedLineTable({ price, atr, kind, strike, strike2 = null, ivSkew = 0, days, premium, iv, capital, contracts = null, mults = BUY_ATR_MULTS, rate = 0 }) {
   const T = days / TRADING_DAYS_PER_YEAR;
-  const val = (S, v) => legWorth(kind, S, strike, strike2, T, v, rate); // 単体、またはスプレッド(買い側−売り側)の価値
+  const val = (S, v) => legWorth(kind, S, strike, strike2, T, v, rate, ivSkew); // 単体、またはスプレッド(買い側−売り側)の価値
   let useIv = iv;
   let ivSource = "input";
   if (!(useIv > 0) && premium > 0) {
-    useIv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: strike2, T, premium, r: rate });
+    useIv = solveFlatIv({ kind, S: price, strikeSell: strike, strikeBuy: strike2, T, premium, r: rate, ivOffset: ivSkew });
     ivSource = "calibrated";
   }
   const pay = premium > 0 ? premium : (useIv > 0 ? val(price, useIv) : null);
