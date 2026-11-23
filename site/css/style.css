@@ -560,3 +560,8 @@ details.mini#volDetails[hidden]{display:none}
 .cone-legend .lg{white-space:nowrap}
 .cone-legend .cone-sw{vertical-align:middle;margin-right:6px}
 .cone-legend .cone-focus-note{margin:0 0 6px}
+
+/* 集計期間の比較: 満期までの長さに応じた、最低限ほしい集計期間 */
+.period-min-note{margin:8px 0 10px;padding:8px 12px;border-left:4px solid var(--accent);background:color-mix(in srgb, var(--accent) 9%, transparent);border-radius:6px;font-size:13px;line-height:1.6}
+.period-min-note .period-min-ok{color:var(--gA, #16a34a);font-weight:700}
+.period-min-note .period-min-ng{color:var(--gradRed);font-weight:700}

@@ -339,6 +339,7 @@ const els = {
   buyStudyCard: document.getElementById("buyStudyCard"),
   periodCompareCard: document.getElementById("periodCompareCard"),
   periodBasisNote: document.getElementById("periodBasisNote"),
+  periodMinNote: document.getElementById("periodMinNote"),
   periodCompareBody: document.getElementById("periodCompareBody"),
   periodCompareNote: document.getElementById("periodCompareNote"),
   buyStudyBody: document.getElementById("buyStudyBody"),
@@ -673,7 +674,7 @@ function initTypeOptions() {
 // 入力した日付までの営業日数が判定期間(t.windowDays)になる。保存するのは営業日数だけで、
 // 日付が進むと、表示する満期日の日付は(営業日数が同じまま)後ろにずれる。
 const MIN_WINDOW_DAYS = 5;     // 選べる最短(営業日)
-const MAX_WINDOW_DAYS = 150;   // 選べる最長(営業日)。従来の判定期間の最大値に合わせた
+const MAX_WINDOW_DAYS = 252;   // 選べる最長(営業日)。約1年(売り・買いとも)
 
 function etTodayYmd() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" })
@@ -715,7 +716,7 @@ function syncWindowInputs(t, message = "", force = false) {
 }
 
 // 満期日が入力されたとき: 営業日数に直して判定期間にし、全体を再計算する。休場日は直前の営業日に直し、
-// 選べる範囲(5〜150営業日)を超えていれば範囲内に直して、その旨を表示する。
+// 選べる範囲(5〜252営業日)を超えていれば範囲内に直して、その旨を表示する。
 function commitWindowDate(value) {
   const t = activeTab();
   if (!t || !value) return;
@@ -3050,9 +3051,17 @@ async function fillRateFromTreasury() {
 const rateOf = (t) => (!bothPremIv(t) && t.buyRate > 0 ? t.buyRate / 100 : 0);
 
 // 集計期間ごとの、ITM発生率(期間中に一度でも・満期時)の比較。売り・買いとも。
-// 慎重な見方の基準＝1年以上の期間のうち、売りはITM発生率が最も高い期間、買いは最も低い期間(6ヶ月は、短く偶然に左右されるため、基準から除く)。
+// 最低限ほしい集計期間＝満期までの営業日数の2.5倍(過去の独立した場面が約2回分以上になる長さ)と、1年(253営業日)の、長いほう以上で、
+// 選べる期間のうち、いちばん短いもの(例: 満期30営業日→1年、満期126営業日→1.6年、満期252営業日→3年)。
+// 慎重な見方の基準＝この「最低限ほしい期間」以上の期間のうち、売りはITM発生率が最も高い期間、買いは最も低い期間。
 // 集計期間を自分で選んでいないときは、分析のたびに、この基準の期間を初期値にする。
 const PERIOD_BASIS_MIN_DAYS = 253;
+const PERIOD_SCENES_FACTOR = 2.5;
+function minPeriodFor(windowDays) {
+  const need = Math.max(PERIOD_BASIS_MIN_DAYS, Math.ceil(windowDays * PERIOD_SCENES_FACTOR));
+  const opt = PERIOD_OPTIONS.find((p) => p.days >= need) || PERIOD_OPTIONS[PERIOD_OPTIONS.length - 1];
+  return { need, opt };
+}
 function periodCompareRows(t) {
   const v = viewDataOf(t);
   const full = v.closes;
@@ -3067,35 +3076,51 @@ function periodCompareRows(t) {
     if (!an.entryCount) continue;
     rows.push({ p, n: an.entryCount, touch: an.overallItmProb, exp: an.dayProb[t.windowDays - 1] ?? null });
   }
-  const pool = rows.filter((r) => r.p.days >= PERIOD_BASIS_MIN_DAYS && r.touch !== null);
+  const minP = minPeriodFor(t.windowDays);
+  const pool = rows.filter((r) => r.p.days >= minP.opt.days && r.touch !== null);
   const pick = group === "sell" ? (a, b) => (b.touch > a.touch ? b : a) : (a, b) => (b.touch < a.touch ? b : a);
   const basis = pool.length ? pool.reduce(pick) : null;
-  return { rows, basis, group, type };
+  return { rows, basis, group, type, minP };
 }
 
 function renderPeriodCompare(t) {
   const card = els.periodCompareCard;
   if (!card) return;
-  const { rows, basis, group, type } = periodCompareRows(t);
+  const { rows, basis, group, type, minP } = periodCompareRows(t);
   if (!rows.length) { card.hidden = true; if (els.periodBasisNote) els.periodBasisNote.hidden = true; return; }
   const f = (v) => (v === null || v === undefined ? "―" : (v * 100).toFixed(1) + "%");
   const tag = group === "sell" ? "最も高い（慎重な見方）" : "最も低い（慎重な見方）";
   els.periodCompareBody.innerHTML = rows.map((r) => {
     const sel = r.p.days === t.periodDays;
     const isBasis = basis !== null && r === basis;
-    return `<tr class="${sel ? "bs-sel" : ""}"><td>${r.p.label}${sel ? '<br><span class="bs-sub">いまの設定</span>' : ""}${r.p.days < PERIOD_BASIS_MIN_DAYS ? '<br><span class="bs-sub">基準から除く</span>' : ""}</td>`
+    return `<tr class="${sel ? "bs-sel" : ""}"><td>${r.p.label}${sel ? '<br><span class="bs-sub">いまの設定</span>' : ""}${r.p.days < minP.opt.days ? '<br><span class="bs-sub">短いため基準から除く</span>' : ""}</td>`
       + `<td>${r.n}件<br><span class="bs-sub">独立した場面は約${Math.max(1, Math.round(r.n / t.windowDays))}回分</span></td>`
       + `<td><b>${f(r.touch)}</b>${isBasis ? `<br><span class="bs-sub">${tag}</span>` : ""}</td><td>${f(r.exp)}</td>`
       + `<td>${sel ? "" : `<button type="button" class="sp-btn" data-use-period="${r.p.days}">この期間にする</button>`}</td></tr>`;
   }).join("");
+  const minLabel = `${minP.opt.label}（${minP.opt.days}営業日）`;
   let note;
   if (group === "sell") {
-    note = "売り手は、ITMに届く割合が高い期間ほど、慎重な見方になります（荒れた期間で見ます）。表では、1年以上の期間のうち「最も高い」期間が基準です。長い期間のほうが荒いとは限りません（期間のなかの相場の向きで変わります）。";
+    note = `売り手は、ITMに届く割合が高い期間ほど、慎重な見方になります（荒れた期間で見ます）。表では、${minP.opt.label}以上の期間のうち「最も高い」期間が基準です。長い期間のほうが荒いとは限りません（期間のなかの相場の向きで変わります）。`;
   } else {
     const kindWord = type.itmWhen === "above" ? "上昇相場が続いた期間は、コール買いのITM発生率が高く出ます" : "下落相場が続いた期間は、プット買いのITM発生率が高く出ます";
-    note = `買い手は、ITMに届く割合が低い期間ほど、慎重な見方になります。表では、1年以上の期間のうち「最も低い」期間が基準です。長い期間のほうが穏やかとは限りません（期間のなかの相場の向きで変わります。${kindWord}）。`;
+    note = `買い手は、ITMに届く割合が低い期間ほど、慎重な見方になります。表では、${minP.opt.label}以上の期間のうち「最も低い」期間が基準です。長い期間のほうが穏やかとは限りません（期間のなかの相場の向きで変わります。${kindWord}）。`;
   }
-  els.periodCompareNote.textContent = `${note}6ヶ月は、期間が短く、独立した場面が少ないため、基準から除いています。集計期間を自分で選ばないときは、分析のたびに、基準の期間を初期値にします。`;
+  els.periodCompareNote.textContent = `${note}それより短い期間は、独立した場面が少ないため、基準から除いています。集計期間を自分で選ばないときは、分析のたびに、基準の期間を初期値にします。`;
+  // 満期までの長さに応じた、最低限ほしい集計期間
+  if (els.periodMinNote) {
+    const have = viewDataOf(t).closes.length;
+    const cur = PERIOD_OPTIONS.find((p) => p.days === t.periodDays);
+    const curOk = t.periodDays >= minP.opt.days;
+    const dataShort = have < minP.opt.days;
+    els.periodMinNote.innerHTML = `<b>満期まで${t.windowDays}営業日の場合、集計期間は、${minLabel}以上がおすすめです。</b><br>`
+      + `理由：満期までの期間の${PERIOD_SCENES_FACTOR}倍（${Math.ceil(t.windowDays * PERIOD_SCENES_FACTOR)}営業日）以上あると、過去の独立した場面が約2回分以上になり、実績が一度きりの相場に左右されにくくなります（1年未満の期間は、短すぎるため、満期の長さによらず、基準から除いています）。<br>`
+      + (dataShort
+        ? `<span class="period-min-ng">この銘柄は、取得できたデータが${have}営業日分しかなく、おすすめの期間に足りません。実績は、参考程度に見てください。</span>`
+        : curOk
+          ? `<span class="period-min-ok">いまの設定（${cur ? cur.label : t.periodDays + "営業日"}）は、この条件を満たしています。</span>`
+          : `<span class="period-min-ng">いまの設定（${cur ? cur.label : t.periodDays + "営業日"}）は、短めです。実績の信頼性が下がるため、表の「この期間にする」で、${minP.opt.label}以上に変えることをおすすめします。</span>`);
+  }
   card.hidden = false;
   if (els.periodBasisNote) {
     els.periodBasisNote.textContent = `※「${SEC.past}」以下の、過去の実績（全エントリー日・「1 最低条件」に当てはまった日だけに絞った実績・コーン図の灰色の帯）は、ここで選んだ集計期間（いまは${(PERIOD_OPTIONS.find((p) => p.days === t.periodDays) || { label: t.periodDays + '営業日' }).label}）を元に算出します。HVは、集計期間とは別に、取得済みのデータから計算します。`;

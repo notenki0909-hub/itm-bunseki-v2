@@ -170,7 +170,7 @@
         <div class="field">
           <label for="windowDateInput" data-note="オプションの満期日を、日付で入力します（日付の欄をクリックすると、カレンダーから選べます）。
   入力した日付までの営業日数が、分析の「判定期間」になります（例：満期日まで25営業日なら、判定期間は25営業日）。
-  選べる範囲は、基準日（最新の終値の日）の5営業日後から、150営業日後までです。
+  選べる範囲は、基準日（最新の終値の日）の5営業日後から、252営業日後（約1年）までです。
   土日や祝日など休場日を入力した場合は、直前の営業日に直します。
   営業日数だけを保存するので、日付が進むと、満期日の日付は自動で後ろにずれます（営業日数は変わりません）。
   実際にその満期日があるかは、銘柄ごとに違うため、証券会社のオプションチェーンで確認してください。">満期日（判定期間）</label>
@@ -349,6 +349,7 @@ IVとプレミアムの両方を入力しているときは、金利は使いま
   <div id="periodCompareCard" class="card in-sec" hidden>
     <h3 style="margin:0 0 8px;font-size:14px">集計期間を変えると、ITM発生率はどう変わるか（慎重な見方の基準）</h3>
     <p class="basis basis-act"><i></i><b>根拠：過去の実績</b>　いまの注文プラン（権利行使価格・満期・判定の基準）のまま、集計期間だけを変えた結果です。</p>
+    <p class="period-min-note" id="periodMinNote"></p>
     <div class="volatility-wrap"><table class="volatility-table bs-table">
       <thead><tr><th>集計期間</th><th>エントリー件数</th><th>期間中に一度でもITM<br>（ITM発生率）</th><th>満期時にITM</th><th></th></tr></thead>
       <tbody id="periodCompareBody"></tbody>
