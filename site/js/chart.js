@@ -248,7 +248,7 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
     ? `<line x1="${f(xNow)}" y1="${f(ylim)}" x2="${f(xEnd)}" y2="${f(ylim)}" stroke="${CONE_STYLE.limit.stroke}" stroke-width="${CONE_STYLE.limit.width}" stroke-dasharray="${CONE_STYLE.limit.dash}"/>`
     : "";
   // ITMの水準(または損益分岐点)のラベル。いまの株価の点・線と重ならないよう、少し右にずらし、文字のまわりを背景色で縁取る(線の上でも読める)
-  const barrierText = `<text x="${f(xNow + (xEnd - xNow) * 0.16)}" y="${f(itmWhen === "below" ? yb - 5 : yb + 13)}" font-size="11" font-weight="700" fill="var(--gradRed)" stroke="var(--card)" stroke-width="3" paint-order="stroke" stroke-linejoin="round">${barrierLabel}</text>`;
+  const barrierText = `<text x="${f(xNow + (xEnd - xNow) * 0.16)}" y="${f(yb + 13)}" font-size="11" font-weight="700" fill="var(--gradRed)" stroke="var(--card)" stroke-width="3" paint-order="stroke" stroke-linejoin="round">${barrierLabel}</text>`;
 
   // 過去の株価
   const pastPts = pastCloses.map((c, k) => `${f(xPast(k))},${f(y(c))}`).join(" ");
