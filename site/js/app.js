@@ -38,8 +38,8 @@ const priceCache = new Map();
 const PAGE = document.body.dataset.page === "buy" ? "buy" : "sell";
 const PAGE_TYPES = PAGE === "buy" ? ["call_buy", "put_buy"] : ["put_sell", "call_sell"];
 const OTHER_PAGE = PAGE === "buy" ? "index.html" : "buy.html";
-// 画面の節の名前(番号つき)。売り・買いとも同じ番号
-const SEC = { risk: "3 リスク確認", past: "4 過去の実績", hv: "5 HV", iv: "6 IV", summary: "7 まとめ" };
+// 画面の節の名前(番号つき)。売り・買いとも同じ番号。「使い方の流れ」の番号と同じ(5の中に、(1)HV・(2)IV)
+const SEC = { recheck: "3 注文プランの再検討", risk: "4 リスク確認", past: "5 過去の実績", hv: "5(1) HV", iv: "5(2) IV", summary: "6 まとめ", plan: "7 注文まとめ" };
 const isPageType = (k) => PAGE_TYPES.includes(k);
 const SELL_STORAGE_KEY = "itm-tool-state-v1";
 const BUY_STORAGE_KEY = "itm-tool-state-buy-v1";
@@ -1130,7 +1130,7 @@ function renderHvCard(t) {
       note: `ITMとみなす水準（${depthText}）が、現在値から何%離れているか、またそれがHVから見て何σ分の距離かを表します。\nσの値が大きいほど、HVから見てITMになりにくい水準です。「OTM側」は現在値よりITMの反対側、「ITM側」はすでにITMの側にあることを表します。\n水準は、現在値×権利行使価格の比率（上の入力欄の比率）から求めています。`,
     },
   ];
-  // グラフ(コーン図)の材料。売り系は「6 IV」の節に、買い系は「5 HV」の節に描く(売り系は、IVがあれば、IV基準の帯も重ねる)
+  // グラフ(コーン図)の材料。売り系は「5(2) IV」の節に、買い系は「5(1) HV」の節に描く(売り系は、IVがあれば、IV基準の帯も重ねる)
   const asOfDate = viewDates[viewDates.length - 1];
   const expiryDate = shiftTradingDays(asOfDate, -days);
   coneBase = { pastCloses: closes.slice(-61), price, days, theory, type, dist, asOfDate, expiryDate };
@@ -1151,7 +1151,7 @@ function renderHvCard(t) {
   setupStatExplain();
 }
 
-// コーン図(満期までの値動きの目安と、権利行使価格の位置)。「7 まとめ」に描く。
+// コーン図(満期までの値動きの目安と、権利行使価格の位置)。「6 まとめ」に描く。
 // 3つの見方を重ねる: ①HV基準の±1σ・±2σ(青) ②IV基準の±1σ(オレンジの点線の枠。売り系でIVが分かれば) ③過去の実績の約68%の範囲(灰色の帯)と最小・最大(点線)。
 // 材料(coneBase)は、renderHvCardが置く。IVは、renderIvHvが分かったときに渡す。
 let coneBase = null;
@@ -2181,18 +2181,18 @@ function renderIvHv(t, price, itmWhen) {
     },
     {
       name: "IV÷HV", value: `${ratio.toFixed(2)}倍`,
-      sub: `HV ${pct(hv)}（「5 HV」と同じ値）で割った倍率。${judge.phrase}／${meaningShort}`,
+      sub: `HV ${pct(hv)}（「5(1) HV」と同じ値）で割った倍率。${judge.phrase}／${meaningShort}`,
       note: `IVがHVの何倍かを見て、市場のこれからの見込み（IV）が、過去の実際の値動き（HV）より高めか低めかを判断する目安です。IVが高いほど、オプションの価格（プレミアム）も高くなります。\n1.2倍以上＝高め（受け取るプレミアムは多め。ただし、市場は大きな動きを見込んでいるので、リスクも高め）／0.8倍以下＝低め（受け取るプレミアムは少なめ。ただし、市場は穏やかな動きを見込んでいる）／その間＝同程度。この基準は、このツールの簡易的なものです。
 「受け取る額が多い」ことと「取引が得になる」ことは別です。実際の値動きが、IVの見込みより小さく収まれば、売りは得になります。\n一般に、IVはHVより少し高めになりやすいため、「同程度」の幅を広めに取っています。`,
     },
   ];
-  // 1σの値動き(IV基準)。「5 HV」の同名のカードと同じ計算で、HVの代わりにIVを使う。
+  // 1σの値動き(IV基準)。「5(1) HV」の同名のカードと同じ計算で、HVの代わりにIVを使う。
   if (thIv) {
     items.push({
       name: "1σの値動き", value: `±${thIv.sigmaAmount.toFixed(2)}ドル`, suffix: "（IV基準）",
       sub: `満期まで。±${pct(thIv.sigmaPct)}（IV ${pct(iv)}×√(${days}/252)）`,
       note: `市場の見込み（IV）から見た、満期までの1σ（標準偏差）の値動きです。株価の変動が正規分布に近いと仮定すると、満期時の株価が現在値±この幅に収まる確率は約68%です。
-1σ＝現在値×IV×√(営業日数÷252)。「5 HV」の1σの値動き（HV基準）と同じ計算で、HVの代わりにIVを使っています。IVのほうが大きければ、1σも広くなります。
+1σ＝現在値×IV×√(営業日数÷252)。「5(1) HV」の1σの値動き（HV基準）と同じ計算で、HVの代わりにIVを使っています。IVのほうが大きければ、1σも広くなります。
 IVは、売り建て側の1つの値を全体に当てはめた目安です。将来を保証するものではありません。`,
     });
   }
@@ -2846,7 +2846,7 @@ function setupCellTip() {
 // 帯に出す値。各描画関数が、計算のついでに置いていく(renderAllの最初にリセットする)
 const band = { hvItm: null, ivhv: null, cond: null, hvSigma: null, hvPos: null, buyLine: null };
 
-// セクション(3〜8)の表示を、中のカードの表示状態に合わせる。ナビの項目も同じ。
+// セクション(3〜8。3は注文プランの再検討)の表示を、中のカードの表示状態に合わせる。ナビの項目も同じ。
 // 売り系だけのセクション(data-only="sell")は、買い系のときは出さない。
 function syncSections() {
   const shown = (...cards) => cards.some((c) => !c.hidden);
@@ -2865,6 +2865,7 @@ function syncSections() {
     set("sb7", shown(els.buyRiskCard));
     set("sb8", shown(els.buyPlanCard));
   }
+  set("s2b", shown(els.periodCompareCard, els.ratioCard));
   set("s3", shown(els.todayCard, els.result));
   set("s4", shown(els.hvCard));
   set("s5", shown(els.orderCard));
@@ -2916,7 +2917,7 @@ function renderTopBand(t) {
   els.bandRow2.innerHTML = parts.join("");
 }
 
-// 「7 まとめ」の表。1〜5で見たことを、思考の順(前提の値動き → 過去の実績 → HV → IV)に1行ずつ並べる。
+// 「6 まとめ」の表。1〜5で見たことを、思考の順(前提の値動き → 過去の実績 → HV → IV)に1行ずつ並べる。
 // 数字は、各カードが計算したものをそのまま使う(ここでは再計算しない)。確率の比較(IV換算・HV換算・実績)は、同じ節の「3点比較」に任せる。
 function renderConclusion(t) {
   const body = els.conclBody;
@@ -3136,7 +3137,7 @@ function renderPremiumJudge(t, price, strike, hv) {
   el.className = "field-hint";
 }
 
-// 買いページの「6 IV」: IVの水準・IV÷HV・IV基準の1σ・理論プレミアム価格(HV計算)を、買い手向けの読み方で出す。
+// 買いページの「5(2) IV」: IVの水準・IV÷HV・IV基準の1σ・理論プレミアム価格(HV計算)を、買い手向けの読み方で出す。
 // IVは、入力(任意)があればその値、なければ支払いプレミアム額から逆算した値。どちらもなければ表示しない(コーン図のIVの帯も出ない)。
 function renderBuyIv(t, price, strike) {
   if (!els.ivHvSummary) return;
