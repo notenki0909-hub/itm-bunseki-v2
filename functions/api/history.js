@@ -71,7 +71,8 @@ function isPriceDataStale(fetchedAt, latestDate, nowMs = Date.now()) {
   return false;
 }
 
-const OUTPUT_SIZE = 800; // 集計期間セレクター(最大3年)をローカルスライスだけで賄うための最大取得数
+const OUTPUT_SIZE = 1300; // 集計期間セレクター(最大5年＝約1,260営業日)をローカルスライスだけで賄うための取得数(5年＋余裕)。
+// 取得数を変えたときは、古い取得数のキャッシュを自動で取り直す(キャッシュに requested を保存して比べる)
 
 export async function onRequestGet(context) {
   const { request, env } = context;
@@ -96,7 +97,9 @@ export async function onRequestGet(context) {
   // 場合は(無料枠の上限などで失敗し続けないよう)再試行せず、古いキャッシュを返す。
   if (cached) {
     // 高値・安値を求められたのに、古い形式のキャッシュ(高値・安値なし)のときは、古いものとして取り直す
-    const stale = isPriceDataStale(cached.fetchedAt, cachedLatest, now) || (wantHl && !Array.isArray(cached.highs));
+    // 取得数(OUTPUT_SIZE)が変わる前のキャッシュ(requestedなし・違う値)は、短いので、次に検索されたときに取り直す
+    const outdated = cached.requested !== OUTPUT_SIZE;
+    const stale = isPriceDataStale(cached.fetchedAt, cachedLatest, now) || (wantHl && !Array.isArray(cached.highs)) || outdated;
     const triedRecently = Number.isFinite(cached.lastAttemptAt) && now - cached.lastAttemptAt < RETRY_INTERVAL_MS;
     if (!stale || triedRecently) return out(cached);
   }
@@ -158,7 +161,7 @@ export async function onRequestGet(context) {
   }
 
   // fetchedAt: Twelve Dataから取得した時刻。ブラウザ側もこの値で「古いか」を判定する。
-  const result = { symbol, currency: data.meta?.currency || null, dates, closes, highs, lows, fetchedAt: now };
+  const result = { symbol, currency: data.meta?.currency || null, dates, closes, highs, lows, fetchedAt: now, requested: OUTPUT_SIZE };
 
   if (kv) {
     context.waitUntil(

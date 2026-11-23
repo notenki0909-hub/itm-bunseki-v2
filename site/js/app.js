@@ -937,7 +937,7 @@ function renderAll(t) {
 }
 
 // 「変動幅の統計」カードを描画する。集計期間セレクターの影響を受けず、
-// 常に取得済みの全データ(closesFull、最大800営業日)を使う。
+// 常に取得済みの全データ(closesFull、最大1,300営業日＝約5年)を使う。
 function renderVolatilityCard(t) {
   const closes = t.closesFull ? viewDataOf(t).closes : null;
   if (!closes || closes.length < 2) {
@@ -1062,7 +1062,7 @@ function statCardHtml({ name, value, suffix = "", line = "", sub = "", note = ""
     + `</div>`;
 }
 
-// 「HV（歴史的ボラティリティ）」カードを描画する。基準日までの全データ(closesFull、最大800営業日)の終値から計算する。
+// 「HV（歴史的ボラティリティ）」カードを描画する。基準日までの全データ(closesFull、最大1,300営業日＝約5年)の終値から計算する。
 //  1) 直近の期間ごとのHV(年率)と、過去1年の中でのいまの高さ(いまより高かった日数)
 //  2) 満期(判定期間)までの1σの値動き、権利行使価格の位置(何σ外か)、HVから見た理論上の確率(目安)と、過去の実績の比較
 // 理論上の確率は「株価が対数正規分布に従い、平均的な上昇・下落はない」という単純な仮定の目安で、将来を保証するものではない。
@@ -3051,12 +3051,12 @@ async function fillRateFromTreasury() {
 const rateOf = (t) => (!bothPremIv(t) && t.buyRate > 0 ? t.buyRate / 100 : 0);
 
 // 集計期間ごとの、ITM発生率(期間中に一度でも・満期時)の比較。売り・買いとも。
-// 最低限ほしい集計期間＝満期までの営業日数の2.5倍(過去の独立した場面が約2回分以上になる長さ)と、1年(253営業日)の、長いほう以上で、
-// 選べる期間のうち、いちばん短いもの(例: 満期30営業日→1年、満期126営業日→1.6年、満期252営業日→3年)。
+// 最低限ほしい集計期間＝満期までの営業日数の4倍(過去の独立した場面＝(集計期間−満期)÷満期が約3回分以上になる長さ)と、1年(253営業日)の、長いほう以上で、
+// 選べる期間のうち、いちばん短いもの(例: 満期30営業日→1年、満期90営業日→1.6年、満期126営業日→3年、満期252営業日→5年)。
 // 慎重な見方の基準＝この「最低限ほしい期間」以上の期間のうち、売りはITM発生率が最も高い期間、買いは最も低い期間。
 // 集計期間を自分で選んでいないときは、分析のたびに、この基準の期間を初期値にする。
 const PERIOD_BASIS_MIN_DAYS = 253;
-const PERIOD_SCENES_FACTOR = 2.5;
+const PERIOD_SCENES_FACTOR = 4;
 function minPeriodFor(windowDays) {
   const need = Math.max(PERIOD_BASIS_MIN_DAYS, Math.ceil(windowDays * PERIOD_SCENES_FACTOR));
   const opt = PERIOD_OPTIONS.find((p) => p.days >= need) || PERIOD_OPTIONS[PERIOD_OPTIONS.length - 1];
@@ -3114,7 +3114,7 @@ function renderPeriodCompare(t) {
     const curOk = t.periodDays >= minP.opt.days;
     const dataShort = have < minP.opt.days;
     els.periodMinNote.innerHTML = `<b>満期まで${t.windowDays}営業日の場合、集計期間は、${minLabel}以上がおすすめです。</b><br>`
-      + `理由：満期までの期間の${PERIOD_SCENES_FACTOR}倍（${Math.ceil(t.windowDays * PERIOD_SCENES_FACTOR)}営業日）以上あると、過去の独立した場面が約2回分以上になり、実績が一度きりの相場に左右されにくくなります（1年未満の期間は、短すぎるため、満期の長さによらず、基準から除いています）。<br>`
+      + `理由：満期までの期間の${PERIOD_SCENES_FACTOR}倍（${Math.ceil(t.windowDays * PERIOD_SCENES_FACTOR)}営業日）以上あると、過去の独立した場面が約3回分以上になり、実績が一度きりの相場に左右されにくくなります（1年未満の期間は、短すぎるため、満期の長さによらず、基準から除いています）。<br>`
       + (dataShort
         ? `<span class="period-min-ng">この銘柄は、取得できたデータが${have}営業日分しかなく、おすすめの期間に足りません。実績は、参考程度に見てください。</span>`
         : curOk

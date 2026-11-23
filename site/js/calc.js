@@ -21,6 +21,7 @@ export const PERIOD_OPTIONS = [
   { label: "1.6年", days: 400 },
   { label: "2年", days: 500 },
   { label: "3年", days: 750 },
+  { label: "5年", days: 1260 },
 ];
 export const DEFAULT_PERIOD_DAYS = 253;
 
