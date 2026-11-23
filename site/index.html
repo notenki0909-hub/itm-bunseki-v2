@@ -132,14 +132,9 @@
           <select id="typeSelect"></select>
         </div>
         <div class="field">
-          <label for="ratioInput">権利行使価格の比率</label>
-          <input id="ratioInput" type="number" step="0.01" min="0.01">
-          <span class="field-hint" id="ratioEffHint"></span>
-        </div>
-        <div class="field">
           <label for="windowDateInput" data-note="オプションの満期日を、日付で入力します（日付の欄をクリックすると、カレンダーから選べます）。
   入力した日付までの営業日数が、分析の「判定期間」になります（例：満期日まで25営業日なら、判定期間は25営業日）。
-  選べる範囲は、基準日（最新の終値の日）の5営業日後から、150営業日後までです。講座の満期の目安は、約60暦日までです。
+  選べる範囲は、基準日（最新の終値の日）の5営業日後から、150営業日後までです。
   土日や祝日など休場日を入力した場合は、直前の営業日に直します。
   営業日数だけを保存するので、日付が進むと、満期日の日付は自動で後ろにずれます（営業日数は変わりません）。
   実際にその満期日があるかは、銘柄ごとに違うため、証券会社のオプションチェーンで確認してください。">満期日（判定期間）</label>
@@ -149,14 +144,21 @@
           </div>
         </div>
         </div>
-    <div class="form-row ord-strikes" data-only="sell">
-      <div class="field">
-        <label for="rrSellStrikeInput" data-target="orderExplain"
-          data-note="売り建てる側の権利行使価格です。証券会社のオプションチェーンで選んだ、実際の権利行使価格を入力します。
-空欄のときは、比率から決めた整数の権利行使価格を使います（比率は、その権利行使価格になるように合わせます。例：終値679.89×0.9＝611.90なら、権利行使価格を611にして、比率を0.8987に変えます）。入力した値は、注文の1行表示・損益分岐点・決済の目安・ストレステストなどの注文内容だけでなく、分析のITM確率（分析結果・HVの理論値・IVとHVの比較・推奨比率の逆算）にも使います。売りの権利行使価格を基準に、ITM（負け）になる確率を求めます。比率の欄を変えると、この入力は消えます。">売りの権利行使価格</label>
-        <input id="rrSellStrikeInput" type="number" step="0.5" min="0" placeholder="空欄=終値×比率（整数）">
-        <span class="field-hint" id="rrSellStrikeHint"></span>
-      </div>
+        <div class="form-row pair-row">
+          <div class="field">
+            <label for="ratioInput">権利行使価格の比率</label>
+            <input id="ratioInput" type="number" step="0.01" min="0.01">
+            <span class="field-hint" id="ratioEffHint"></span>
+          </div>
+          <div class="field">
+            <label for="rrSellStrikeInput" data-target="orderExplain"
+              data-note="売り建てる側の権利行使価格です。証券会社のオプションチェーンで選んだ、実際の権利行使価格を入力します。
+          、比率から決めた整数の権利行使価格を使います（比率は、その権利行使価格になるように合わせます。例：終値679.89×0.9＝611.90なら、権利行使価格を611にして、比率を0.8987に変えます）。入力した値は、注文の1行表示・損益分岐点・決済の目安・ストレステストなどの注文内容だけでなく、分析のITM確率（分析結果・HVの理論値・IVとHVの比較・推奨比率の逆算）にも使います。売りの権利行使価格を基準に、ITM（負け）になる確率を求めます。比率の欄を変えると、この入力は消えます。">売りの権利行使価格</label>
+            <input id="rrSellStrikeInput" type="number" step="0.5" min="0" placeholder="空欄=終値×比率（整数）">
+            <span class="field-hint" id="rrSellStrikeHint"></span>
+          </div>
+        </div>
+    <div class="form-row ord-strikes" data-only="sp">
       <div class="field" data-only="sp">
         <label for="rrBuyStrikeInput" data-target="orderExplain"
           data-note="買い建てる側の権利行使価格です。ブルプット(プット)は売りより低い値、ベアコール(コール)は売りより高い値を入力します。

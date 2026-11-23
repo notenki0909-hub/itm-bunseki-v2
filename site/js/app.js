@@ -674,7 +674,6 @@ function initTypeOptions() {
 // 日付が進むと、表示する満期日の日付は(営業日数が同じまま)後ろにずれる。
 const MIN_WINDOW_DAYS = 5;     // 選べる最短(営業日)
 const MAX_WINDOW_DAYS = 150;   // 選べる最長(営業日)。従来の判定期間の最大値に合わせた
-const GUIDE_MAX_CALENDAR_DAYS = 60; // 講座の想定の上限(暦日)。超えても選べるが、ひとこと添える
 
 function etTodayYmd() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" })
@@ -705,8 +704,7 @@ function syncWindowInputs(t, message = "", force = false) {
   const exp = shiftTradingDays(asOf, -t.windowDays);
   const min = shiftTradingDays(asOf, -MIN_WINDOW_DAYS);
   const max = shiftTradingDays(asOf, -MAX_WINDOW_DAYS);
-  const cal = calendarDaysBetween(asOf, exp);
-  const base = `残り${t.windowDays}営業日（${cal}暦日）・${EXPIRY_KIND_LABEL[expiryKind(exp)]}${cal > GUIDE_MAX_CALENDAR_DAYS ? "・講座の想定の約60暦日を超えています" : ""}`;
+  const base = `残り${t.windowDays}営業日`; // 表示は、残り営業日だけ(暦日・週次/月次の別・講座の想定との比較は出さない)
   const hint = message ? `${message}　${base}` : base;
   for (const [inp, h] of [[els.windowDateInput, els.windowHint]]) {
     inp.min = min;
@@ -1842,7 +1840,6 @@ function renderOrderExit(t, asOfDate) {
   els.expirySummary.innerHTML = dateItems.map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
   els.expiryNote.textContent =
     `${EXPIRY_KIND_NOTE[expiryKind(expiry)]}実際にあるかは、証券会社のオプションチェーンで確認してください。`
-    + (cal > GUIDE_MAX_CALENDAR_DAYS ? " 講座の満期の目安（約60暦日まで）を超えています。" : "")
     + " 休場日は、毎年決まっている祝日のみ反映しています（臨時の休場は反映されません）。";
 }
 

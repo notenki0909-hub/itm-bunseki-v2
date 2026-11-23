@@ -547,3 +547,8 @@ details.mini#volDetails[hidden]{display:none}
 .jump-back[hidden]{display:none}
 .jump-flash{animation:jumpflash 2.6s ease-out;border-radius:8px}
 @keyframes jumpflash{0%,60%{outline:3px solid var(--accent);background:color-mix(in srgb, var(--accent) 18%, transparent)}100%{outline:3px solid transparent;background:transparent}}
+
+/* 比率と権利行使価格の入力欄は、隣同士に並べる(狭い画面では縦に) */
+.pair-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;align-items:start;max-width:680px}
+.pair-row .field input{width:100%;box-sizing:border-box}
+@media (max-width:560px){.pair-row{grid-template-columns:minmax(0,1fr)}}
