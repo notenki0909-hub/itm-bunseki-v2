@@ -223,10 +223,10 @@ IVとプレミアムの両方を入力しているときは、金利は使いま
         <div class="form-row">
       <div class="field" data-only="buy">
         <label for="buyAtrMultSelect" data-target="orderExplain"
-          data-note="「ここまで下がったら手仕舞う」固定の線の幅を、ATR（直近10営業日の1日の値幅の平均）の何倍にするかを選びます（初期値は3倍）。
+          data-note="「ここまで下がったら手仕舞う」固定の線の幅を、ATR（直近10営業日の1日の値幅の平均）の何倍にするかを選びます（初期値は2倍）。
 線は、買った日の終値から、ATR×倍率だけ下（プット買いは上）に引きます。買った時点で決めて、動かしません。トレンドの判定はしません。
-倍率を大きくすると、手仕舞いになりにくく、平均と勝率は上がりますが、最悪の損失は深くなります（過去の検証）。1〜2倍は、すぐに手仕舞いになりやすく、あまり使われません。">手仕舞いの線（ATR倍率）</label>
-        <select id="buyAtrMultSelect"><option value="2">2倍</option><option value="3" selected>3倍</option><option value="4">4倍</option><option value="5">5倍</option></select>
+倍率を大きくすると、手仕舞いになりにくく、平均と勝率は上がりますが、最悪の損失は深くなります（過去の検証）。2倍（初期値）は、3倍より損失は浅くなりますが、手仕舞いになる割合は高め（過去の検証で約6割）です。1倍は、すぐに手仕舞いになりやすく、あまり使われません。">手仕舞いの線（ATR倍率）</label>
+        <select id="buyAtrMultSelect"><option value="2" selected>2倍</option><option value="3">3倍</option><option value="4">4倍</option><option value="5">5倍</option></select>
       </div>
         </div>
         <div class="form-row">

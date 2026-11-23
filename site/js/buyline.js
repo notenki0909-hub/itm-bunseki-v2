@@ -9,7 +9,7 @@ import { bsPrice, solveFlatIv, TRADING_DAYS_PER_YEAR } from "./optionModel.js";
 
 export const BUY_X_LIST = [1, 2, 3, 5, 7, 10];      // 比べる下落率(%)
 export const BUY_ATR_MULTS = [2, 3, 4, 5];           // 比べるATR倍率
-export const DEFAULT_ATR_MULT = 3;                   // 初期値(Pineの初期値と同じ)
+export const DEFAULT_ATR_MULT = 2;                   // 初期値(ユーザー指示で、Pineの初期値3から2に変更。2023-11-23)
 export const ATR_PERIOD = 10;                        // ATRの期間(Pineの初期値。20でもほぼ同じ結果だった)
 export const IV_HV_FACTOR = 1.15;                    // 過去の検証用のIVの仮定: HV×1.15
 
