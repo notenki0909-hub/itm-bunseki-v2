@@ -138,7 +138,7 @@ export const coneTextColor = (key) => CONE_STYLE[key].text || CONE_STYLE[key].st
  * @param {boolean} p.focus trueなら、縦軸を「ITMの水準のまわり」に絞った拡大図にする(ITMの水準と、満期時の各線が近い範囲)
  * @param {{lo:number[],hi:number[],min:number[],max:number[]}|null} p.empCone 過去の実績の帯(営業日ごとの変化率。k=0〜days)。あれば、約68%の範囲を灰色の帯、最小・最大を点線で重ねる
  */
-export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", halfBefore = null, halfLabel = "", ivSigmaPct = null, empCone = null, vScale = 2, focus = false, breakEven = null, itmStrike = null, stopLine = null, limitLine = null }) {
+export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", halfBefore = null, halfLabel = "", ivSigmaPct = null, empCone = null, vScale = 2, focus = false, breakEven = null, itmStrike = null, stopLine = null, limitLine = null, stopLabel = "設定した損切ライン", limitLabel = "資金2%の線" }) {
   const w = 640;
   const h = Math.round(300 * vScale); // 縦の高さ。基準は300(倍率1)
   const padL = 50;
@@ -289,10 +289,10 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
     labItems.push({ v: breakEven, text: `損益分岐点 ${breakEven.toFixed(1)}`, color: "var(--gradPurple)" });
   }
   if (hasLimit) {
-    labItems.push({ v: limitLine, text: `資金2%の線 ${limitLine.toFixed(1)}`, color: CONE_STYLE.limit.stroke });
+    labItems.push({ v: limitLine, text: `${limitLabel} ${limitLine.toFixed(1)}`, color: CONE_STYLE.limit.stroke });
   }
   if (hasStop) {
-    labItems.push({ v: stopLine, text: `設定した損切ライン ${stopLine.toFixed(1)}`, color: CONE_STYLE.stop.stroke });
+    labItems.push({ v: stopLine, text: `${stopLabel} ${stopLine.toFixed(1)}`, color: CONE_STYLE.stop.stroke });
   }
   const nudge = (items) => {
     const sorted = items.map((it) => ({ ...it, yy: y(it.v) + 3 })).sort((p, q) => p.yy - q.yy);

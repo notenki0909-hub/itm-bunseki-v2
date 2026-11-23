@@ -1209,7 +1209,9 @@ function drawCone(t, iv) {
   // 設定した損切ライン(売りページ。リスク確認の表で選んだセル)。株価が動く場面(ストレステスト)だけ、その株価の線を引く。時間の経過の場面は、株価が変わらないため、線は引かない
   const pickedStop = grp === "sell" && lastStress && lastStress.picked ? lastStress.picked : null;
   const stopPrice = pickedStop && pickedStop.scene !== "time" && pickedStop.price > 0 ? pickedStop.price : null;
-  // 資金2%の線: 損失が資金の2%になる買い戻し価格(リスク確認の「損切りの買い戻し価格（2%の上限）」)を、株価に換算した値
+  // 買いページ: 手仕舞いの線(ATR×倍率。固定)と、資金2%の線(リスク確認の表の「資金2%の損切り」と同じ株価)
+  const buyLn = PAGE === "buy" && grp === "buy" ? lastBuyRisk : null;
+  // 資金2%の線(売り): 損失が資金の2%になる買い戻し価格(リスク確認の「損切りの買い戻し価格（2%の上限）」)を、株価に換算した値
   const limitOk = grp === "sell" && lastRisk && lastRisk.limitValue > 0 && lastStress && lastStress.meta && lastStressModel;
   const limitPrice = limitOk ? stopPriceFromLimit(lastStressModel, lastStress.meta.ivSell, lastStress.meta.ivBuy, lastRisk.limitValue) : null;
   const side = theory.zScore >= 0 ? "外" : "内";
@@ -1230,8 +1232,10 @@ function drawCone(t, iv) {
     focus: coneFocus,
     breakEven: beVal !== null && !beIsBarrier ? beVal : null,
     itmStrike: Math.abs(strikeBe - theory.barrier) > 0.005 ? strikeBe : null,
-    stopLine: stopPrice,
-    limitLine: limitPrice,
+    stopLine: buyLn ? buyLn.line : stopPrice,
+    limitLine: buyLn ? buyLn.riskLine : limitPrice,
+    stopLabel: buyLn ? `手仕舞いの線 ATR×${buyLn.mult}` : undefined,
+    limitLabel: buyLn ? "資金2%の線" : undefined,
   });
   // 説明(凡例)は、箇条書き。色の見本と、見出しの文字は、グラフと同じ色(chart.js の CONE_STYLE)
   const li = (key, label, desc) => `<li><span class="lg" style="color:${coneTextColor(key)}">${coneSwatch(key)}<b>${label}</b></span>：${desc}</li>`;
@@ -1260,6 +1264,16 @@ function drawCone(t, iv) {
     items.push(limitPrice !== null
       ? li("limit", "緑の細い点線", `損失が資金の2%になる株価（${limitPrice.toFixed(2)}、現在値から${limitPrice >= cb.price ? "+" : "−"}${Math.abs((limitPrice / cb.price - 1) * 100).toFixed(1)}%）。「${SEC.risk}」の「損切りの買い戻し価格（2%の上限）${lastRisk.limitValue.toFixed(2)}」を、IV・残りの営業日数がいまのままだとして、株価に直した値です。時間が経つ・IVが上がるときは、もっと手前の株価で2%に届きます`)
       : note(`「${SEC.risk}」の「損切りの買い戻し価格（2%の上限）」は、株価がどこまで動いても届かない価格（スプレッドの最大損失でも、損失が資金の2%以内に収まる）ため、資金2%の線は引きません`));
+  }
+  if (buyLn) {
+    items.push(li("stop", "緑の太い破線", `手仕舞いの線（ATR×${buyLn.mult}）の株価（${buyLn.line.toFixed(2)}、現在値から${buyLn.movePct >= 0 ? "+" : "−"}${Math.abs(buyLn.movePct * 100).toFixed(1)}%）。買った日の終値から、ATRの${buyLn.mult}倍だけ${cb.type.itmWhen === "above" ? "下" : "上"}に引いた固定の線で、終値がこの線に届いたら手仕舞う、という目安です（「${SEC.risk}」）`));
+    if (buyLn.riskLine !== null) {
+      items.push(li("limit", "緑の細い点線", `損失が資金の2%になる株価（${buyLn.riskLine.toFixed(2)}、現在値から${buyLn.riskLine >= cb.price ? "+" : "−"}${Math.abs((buyLn.riskLine / cb.price - 1) * 100).toFixed(1)}%）。${buyLn.riskQty}枚${t.planQty ? "" : "（枚数が未入力のため1枚）"}で、オプションの損失がちょうど資金の2%になる位置です（「${SEC.risk}」の「資金2%の損切り」と同じ）。この線より先まで待つと、資金の2%を超えます`));
+    } else if (buyLn.riskNote === "over") {
+      items.push(note(`「${SEC.risk}」のとおり、すでに、いまの価格で、損失が資金の2%を超える計算のため、資金2%の線は引きません`));
+    } else if (buyLn.riskNote === "none") {
+      items.push(note("全損しても、損失が資金の2%以内に収まるため、資金2%の線は引きません"));
+    }
   }
   const halfDays = Math.round(days / 2);
   if (days > MARK_BEFORE_EXPIRY) {
@@ -2359,6 +2373,7 @@ const riskCapital = () => ratioSetting(RISK_CAPITAL_KEY, 0, 1e9);
 
 // ストレステスト・リスクリワード・注文まとめの間で受け渡す、直近の計算結果
 let lastStress = null; // {picked, received, meta, limitValue}。計算できなかったときはnull
+let lastBuyRisk = null; // 買い: {line(手仕舞いの線), mult, riskLine(資金2%の線の株価), riskQty, riskNote}。コーン図に渡す
 let lastStressModel = null; // コーン図の株価換算用 {kind, price, strikeSell, strikeBuy, T}
 let lastRisk = null;
 
@@ -3305,6 +3320,7 @@ function renderBuyRisk(t, price, strike, asOfDate) {
     card.hidden = false;
     return;
   }
+  lastBuyRisk = null;
   const kind = buyKindOf(t);
   const atrArr = computeAtr(v.highs, v.lows, v.closes, ATR_PERIOD);
   const atr = atrArr[atrArr.length - 1];
@@ -3320,6 +3336,12 @@ function renderBuyRisk(t, price, strike, asOfDate) {
   const dirWord = kind === "call" ? "下がった" : "上がった";
   const sel = tbl.rows.find((r) => r.mult === t.buyAtrMult) || tbl.rows[0];
   band.buyLine = { line: sel.line, movePct: sel.movePct, mult: sel.mult, kind };
+  lastBuyRisk = {
+    line: sel.line, mult: sel.mult, movePct: sel.movePct,
+    riskLine: tbl.riskRow && !tbl.riskRow.alreadyOver ? tbl.riskRow.line : null,
+    riskQty: tbl.riskRow ? tbl.riskRow.contracts : null,
+    riskNote: tbl.riskRow && tbl.riskRow.alreadyOver ? "over" : (capital > 0 && premium !== null && !tbl.riskRow ? "none" : null),
+  };
   const ivSrc = tbl.iv === null ? "（IVを計算できません）"
     : premium !== null ? "支払いプレミアムから逆算したIV" : (ivIn !== null ? "入力したIV" : "仮定のIV（直近20営業日のHV×1.15）");
   els.buyRiskSummary.innerHTML = [
@@ -3355,6 +3377,7 @@ function renderBuyRisk(t, price, strike, asOfDate) {
     + `<br>・線は、期待値を上げるものではなく、<b>損失の大きさを決めるもの</b>です（過去の検証では、倍率を大きくするほど、平均と勝率は上がり、最悪の損失が深くなりました）。`;
   renderBuyTime(t, price, strike, asOfDate, tbl, kind, capital, ivSrc);
   card.hidden = false;
+  if (lastCone) drawCone(lastCone.t, lastCone.iv); // 手仕舞いの線・資金2%の線を、コーン図に反映する
 }
 
 // 買い建玉の、時間の経過の表。株価は今の水準のまま動かず、IVが変わり(縦)、時間が経った(横)ときの、オプション価格と損益。
