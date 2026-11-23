@@ -191,10 +191,20 @@
       <div class="field" data-only="buy">
         <label for="rrPayPremiumInput" data-target="orderExplain"
           data-note="オプションの買い手として支払うプレミアム額（1株あたりの合計額）です。
-スプレッドの場合は、差し引き後の正味の額（支払い−受取）を入力してください。
-買い系は、支払いプレミアム額がそのまま最大損失額になります。">支払いプレミアム額</label>
+スプレッド（ブルコール・ベアプット）の場合は、ここに買い側の支払い額を入力し、売り側の受取額は、下の「受取プレミアム額（売り側）」に入力します（計算には、差し引き後の正味＝支払い−受取を使います。受取を空欄にしたときは、ここに入れた額を、そのまま正味とみなします）。
+買い系は、差し引き後の正味の支払いが、そのまま最大損失額になります。">支払いプレミアム額</label>
         <input id="rrPayPremiumInput" type="number" step="0.01" min="0" placeholder="例: 4.00">
         <span class="field-hint" id="premJudge"></span>
+      </div>
+        </div>
+        <div class="form-row">
+      <div class="field" data-only="sp">
+        <label for="rrRecvPremiumInput" data-target="orderExplain"
+          data-note="スプレッドの、売り建てる側（売り側）で受け取るプレミアム額（1株あたり）です。任意です。
+入力すると、差し引き後の正味（買い側の支払い − 売り側の受取）で、最大損失・最大利益・損益分岐点・リスク確認などを計算します。
+空欄のときは、上の支払いプレミアム額を、差し引き後の正味とみなします（受取を引いた額を、直接入力してもかまいません）。">受取プレミアム額（売り側）</label>
+        <input id="rrRecvPremiumInput" type="number" step="0.01" min="0" placeholder="例: 1.50（空欄=支払いが正味）">
+        <span class="field-hint" id="recvHint"></span>
       </div>
         </div>
         <div class="form-row">

@@ -66,6 +66,7 @@ function tabRecipe(t) {
     rrBeBase: t.rrBeBase,
     rrPremium: t.rrPremium,
     rrPayPremium: t.rrPayPremium,
+    rrRecvPremium: t.rrRecvPremium,
     rrProfitRatio: t.rrProfitRatio,
     rrSpreadWidth: t.rrSpreadWidth,
     rrIvSell: t.rrIvSell,
@@ -100,6 +101,7 @@ function applyRecipe(t, rec) {
     rrBeBase: rec.rrBeBase ?? t.rrBeBase,
     rrPremium: rec.rrPremium ?? t.rrPremium,
     rrPayPremium: rec.rrPayPremium ?? t.rrPayPremium,
+    rrRecvPremium: rec.rrRecvPremium ?? t.rrRecvPremium,
     rrProfitRatio: rec.rrProfitRatio ?? t.rrProfitRatio,
     rrSpreadWidth: rec.rrSpreadWidth ?? t.rrSpreadWidth,
     rrIvSell: rec.rrIvSell ?? t.rrIvSell,
@@ -430,6 +432,8 @@ const els = {
   orderMaxLossHint: document.getElementById("orderMaxLossHint"),
   spBtn: document.getElementById("spBtn"),
   rrPayPremiumInput: document.getElementById("rrPayPremiumInput"),
+  rrRecvPremiumInput: document.getElementById("rrRecvPremiumInput"),
+  recvHint: document.getElementById("recvHint"),
   rrDepthInput: document.getElementById("rrDepthInput"),
   rrDepthPct: document.getElementById("rrDepthPct"),
   beBaseCheck: document.getElementById("beBaseCheck"),
@@ -501,6 +505,7 @@ function newTabState() {
     rrBeBase: false, // 買いページ: 損益分岐点(権利行使価格＋支払いプレミアム)を、判定の基準にする
     rrPremium: null,
     rrPayPremium: null,
+    rrRecvPremium: null, // 買いスプレッド: 売り側の受取プレミアム額(任意)。正味＝rrPayPremium−rrRecvPremium
     rrProfitRatio: null,
     rrSpreadWidth: null,
     rrIvSell: null,
@@ -559,6 +564,7 @@ function switchTab(id) {
   if (els.beBaseCheck) els.beBaseCheck.checked = !!t.rrBeBase;
   els.rrPremiumInput.value = t.rrPremium ?? "";
   els.rrPayPremiumInput.value = t.rrPayPremium ?? "";
+  if (els.rrRecvPremiumInput) els.rrRecvPremiumInput.value = t.rrRecvPremium ?? "";
   els.rrProfitRatioInput.value = t.rrProfitRatio ?? "";
   els.rrSpreadWidthInput.value = t.rrSpreadWidth ?? "";
   els.rrIvSellInput.value = t.rrIvSell ?? "";
@@ -844,6 +850,7 @@ function onFormChange() {
   if (els.beBaseCheck) t.rrBeBase = els.beBaseCheck.checked;
   t.rrPremium = els.rrPremiumInput.value === "" ? null : Number(els.rrPremiumInput.value);
   t.rrPayPremium = els.rrPayPremiumInput.value === "" ? null : Number(els.rrPayPremiumInput.value);
+  if (els.rrRecvPremiumInput) t.rrRecvPremium = els.rrRecvPremiumInput.value === "" ? null : Number(els.rrRecvPremiumInput.value);
   t.rrProfitRatio = els.rrProfitRatioInput.value === "" ? null : Number(els.rrProfitRatioInput.value);
   t.rrSpreadWidth = els.rrSpreadWidthInput.value === "" ? null : Number(els.rrSpreadWidthInput.value);
   t.rrIvSell = els.rrIvSellInput.value === "" ? null : Number(els.rrIvSellInput.value);
@@ -1202,7 +1209,7 @@ function drawCone(t, iv) {
   const emp = computeEmpiricalCone(pc, days);
   // 損益分岐点＝権利行使価格±プレミアム(売りは受取、買いは支払い)。プレミアムが未入力なら、線は引かない
   const grp = typeGroup(t.typeKey);
-  const premBe = grp === "sell" ? t.rrPremium : t.rrPayPremium;
+  const premBe = grp === "sell" ? t.rrPremium : payNetOf(t);
   const strikeBe = grp === "sell" ? sellStrikeOf(t, cb.price) : effStrikeOf(t, cb.price);
   const beVal = premBe !== null && premBe > 0 ? strikeBe + (cb.type.itmWhen === "below" ? -premBe : premBe) : null;
   const beIsBarrier = isBeBase(t); // 判定の基準が損益分岐点のときは、赤い破線が損益分岐点
@@ -1305,10 +1312,10 @@ function renderTodayCard(t) {
 // 判定する深さ(ドル)。買いページで「損益分岐点を基準にする」にチェックがあり、支払いプレミアム額が入っているときは、
 // 支払いプレミアム額(＝損益分岐点−権利行使価格)。それ以外は、入力した深さ(空欄＝0)。
 function isBeBase(t) {
-  return PAGE === "buy" && !!t.rrBeBase && t.rrPayPremium !== null && t.rrPayPremium > 0;
+  return PAGE === "buy" && !!t.rrBeBase && payNetOf(t) !== null && payNetOf(t) > 0;
 }
 function depthDollarOf(t) {
-  return isBeBase(t) ? t.rrPayPremium : (t.rrDepth ?? 0);
+  return isBeBase(t) ? payNetOf(t) : (t.rrDepth ?? 0);
 }
 
 // 判定する深さ(ドル)を、現在の権利行使価格(本日の終値×比率)に対する割合に換算する。
@@ -1598,7 +1605,7 @@ function lossBasisOf(t) {
 
 // 注文時のプレミアム額。売り系は受取プレミアム額、買い系は支払いプレミアム額。
 function premiumOf(t) {
-  return typeGroup(t.typeKey) === "sell" ? t.rrPremium : t.rrPayPremium;
+  return typeGroup(t.typeKey) === "sell" ? t.rrPremium : payNetOf(t);
 }
 
 // 売り/買い・単体/SPで使う入力欄が違うため、body属性に現在の状態を書き込み、
@@ -1612,6 +1619,14 @@ function updateRiskRewardInputUI(typeKey, variant) {
   els.spBtn.textContent = variant === "spread" ? `${labels.naked}へ切替` : `${labels.spread}へ切替`;
   els.spBtn.setAttribute("aria-pressed", variant === "spread" ? "true" : "false");
   els.spBtn.classList.toggle("active", variant === "spread");
+  // 買いページ: スプレッド(ブルコール・ベアプット)のときの入力欄の名前
+  if (PAGE === "buy") {
+    const sp = variant === "spread";
+    const setLab = (id, txt) => { const l = document.querySelector(`label[for="${id}"]`); if (l) l.textContent = txt; };
+    setLab("rrSellStrikeInput", sp ? "買い側の権利行使価格" : "権利行使価格");
+    setLab("rrPayPremiumInput", sp ? "支払いプレミアム額（買い側）" : "支払いプレミアム額");
+    setLab("rrIvSellInput", sp ? "IV（買い側）(%)" : "IV（任意）(%)");
+  }
 }
 
 // 売りの権利行使価格: 入力があればその値、なければ、終値×比率の整数部分(effStrikeOf。比率のほうを、その整数に合わせて直す)。分析・注文内容まわりのすべての計算で、これを基準にする。
@@ -1689,6 +1704,21 @@ function syncOrderDerived(t) {
   els.rrSpreadWidthInput.disabled = widthAuto;
   if (widthAuto || (isSellSp && t.rrBuyStrike > 0 && warn)) els.rrSpreadWidthInput.value = t.rrSpreadWidth ?? "";
 
+  // 買いスプレッド: 売り側の受取と、差し引き後の正味の案内
+  if (els.recvHint) {
+    const pay = t.rrPayPremium;
+    const rcv = t.rrRecvPremium;
+    if (group === "buy" && isSellSp && pay > 0 && rcv > 0) {
+      const net = pay - rcv;
+      els.recvHint.textContent = net > 0
+        ? `差し引き後の正味 ${net.toFixed(2)} ＝ 支払い ${pay.toFixed(2)} − 受取 ${rcv.toFixed(2)}（自動計算。以降の計算に使います）`
+        : "受取が、支払い以上になっています。入力を確認してください（正味が0以下では、計算できません）";
+    } else if (group === "buy" && isSellSp) {
+      els.recvHint.textContent = "入力すると、差し引き後の正味（支払い − 受取）で計算します。空欄のときは、上の支払いプレミアム額を、正味とみなします";
+    } else {
+      els.recvHint.textContent = "";
+    }
+  }
   // 受取プレミアム
   const legs = isSellSp && group === "sell" && t.rrPremMode === "legs"; // 「売りと買いを入力」は売りページだけ
   els.premModeNet.classList.toggle("active", !legs);
@@ -3050,7 +3080,7 @@ function rateForCalendarDays(calDays) {
   }
   return pts[pts.length - 1].rate;
 }
-const hasPrem = (t) => t.rrPayPremium !== null && t.rrPayPremium > 0;
+const hasPrem = (t) => payNetOf(t) !== null && payNetOf(t) > 0;
 const hasIvIn = (t) => t.rrIvSell !== null && t.rrIvSell > 0;
 const bothPremIv = (t) => hasPrem(t) && hasIvIn(t);
 let rateNote = { text: "", days: null }; // ボタンを押した結果の案内(取得できた日付・失敗)。満期の長さを変えたら、出さない
@@ -3171,7 +3201,7 @@ function renderPeriodCompare(t) {
 
 // 入力したIVから計算した理論価格が、支払いプレミアムと大きく離れているときの注意文(離れていなければ空文字)
 function premiumMismatchText(t, price, strike, where = "iv") {
-  const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
+  const premium = payNetOf(t) !== null && payNetOf(t) > 0 ? payNetOf(t) : null;
   const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
   if (premium === null || ivIn === null) return "";
   const theo = legWorth(buyKindOf(t), price, strike, buySecondStrike(t, strike), t.windowDays / TRADING_DAYS_PER_YEAR, ivIn, rateOf(t), buySkew(t, strike));
@@ -3188,7 +3218,7 @@ function premiumMismatchText(t, price, strike, where = "iv") {
 function renderPremiumJudge(t, price, strike, hv) {
   const el = els.premJudge;
   if (!el) return;
-  const premium = hasPrem(t) ? t.rrPayPremium : null;
+  const premium = hasPrem(t) ? payNetOf(t) : null;
   if (premium === null || hv === null || buySpreadPending(t)) { el.textContent = ""; el.className = "field-hint"; return; }
   const K2 = buySecondStrike(t, strike);
   const kind = buyKindOf(t);
@@ -3231,7 +3261,7 @@ function renderBuyIv(t, price, strike) {
   if (buySpreadPending(t)) { clear("売り側の権利行使価格（または差額）を入力すると表示します。"); return; }
   const K2 = buySecondStrike(t, strike);
   if (hv === null) { clear("HVを計算するためのデータが足りないため、表示できません。"); return; }
-  const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
+  const premium = payNetOf(t) !== null && payNetOf(t) > 0 ? payNetOf(t) : null;
   const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
   const T = days / TRADING_DAYS_PER_YEAR;
   let iv = ivIn;
@@ -3297,6 +3327,14 @@ function renderBuyIv(t, price, strike) {
   els.ivHvCompare.innerHTML = thIv && thHv ? ivHvCompareHtml(t, thIv, thHv, days, itmWhen, "buy") : "";
   drawCone(t, { thIv });
   setupStatExplain();
+}
+// 買いの、差し引き後の正味の支払いプレミアム額(1株あたり)。単体は、入力した支払いプレミアム額。
+// 買いスプレッドで、売り側の受取プレミアム額を入力したときは、支払い−受取(受取が空欄なら、支払いが正味)。
+function payNetOf(t) {
+  const p = t.rrPayPremium;
+  if (p === null || p === undefined) return null;
+  if (PAGE === "buy" && t.rrVariant === "spread" && t.rrRecvPremium > 0) return Math.round((p - t.rrRecvPremium) * 100) / 100;
+  return p;
 }
 // 買い系スプレッド: 売り側の権利行使価格(差額から決まる。コールは買い側より高く、プットは低い)。単体・未入力はnull
 function buySecondStrike(t, strike) {
@@ -3387,7 +3425,7 @@ function renderBuyRisk(t, price, strike, asOfDate) {
   const atrArr = computeAtr(v.highs, v.lows, v.closes, ATR_PERIOD);
   const atr = atrArr[atrArr.length - 1];
   if (!(atr > 0)) { card.hidden = true; return; }
-  const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
+  const premium = payNetOf(t) !== null && payNetOf(t) > 0 ? payNetOf(t) : null;
   const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
   const assumed = assumedIvAt(v.closes, v.closes.length - 1);
   const capital = riskCapital();
@@ -3492,7 +3530,7 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   const type = OPTION_TYPES[t.typeKey];
   const expiry = shiftTradingDays(asOfDate, -t.windowDays);
   const bl = band.buyLine;
-  const premium = t.rrPayPremium !== null && t.rrPayPremium > 0 ? t.rrPayPremium : null;
+  const premium = payNetOf(t) !== null && payNetOf(t) > 0 ? payNetOf(t) : null;
   const capital = riskCapital();
   const ask = (m) => `―（${m}を入力）`;
   const money = (x) => x.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
@@ -3519,7 +3557,9 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   } else {
     add("発注する権利行使価格・満期", `権利行使価格 ${fmtStrike(strike)}（終値の${(strike / price * 100).toFixed(1)}%）　満期 ${expiry}（残り${t.windowDays}営業日）`);
   }
-  add("支払いプレミアム（買いの指値）", premium === null ? ask("支払いプレミアム額") : `指値 ${money(premium)}${isSpread ? "（差し引き後の正味）" : ""}　（1枚 ${money(premium * 100)}ドル）`);
+  add("支払いプレミアム（買いの指値）", premium === null ? ask("支払いプレミアム額") : (isSpread && t.rrRecvPremium > 0
+    ? `正味 ${money(premium)} ＝ 買い側の支払い ${money(t.rrPayPremium)} − 売り側の受取 ${money(t.rrRecvPremium)}　（1枚 ${money(premium * 100)}ドル）`
+    : `指値 ${money(premium)}${isSpread ? "（差し引き後の正味）" : ""}　（1枚 ${money(premium * 100)}ドル）`));
   if (isSpread) {
     const w = t.rrSpreadWidth > 0 ? t.rrSpreadWidth : null;
     add("最大損失・最大利益", premium === null ? ask("支払いプレミアム額") : `最大損失 ${money(premium)}（1枚 ${money(premium * 100)}ドル）／最大利益 ${w === null ? "―（売り側の権利行使価格を入力）" : (premium >= w ? "―（支払いが差額以上です）" : `${money(w - premium)}（1枚 ${money((w - premium) * 100)}ドル）`)}`);
@@ -3541,7 +3581,8 @@ function renderBuyPlan(t, price, strike, asOfDate) {
   const jm = { ...BUY_JUMPS };
   if (isSpread) {
     jm["発注する権利行使価格・満期"] = [["買い側の権利行使価格", "rrSellStrikeInput"], ["売り側の権利行使価格", "rrBuyStrikeInput"], ["満期日", "windowDateInput"]];
-    jm["最大損失・最大利益"] = [["売り側の権利行使価格", "rrBuyStrikeInput"], ["支払いプレミアム", "rrPayPremiumInput"]];
+    jm["最大損失・最大利益"] = [["売り側の権利行使価格", "rrBuyStrikeInput"], ["支払いプレミアム", "rrPayPremiumInput"], ["受取プレミアム", "rrRecvPremiumInput"]];
+    jm["支払いプレミアム（買いの指値）"] = [["支払いプレミアム", "rrPayPremiumInput"], ["受取プレミアム", "rrRecvPremiumInput"]];
   }
   els.buyPlanBody.innerHTML = rows.map(([k, val]) => `<tr><th>${k}</th><td>${val}${jumpHtml(k, jm)}</td></tr>`).join("");
   lastBuyPlanText = rows.map(([k, val]) => `${k}：${val.replace(/<[^>]+>/g, "")}`).join("\n");
@@ -3743,6 +3784,7 @@ function init() {
   els.spBtn.addEventListener("click", onToggleSp);
   els.rrDepthInput.addEventListener("input", debounce(onFormChange, 250));
   els.rrPayPremiumInput.addEventListener("input", debounce(onFormChange, 250));
+  if (els.rrRecvPremiumInput) els.rrRecvPremiumInput.addEventListener("input", debounce(onFormChange, 250));
   els.rrPremiumInput.addEventListener("input", debounce(onFormChange, 250));
   els.rrProfitRatioInput.addEventListener("input", debounce(onFormChange, 250));
   els.rrSpreadWidthInput.addEventListener("input", debounce(onFormChange, 250));
