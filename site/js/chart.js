@@ -138,11 +138,11 @@ export const coneTextColor = (key) => CONE_STYLE[key].text || CONE_STYLE[key].st
  * @param {boolean} p.focus trueなら、縦軸を「ITMの水準のまわり」に絞った拡大図にする(ITMの水準と、満期時の各線が近い範囲)
  * @param {{lo:number[],hi:number[],min:number[],max:number[]}|null} p.empCone 過去の実績の帯(営業日ごとの変化率。k=0〜days)。あれば、約68%の範囲を灰色の帯、最小・最大を点線で重ねる
  */
-export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", halfBefore = null, halfLabel = "", ivSigmaPct = null, empCone = null, vScale = 2, focus = false, breakEven = null, itmStrike = null, stopLine = null, limitLine = null, stopLabel = "設定した損切ライン", limitLabel = "資金2%の線" }) {
+export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, itmWhen, nowLabel = "いま", expiryLabel = "満期", barrierLabel = "ITMの水準", markBefore = null, markLabel = "", halfBefore = null, halfLabel = "", ivSigmaPct = null, empCone = null, vScale = 2, focus = false, breakEven = null, itmStrike = null, stopLine = null, limitLine = null, stopLabel = "損切ライン", limitLabel = "資金2%の線" }) {
   const w = 640;
   const h = Math.round(300 * vScale); // 縦の高さ。基準は300(倍率1)
   const padL = 50;
-  const padR = 92;
+  const padR = 112; // 右端の価格ラベルの幅(権利行使価格・手仕舞いの線などの長いラベルが切れないように)
   const padT = 14;
   const padB = 58; // 下に、満期までの半分・2週間前の日付を2段で出すため、広く取る
   const nPast = Math.max(1, pastCloses.length - 1);
@@ -247,7 +247,8 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   const limitLineSvg = hasLimit
     ? `<line x1="${f(xNow)}" y1="${f(ylim)}" x2="${f(xEnd)}" y2="${f(ylim)}" stroke="${CONE_STYLE.limit.stroke}" stroke-width="${CONE_STYLE.limit.width}" stroke-dasharray="${CONE_STYLE.limit.dash}"/>`
     : "";
-  const barrierText = `<text x="${f(xNow + 6)}" y="${f(itmWhen === "below" ? yb - 5 : yb + 13)}" font-size="11" font-weight="700" fill="var(--gradRed)">${barrierLabel}</text>`;
+  // ITMの水準(または損益分岐点)のラベル。いまの株価の点・線と重ならないよう、少し右にずらし、文字のまわりを背景色で縁取る(線の上でも読める)
+  const barrierText = `<text x="${f(xNow + (xEnd - xNow) * 0.16)}" y="${f(itmWhen === "below" ? yb - 5 : yb + 13)}" font-size="11" font-weight="700" fill="var(--gradRed)" stroke="var(--card)" stroke-width="3" paint-order="stroke" stroke-linejoin="round">${barrierLabel}</text>`;
 
   // 過去の株価
   const pastPts = pastCloses.map((c, k) => `${f(xPast(k))},${f(y(c))}`).join(" ");
@@ -283,7 +284,7 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
     );
   }
   if (itmStrike !== null && Number.isFinite(itmStrike)) {
-    labItems.push({ v: itmStrike, text: `ITM（権利行使価格）${itmStrike.toFixed(1)}`, color: "var(--gradRed)" });
+    labItems.push({ v: itmStrike, text: `権利行使 ${itmStrike.toFixed(1)}`, color: "var(--gradRed)" });
   }
   if (breakEven !== null && Number.isFinite(breakEven)) {
     labItems.push({ v: breakEven, text: `損益分岐点 ${breakEven.toFixed(1)}`, color: "var(--gradPurple)" });
@@ -296,7 +297,7 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
   }
   const nudge = (items) => {
     const sorted = items.map((it) => ({ ...it, yy: y(it.v) + 3 })).sort((p, q) => p.yy - q.yy);
-    for (let i = 1; i < sorted.length; i++) if (sorted[i].yy - sorted[i - 1].yy < 12) sorted[i].yy = sorted[i - 1].yy + 12;
+    for (let i = 1; i < sorted.length; i++) if (sorted[i].yy - sorted[i - 1].yy < 13.5) sorted[i].yy = sorted[i - 1].yy + 13.5;
     return sorted;
   };
   const inPlot = (yy) => yy >= padT + 6 && yy <= h - padB - 2;
@@ -341,7 +342,8 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
     markFoot += `<text x="${f(x)}" y="${footY}" font-size="10.5" font-weight="700" text-anchor="middle" fill="${line}">${label}</text>`;
   };
   addMark(halfBefore, halfLabel, "left", h - 22, "2 3");
-  addMark(markBefore, markLabel, "right", h - 6, "5 3");
+  // 2週間前の線が、右端(満期)に近い(右側に書くと、右端の価格ラベルに重なる)ときは、線の左側に書く
+  addMark(markBefore, markLabel, markBefore !== null && (xEnd - xFut(days - markBefore)) < 90 ? "left" : "right", h - 6, "5 3");
 
   return `<svg viewBox="0 0 ${w} ${h}" class="chart cone-chart" role="img" aria-label="満期までの値動きの目安とITMの水準">`
     + `<defs><clipPath id="coneClip"><rect x="0" y="${padT}" width="${w}" height="${h - padT - padB}"/></clipPath></defs>`

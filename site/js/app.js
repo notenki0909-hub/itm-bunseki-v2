@@ -1228,7 +1228,7 @@ function drawCone(t, iv) {
   wrap.innerHTML = renderConeChart({
     pastCloses: cb.pastCloses, price: cb.price, days, sigmaPct: theory.sigmaPct, barrier: theory.barrier, itmWhen: cb.type.itmWhen,
     nowLabel: `いま（${cb.asOfDate.slice(5)}）`, expiryLabel: `満期 ${cb.expiryDate.slice(5)}（${days}営業日後）`,
-    barrierLabel: `${beIsBarrier ? "損益分岐点（判定の基準）" : "ITMの水準"} ${theory.barrier.toFixed(2)}（${dist >= 0 ? "+" : ""}${pct(dist)}・${sigmaText}）`,
+    barrierLabel: `${beIsBarrier ? "損益分岐点（判定の基準）" : "ITMの水準"} ${theory.barrier.toFixed(2)}（${dist >= 0 ? "+" : ""}${pct(dist)}）`,
     markBefore: days > MARK_BEFORE_EXPIRY ? MARK_BEFORE_EXPIRY : null,
     markLabel: `2週間前（満期${MARK_BEFORE_EXPIRY}営業日前） ${shiftTradingDays(cb.expiryDate, MARK_BEFORE_EXPIRY).slice(5)}`,
     // 満期までの期間の半分(2週間前より前にあるときだけ)
@@ -1241,7 +1241,7 @@ function drawCone(t, iv) {
     itmStrike: Math.abs(strikeBe - theory.barrier) > 0.005 ? strikeBe : null,
     stopLine: buyLn ? buyLn.line : stopPrice,
     limitLine: buyLn ? buyLn.riskLine : limitPrice,
-    stopLabel: buyLn ? `手仕舞いの線 ATR×${buyLn.mult}` : undefined,
+    stopLabel: buyLn ? `手仕舞い ATR×${buyLn.mult}` : undefined,
     limitLabel: buyLn ? "資金2%の線" : undefined,
   });
   // 説明(凡例)は、箇条書き。色の見本と、見出しの文字は、グラフと同じ色(chart.js の CONE_STYLE)
@@ -1258,7 +1258,7 @@ function drawCone(t, iv) {
     items.push(li("emp", "灰色の帯", `過去の実績の約68%の範囲（過去の各エントリー日から、同じ営業日数が経ったときの株価の変化の、下位16%〜上位84%）。実績は、集計期間の${emp.count}件のエントリーから求めています（判定期間が重なるため、独立した試行は約${trials}回分）。調べた期間の相場つきに左右されます`));
     items.push(li("minmax", "黒の点線", "過去の最大・最小（過去1回の出来事で、参考）"));
   }
-  items.push(li("itm", "赤い破線", beIsBarrier ? "損益分岐点（判定の基準）" : "ITMの水準"));
+  items.push(li("itm", "赤い破線", `${beIsBarrier ? "損益分岐点（判定の基準）" : "ITMの水準"}（現在値から${dist >= 0 ? "+" : ""}${pct(dist)}、満期までの1σの${sigmaText}）`));
   items.push(li("itmZone", "薄い赤", "ITM側（赤い破線の先）"));
   if (Math.abs(strikeBe - theory.barrier) > 0.005) items.push(li("itmStrike", "細い赤の実線", `ITMの水準（権利行使価格${strikeBe.toFixed(2)}）`));
   if (beVal !== null && !beIsBarrier) items.push(li("be", "紫の点線", `損益分岐点（権利行使価格${cb.type.itmWhen === "below" ? "−" : "＋"}${grp === "sell" ? "受取" : "支払い"}プレミアム＝${beVal.toFixed(2)}、現在値から${((beVal / cb.price - 1) * 100).toFixed(1)}%）`));
