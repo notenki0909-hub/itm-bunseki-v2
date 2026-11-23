@@ -82,6 +82,38 @@ export function renderDayProbChart(dayProb, group, mode = "itm") {
 // 左: 直近の株価(終値)の推移。右: いまの株価を起点に、満期まで広がる±1σ・±2σの範囲(HVから求めた目安)。
 // 赤い横線=ITMとみなす水準(権利行使価格。判定する深さを入れていれば、その分だけ奥)。線の先(プット系は下、コール系は上)がITM側。
 // 帯の幅は、現在値×σ×√(経過日数÷満期までの日数)(線形)。画面の「±◯ドル」と同じ計算。純粋関数(SVG文字列を返す)。
+// ---- コーン図の色・線の設定(グラフと、グラフの下の説明で、同じ設定を使う。色を変えるときは、ここだけを直す) ----
+// fill=面の色、stroke=線の色、width=線の太さ、dash=破線の形、text=説明文の文字の色(省略時はstroke。面だけのものは、読める濃さの同系色)
+export const CONE_STYLE = {
+  hv1: { fill: "color-mix(in srgb, var(--accent) 24%, transparent)", stroke: "var(--accent)", width: 1 },
+  hv2: { fill: "color-mix(in srgb, var(--accent) 10%, transparent)", stroke: "none", text: "color-mix(in srgb, var(--accent) 55%, transparent)" },
+  iv: { fill: "color-mix(in srgb, var(--gradOrange) 10%, transparent)", stroke: "var(--gradOrange)", width: 1.8, dash: "6 3" },
+  emp: { fill: "color-mix(in srgb, var(--muted) 30%, transparent)", stroke: "var(--muted)", width: 1.2 },
+  minmax: { stroke: "var(--fg)", width: 1.3, dash: "2 3", opacity: 0.7 },
+  itm: { stroke: "var(--gradRed)", width: 1.8, dash: "6 4" },
+  itmZone: { fill: "color-mix(in srgb, var(--gradRed) 12%, transparent)", stroke: "none", text: "color-mix(in srgb, var(--gradRed) 55%, transparent)" },
+  itmStrike: { stroke: "var(--gradRed)", width: 1.4 },
+  be: { stroke: "var(--gradPurple)", width: 1.8, dash: "2 4" },
+  stop: { stroke: "#16a34a", width: 2.4, dash: "9 4" },
+  limit: { stroke: "#16a34a", width: 1.6, dash: "2 4" },
+  mark: { stroke: "var(--muted)", width: 1 },
+};
+// 説明用の見本(グラフと同じ色・線の形の、小さな図)と、文字の色
+export function coneSwatch(key) {
+  const st = CONE_STYLE[key];
+  const w = 30;
+  const h = 12;
+  let inner;
+  if (st.fill) {
+    const sk = st.stroke === "none" ? "var(--line)" : st.stroke;
+    inner = `<rect x="0.5" y="1.5" width="${w - 1}" height="${h - 3}" rx="2" fill="${st.fill}" stroke="${sk}" stroke-width="${st.stroke === "none" ? 1 : st.width}"${st.dash ? ` stroke-dasharray="${st.dash}"` : ""}/>`;
+  } else {
+    inner = `<line x1="1" y1="${h / 2}" x2="${w - 1}" y2="${h / 2}" stroke="${st.stroke}" stroke-width="${st.width}"${st.dash ? ` stroke-dasharray="${st.dash}"` : ""}${st.opacity ? ` opacity="${st.opacity}"` : ""}/>`;
+  }
+  return `<svg class="cone-sw" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${inner}</svg>`;
+}
+export const coneTextColor = (key) => CONE_STYLE[key].text || CONE_STYLE[key].stroke;
+
 /**
  * @param {object} p
  * @param {number[]} p.pastCloses 直近の終値(古い順。最後がいまの株価)
@@ -175,45 +207,45 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
     }
     return `${up.join(" ")} ${dn.reverse().join(" ")}`;
   };
-  const cone = `<polygon points="${band(2)}" fill="color-mix(in srgb, var(--accent) 10%, transparent)" stroke="none"/>`
-    + `<polygon points="${band(1)}" fill="color-mix(in srgb, var(--accent) 24%, transparent)" stroke="var(--accent)" stroke-width="1"/>`
-    + (hasIv ? `<polygon points="${band(1, ivSigmaPct)}" fill="color-mix(in srgb, var(--gradOrange) 10%, transparent)" stroke="var(--gradOrange)" stroke-width="1.8" stroke-dasharray="6 3"/>` : "");
+  const cone = `<polygon points="${band(2)}" fill="${CONE_STYLE.hv2.fill}" stroke="none"/>`
+    + `<polygon points="${band(1)}" fill="${CONE_STYLE.hv1.fill}" stroke="${CONE_STYLE.hv1.stroke}" stroke-width="${CONE_STYLE.hv1.width}"/>`
+    + (hasIv ? `<polygon points="${band(1, ivSigmaPct)}" fill="${CONE_STYLE.iv.fill}" stroke="${CONE_STYLE.iv.stroke}" stroke-width="${CONE_STYLE.iv.width}" stroke-dasharray="${CONE_STYLE.iv.dash}"/>` : "");
 
   // 過去の実績の帯(約68%の範囲＝灰色の帯、最小・最大＝点線)
   let emp = "";
   if (empCone) {
     const ptsOf = (arr) => arr.map((r, k) => `${f(xFut(k))},${f(y(price * (1 + r)))}`);
     const poly = (a, b) => `${ptsOf(a).join(" ")} ${ptsOf(b).reverse().join(" ")}`;
-    emp = `<polygon points="${poly(empCone.hi, empCone.lo)}" fill="color-mix(in srgb, var(--muted) 30%, transparent)" stroke="var(--muted)" stroke-width="1.2"/>`
-      + `<polyline points="${ptsOf(empCone.max).join(" ")}" fill="none" stroke="var(--fg)" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>`
-      + `<polyline points="${ptsOf(empCone.min).join(" ")}" fill="none" stroke="var(--fg)" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>`;
+    emp = `<polygon points="${poly(empCone.hi, empCone.lo)}" fill="${CONE_STYLE.emp.fill}" stroke="${CONE_STYLE.emp.stroke}" stroke-width="${CONE_STYLE.emp.width}"/>`
+      + `<polyline points="${ptsOf(empCone.max).join(" ")}" fill="none" stroke="${CONE_STYLE.minmax.stroke}" stroke-width="${CONE_STYLE.minmax.width}" stroke-dasharray="${CONE_STYLE.minmax.dash}" opacity="${CONE_STYLE.minmax.opacity}"/>`
+      + `<polyline points="${ptsOf(empCone.min).join(" ")}" fill="none" stroke="${CONE_STYLE.minmax.stroke}" stroke-width="${CONE_STYLE.minmax.width}" stroke-dasharray="${CONE_STYLE.minmax.dash}" opacity="${CONE_STYLE.minmax.opacity}"/>`;
   }
 
   // ITM側の領域(赤い薄い帯)と、ITMの水準の線
   const yb = y(barrier);
   const zoneTop = itmWhen === "below" ? yb : padT;
   const zoneBottom = itmWhen === "below" ? h - padB : yb;
-  const zone = `<rect x="${f(xNow)}" y="${f(zoneTop)}" width="${f(xEnd - xNow)}" height="${f(Math.max(0, zoneBottom - zoneTop))}" fill="color-mix(in srgb, var(--gradRed) 12%, transparent)"/>`;
-  const barrierLine = `<line x1="${f(xNow)}" y1="${f(yb)}" x2="${f(xEnd)}" y2="${f(yb)}" stroke="var(--gradRed)" stroke-width="1.8" stroke-dasharray="6 4"/>`;
+  const zone = `<rect x="${f(xNow)}" y="${f(zoneTop)}" width="${f(xEnd - xNow)}" height="${f(Math.max(0, zoneBottom - zoneTop))}" fill="${CONE_STYLE.itmZone.fill}"/>`;
+  const barrierLine = `<line x1="${f(xNow)}" y1="${f(yb)}" x2="${f(xEnd)}" y2="${f(yb)}" stroke="${CONE_STYLE.itm.stroke}" stroke-width="${CONE_STYLE.itm.width}" stroke-dasharray="${CONE_STYLE.itm.dash}"/>`;
   // 権利行使価格(ITMの水準)の線(細い赤の実線)。判定の基準が別の価格(深さあり・損益分岐点)のときだけ
   const yitm = y(itmV);
   const itmLine = itmStrike !== null && Number.isFinite(itmStrike)
-    ? `<line x1="${f(xNow)}" y1="${f(yitm)}" x2="${f(xEnd)}" y2="${f(yitm)}" stroke="var(--gradRed)" stroke-width="1.4"/>`
+    ? `<line x1="${f(xNow)}" y1="${f(yitm)}" x2="${f(xEnd)}" y2="${f(yitm)}" stroke="${CONE_STYLE.itmStrike.stroke}" stroke-width="${CONE_STYLE.itmStrike.width}"/>`
     : "";
   // 損益分岐点の線(紫の点線)
   const ybe = y(beV);
   const beLine = breakEven !== null && Number.isFinite(breakEven)
-    ? `<line x1="${f(xNow)}" y1="${f(ybe)}" x2="${f(xEnd)}" y2="${f(ybe)}" stroke="var(--gradPurple)" stroke-width="1.8" stroke-dasharray="2 4"/>`
+    ? `<line x1="${f(xNow)}" y1="${f(ybe)}" x2="${f(xEnd)}" y2="${f(ybe)}" stroke="${CONE_STYLE.be.stroke}" stroke-width="${CONE_STYLE.be.width}" stroke-dasharray="${CONE_STYLE.be.dash}"/>`
     : "";
   // 設定した損切ラインの線(緑の太い破線)
   const ystop = y(stopV);
   const stopLineSvg = hasStop
-    ? `<line x1="${f(xNow)}" y1="${f(ystop)}" x2="${f(xEnd)}" y2="${f(ystop)}" stroke="#16a34a" stroke-width="2.4" stroke-dasharray="9 4"/>`
+    ? `<line x1="${f(xNow)}" y1="${f(ystop)}" x2="${f(xEnd)}" y2="${f(ystop)}" stroke="${CONE_STYLE.stop.stroke}" stroke-width="${CONE_STYLE.stop.width}" stroke-dasharray="${CONE_STYLE.stop.dash}"/>`
     : "";
   // 損失が資金の2%になる株価の線(緑の細い点線)
   const ylim = y(limitV);
   const limitLineSvg = hasLimit
-    ? `<line x1="${f(xNow)}" y1="${f(ylim)}" x2="${f(xEnd)}" y2="${f(ylim)}" stroke="#16a34a" stroke-width="1.6" stroke-dasharray="2 4"/>`
+    ? `<line x1="${f(xNow)}" y1="${f(ylim)}" x2="${f(xEnd)}" y2="${f(ylim)}" stroke="${CONE_STYLE.limit.stroke}" stroke-width="${CONE_STYLE.limit.width}" stroke-dasharray="${CONE_STYLE.limit.dash}"/>`
     : "";
   const barrierText = `<text x="${f(xNow + 6)}" y="${f(itmWhen === "below" ? yb - 5 : yb + 13)}" font-size="11" font-weight="700" fill="var(--gradRed)">${barrierLabel}</text>`;
 
@@ -257,10 +289,10 @@ export function renderConeChart({ pastCloses, price, days, sigmaPct, barrier, it
     labItems.push({ v: breakEven, text: `損益分岐点 ${breakEven.toFixed(1)}`, color: "var(--gradPurple)" });
   }
   if (hasLimit) {
-    labItems.push({ v: limitLine, text: `資金2%の線 ${limitLine.toFixed(1)}`, color: "#16a34a" });
+    labItems.push({ v: limitLine, text: `資金2%の線 ${limitLine.toFixed(1)}`, color: CONE_STYLE.limit.stroke });
   }
   if (hasStop) {
-    labItems.push({ v: stopLine, text: `設定した損切ライン ${stopLine.toFixed(1)}`, color: "#16a34a" });
+    labItems.push({ v: stopLine, text: `設定した損切ライン ${stopLine.toFixed(1)}`, color: CONE_STYLE.stop.stroke });
   }
   const nudge = (items) => {
     const sorted = items.map((it) => ({ ...it, yy: y(it.v) + 3 })).sort((p, q) => p.yy - q.yy);

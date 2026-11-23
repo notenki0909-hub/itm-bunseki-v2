@@ -553,3 +553,10 @@ details.mini#volDetails[hidden]{display:none}
 .pair-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;align-items:start;max-width:680px}
 .pair-row .field input{width:100%;box-sizing:border-box}
 @media (max-width:560px){.pair-row{grid-template-columns:minmax(0,1fr)}}
+
+/* コーン図の説明(箇条書き。色の見本と見出しは、グラフと同じ色) */
+.cone-legend ul{list-style:none;margin:6px 0 0;padding:0}
+.cone-legend li{margin:5px 0;line-height:1.55}
+.cone-legend .lg{white-space:nowrap}
+.cone-legend .cone-sw{vertical-align:middle;margin-right:6px}
+.cone-legend .cone-focus-note{margin:0 0 6px}

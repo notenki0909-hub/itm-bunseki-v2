@@ -10,7 +10,7 @@ import {
   computeHv, computeHvSeries, hvPosition, hvTheory, computeEmpiricalCone,
 } from "./calc.js";
 import { computeBuyStudy, computeFixedLineTable, computeAtr, assumedIvAt, BUY_X_LIST, BUY_ATR_MULTS, DEFAULT_ATR_MULT, ATR_PERIOD } from "./buyline.js";
-import { renderDayProbChart, DAY_PROB_BANDS, renderConeChart, renderHvHistoryChart } from "./chart.js";
+import { renderDayProbChart, DAY_PROB_BANDS, renderConeChart, renderHvHistoryChart, coneSwatch, coneTextColor } from "./chart.js";
 import { renderEntryHeatmap, ENTRY_HEATMAP_BANDS, renderDepthHeatmap, DEPTH_HEATMAP_BANDS, renderOtmHeatmap, OTM_HEATMAP_BANDS, OTM_RATE_BANDS } from "./heatmap.js";
 import { initThemeBar } from "./theme.js";
 import { isPriceDataStale } from "./marketTime.js";
@@ -1190,7 +1190,7 @@ function drawCone(t, iv) {
   const wrap = els.ivConeWrap;
   const legend = els.ivConeLegend;
   wrap.innerHTML = "";
-  legend.textContent = "";
+  legend.innerHTML = "";
   const cb = coneBase;
   if (!cb) return;
   const sell = typeGroup(t.typeKey) === "sell";
@@ -1232,33 +1232,43 @@ function drawCone(t, iv) {
     stopLine: stopPrice,
     limitLine: limitPrice,
   });
-  const beText = beVal !== null && !beIsBarrier ? `紫の点線＝損益分岐点（権利行使価格${cb.type.itmWhen === "below" ? "−" : "＋"}${grp === "sell" ? "受取" : "支払い"}プレミアム＝${beVal.toFixed(2)}、現在値から${((beVal / cb.price - 1) * 100).toFixed(1)}%）。` : "";
-  const itmText = Math.abs(strikeBe - theory.barrier) > 0.005 ? `細い赤の実線＝ITMの水準（権利行使価格${strikeBe.toFixed(2)}）。` : "";
-  const stopText = pickedStop
-    ? (stopPrice !== null
-      ? `緑の太い破線＝「${SEC.risk}」で設定した損切ラインの株価（${stopPrice.toFixed(2)}、現在値から${pickedStop.shock >= 0 ? "+" : "−"}${Math.abs(pickedStop.shock * 100).toFixed(1)}%）。この株価まで動いたら損切りする、という場面です。`
-      : `「${SEC.risk}」で設定した損切ラインは、株価が変わらない（時間の経過による）場面のため、この図には線を引きません。`)
-    : "";
-  const limitText = limitOk
-    ? (limitPrice !== null
-      ? `緑の細い点線＝損失が資金の2%になる株価（${limitPrice.toFixed(2)}、現在値から${limitPrice >= cb.price ? "+" : "−"}${Math.abs((limitPrice / cb.price - 1) * 100).toFixed(1)}%）。「${SEC.risk}」の「損切りの買い戻し価格（2%の上限）${lastRisk.limitValue.toFixed(2)}」を、IV・残りの営業日数がいまのままだとして、株価に直した値です。時間が経つ・IVが上がるときは、もっと手前の株価で2%に届きます。`
-      : `「${SEC.risk}」の「損切りの買い戻し価格（2%の上限）」は、株価がどこまで動いても届かない価格（スプレッドの最大損失でも、損失が資金の2%以内に収まる）ため、資金2%の線は引きません。`)
-    : "";
-  const halfDays = Math.round(days / 2);
-  const markText = days > MARK_BEFORE_EXPIRY ? `灰色の縦線＝${halfDays > MARK_BEFORE_EXPIRY ? `満期までの期間の半分（残り${halfDays}営業日。値は線の左）と、` : ""}2週間前（満期の${MARK_BEFORE_EXPIRY}営業日前。値は線の右）。それぞれ、その日の日付と、そのときのHV・IVの±1σの株価を表示します。` : "";
-  const ivText = ivSigma !== null
-      ? "オレンジの点線の枠＝IV基準の±1σ（市場が見込む範囲）。IVは、売り建て側の1つの値を全体に当てはめた目安です。"
-      : "IV（売り建て側）か受取プレミアム額を入力すると、IV基準の±1σの枠が重なります。";
-  let empText = "";
+  // 説明(凡例)は、箇条書き。色の見本と、見出しの文字は、グラフと同じ色(chart.js の CONE_STYLE)
+  const li = (key, label, desc) => `<li><span class="lg" style="color:${coneTextColor(key)}">${coneSwatch(key)}<b>${label}</b></span>：${desc}</li>`;
+  const note = (html) => `<li>${html}</li>`;
+  const items = [];
+  items.push(li("hv1", "青の帯", `HV基準の±1σ（満期時に約68%がこの範囲）。直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります`));
+  items.push(li("hv2", "薄い青", "HV基準の±2σ（約95%）"));
+  items.push(ivSigma !== null
+    ? li("iv", "オレンジの点線の枠", "IV基準の±1σ（市場が見込む範囲）。IVは、売り建て側の1つの値を全体に当てはめた目安です")
+    : li("iv", "オレンジの点線の枠", "IV（売り建て側）か受取プレミアム額を入力すると、IV基準の±1σの枠が重なります"));
   if (emp) {
     const trials = Math.max(1, Math.round(emp.count / days));
-    empText = `灰色の帯＝過去の実績の約68%の範囲（過去の各エントリー日から、同じ営業日数が経ったときの株価の変化の、下位16%〜上位84%）、黒の点線＝過去の最大・最小（過去1回の出来事で、参考）。実績は、集計期間の${emp.count}件のエントリーから求めています（判定期間が重なるため、独立した試行は約${trials}回分）。調べた期間の相場つきに左右されます。`;
+    items.push(li("emp", "灰色の帯", `過去の実績の約68%の範囲（過去の各エントリー日から、同じ営業日数が経ったときの株価の変化の、下位16%〜上位84%）。実績は、集計期間の${emp.count}件のエントリーから求めています（判定期間が重なるため、独立した試行は約${trials}回分）。調べた期間の相場つきに左右されます`));
+    items.push(li("minmax", "黒の点線", "過去の最大・最小（過去1回の出来事で、参考）"));
+  }
+  items.push(li("itm", "赤い破線", beIsBarrier ? "損益分岐点（判定の基準）" : "ITMの水準"));
+  items.push(li("itmZone", "薄い赤", "ITM側（赤い破線の先）"));
+  if (Math.abs(strikeBe - theory.barrier) > 0.005) items.push(li("itmStrike", "細い赤の実線", `ITMの水準（権利行使価格${strikeBe.toFixed(2)}）`));
+  if (beVal !== null && !beIsBarrier) items.push(li("be", "紫の点線", `損益分岐点（権利行使価格${cb.type.itmWhen === "below" ? "−" : "＋"}${grp === "sell" ? "受取" : "支払い"}プレミアム＝${beVal.toFixed(2)}、現在値から${((beVal / cb.price - 1) * 100).toFixed(1)}%）`));
+  if (pickedStop) {
+    items.push(stopPrice !== null
+      ? li("stop", "緑の太い破線", `「${SEC.risk}」で設定した損切ラインの株価（${stopPrice.toFixed(2)}、現在値から${pickedStop.shock >= 0 ? "+" : "−"}${Math.abs(pickedStop.shock * 100).toFixed(1)}%）。この株価まで動いたら損切りする、という場面です`)
+      : note(`「${SEC.risk}」で設定した損切ラインは、株価が変わらない（時間の経過による）場面のため、この図には線を引きません`));
+  }
+  if (limitOk) {
+    items.push(limitPrice !== null
+      ? li("limit", "緑の細い点線", `損失が資金の2%になる株価（${limitPrice.toFixed(2)}、現在値から${limitPrice >= cb.price ? "+" : "−"}${Math.abs((limitPrice / cb.price - 1) * 100).toFixed(1)}%）。「${SEC.risk}」の「損切りの買い戻し価格（2%の上限）${lastRisk.limitValue.toFixed(2)}」を、IV・残りの営業日数がいまのままだとして、株価に直した値です。時間が経つ・IVが上がるときは、もっと手前の株価で2%に届きます`)
+      : note(`「${SEC.risk}」の「損切りの買い戻し価格（2%の上限）」は、株価がどこまで動いても届かない価格（スプレッドの最大損失でも、損失が資金の2%以内に収まる）ため、資金2%の線は引きません`));
+  }
+  const halfDays = Math.round(days / 2);
+  if (days > MARK_BEFORE_EXPIRY) {
+    items.push(li("mark", "灰色の縦線", `${halfDays > MARK_BEFORE_EXPIRY ? `満期までの期間の半分（残り${halfDays}営業日。値は線の左）と、` : ""}2週間前（満期の${MARK_BEFORE_EXPIRY}営業日前。値は線の右）。それぞれ、その日の日付と、そのときのHV・IVの±1σの株価を表示します`));
   }
   const btnF = document.getElementById("coneFocusBtn");
   btnF.textContent = coneFocus ? "全体表示に戻す" : "ITMの水準の拡大図を見る";
   btnF.setAttribute("aria-pressed", String(coneFocus));
   const focusText = coneFocus ? "【拡大図】縦軸を、ITMの水準と、満期時の各線（HV・IVの1σ、実績の帯と最小・最大）が近い範囲に絞っています。範囲の外の線や、いまの株価は見えません。「全体表示に戻す」で、全体に戻ります。" : "";
-  legend.textContent = `${focusText}${stopText}${limitText}${markText}${itmText}${beText}青の帯＝HV基準の±1σ（満期時に約68%がこの範囲）、薄い青＝±2σ（約95%）。${ivText}${empText}赤い破線＝ITMの水準、その先の薄い赤＝ITM側。HVの帯は、直近${days}営業日のHVから求めた目安で、いまの株価（黒い点）から満期まで広がります。`;
+  legend.innerHTML = `${focusText ? `<p class="cone-focus-note">${focusText}</p>` : ""}<ul>${items.join("")}</ul>`;
 }
 
 function renderTodayCard(t) {
