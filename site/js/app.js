@@ -3093,7 +3093,7 @@ function renderPeriodCompare(t) {
   els.periodCompareBody.innerHTML = rows.map((r) => {
     const sel = r.p.days === t.periodDays;
     const isBasis = basis !== null && r === basis;
-    return `<tr class="${sel ? "bs-sel" : ""}"><td>${r.p.label}${sel ? '<br><span class="bs-sub">いまの設定</span>' : ""}${r.p.days < minP.opt.days ? '<br><span class="bs-sub">短いため基準から除く</span>' : ""}</td>`
+    return `<tr class="${sel ? "bs-sel" : ""}"><td>${r.p.label}${sel ? '<br><span class="bs-sub">いまの設定</span>' : ""}${r.p.days < minP.opt.days ? '<br><span class="bs-sub bs-excl">短いため基準から除く</span>' : ""}</td>`
       + `<td>${r.n}件<br><span class="bs-sub">独立した場面は約${Math.max(1, Math.round(r.n / t.windowDays))}回分</span></td>`
       + `<td><b>${f(r.touch)}</b>${isBasis ? `<br><span class="bs-sub">${tag}</span>` : ""}</td><td>${f(r.exp)}</td>`
       + `<td>${sel ? "" : `<button type="button" class="sp-btn" data-use-period="${r.p.days}">この期間にする</button>`}</td></tr>`;
