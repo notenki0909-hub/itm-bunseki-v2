@@ -46,18 +46,31 @@ export function solveFlatIv({ kind, S, strikeSell, strikeBuy, T, premium, r = 0,
   if (!(premium > 0) || !(T > 0)) return null;
   // ivOffset: もう一方の脚(strikeBuy)のIVは、全体のIV＋ivOffset(権利行使価格ごとのIVの差を、保ったまま、水準だけを逆算する)
   const f = (iv) => positionValue({ kind, S, strikeSell, strikeBuy, T, ivSell: iv, ivBuy: Math.max(0.005, iv + ivOffset), r });
-  let lo = 0.01;
-  if (f(lo) >= premium) return lo;
-  let hi = null;
-  for (let iv = 0.02; iv <= 4; iv += 0.01) {
-    if (f(iv) >= premium) { hi = iv; lo = iv - 0.01; break; }
+  // 価値(f)をIVの小さい方から順に調べ、プレミアムと交わる最初のIVを、二分法で求める。
+  // 単体のオプションは、IVが上がるほど価値が上がる。スプレッドは、OTM側は上がってから下がり、ITM側は下がる(差額が上限)ため、
+  // 「IVが上がるほど価値が上がる」とは限らない。最初に交わる点を採用する(2点あるときは、低い方)。
+  // どのIVでも、プレミアムに届かない・交わらない(プレミアムが、理論上の範囲の外)ときは、null。
+  const g = (iv) => f(iv) - premium;
+  let prev = 0.01;
+  let gp = g(prev);
+  if (gp === 0) return prev;
+  // 小さいIVで、すでにプレミアム以上で、IVが上がるほど価値が上がる(従来の単体・OTMの売りスプレッド)ときは、下限のIVを返す(従来どおり)
+  if (gp > 0 && f(0.02) >= f(0.01)) return prev;
+  for (let iv = 0.02; iv <= 4 + 1e-9; iv += 0.01) {
+    const gc = g(iv);
+    if (gp * gc <= 0) {
+      let lo = prev;
+      let hi = iv;
+      for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        if ((g(mid) > 0) === (gp > 0)) lo = mid; else hi = mid;
+      }
+      return (lo + hi) / 2;
+    }
+    prev = iv;
+    gp = gc;
   }
-  if (hi === null) return null;
-  for (let i = 0; i < 60; i++) {
-    const mid = (lo + hi) / 2;
-    if (f(mid) >= premium) hi = mid; else lo = mid;
-  }
-  return (lo + hi) / 2;
+  return null;
 }
 
 /**

@@ -3429,10 +3429,17 @@ function renderBuyRisk(t, price, strike, asOfDate) {
   const ivIn = t.rrIvSell !== null && t.rrIvSell > 0 ? t.rrIvSell / 100 : null;
   const assumed = assumedIvAt(v.closes, v.closes.length - 1);
   const capital = riskCapital();
-  const tbl = computeFixedLineTable({
+  const calcTbl = (ivArg) => computeFixedLineTable({
     price, atr, kind, strike, strike2: K2, ivSkew: buySkew(t, strike), days: t.windowDays, premium, capital: capital > 0 ? capital : null, contracts: t.planQty,
-    iv: premium !== null ? null : (ivIn !== null ? ivIn : assumed), rate: rateOf(t), mults: BUY_ATR_MULTS.includes(t.buyAtrMult) ? BUY_ATR_MULTS : [...BUY_ATR_MULTS, t.buyAtrMult].sort((a, b) => a - b),
+    iv: ivArg, rate: rateOf(t), mults: BUY_ATR_MULTS.includes(t.buyAtrMult) ? BUY_ATR_MULTS : [...BUY_ATR_MULTS, t.buyAtrMult].sort((a, b) => a - b),
   });
+  let tbl = calcTbl(premium !== null ? null : (ivIn !== null ? ivIn : assumed));
+  // 支払いプレミアムに合うIVが、見つからないとき(プレミアムが、この権利行使価格の理論上の範囲の外)は、表を空にせず、入力したIV(なければ仮定のIV)で計算する
+  let ivFallback = null;
+  if (tbl.iv === null && premium !== null) {
+    const alt = ivIn !== null ? ivIn : assumed;
+    if (alt > 0) { tbl = calcTbl(alt); ivFallback = ivIn !== null ? "入力したIV" : "仮定のIV（直近20営業日のHV×1.15）"; }
+  }
   const dirWord = kind === "call" ? "下がった" : "上がった";
   const sel = tbl.rows.find((r) => r.mult === t.buyAtrMult) || tbl.rows[0];
   band.buyLine = { line: sel.line, movePct: sel.movePct, mult: sel.mult, kind };
@@ -3443,16 +3450,27 @@ function renderBuyRisk(t, price, strike, asOfDate) {
     riskNote: tbl.riskRow && tbl.riskRow.alreadyOver ? "over" : (capital > 0 && premium !== null && !tbl.riskRow ? "none" : null),
   };
   const ivSrc = tbl.iv === null ? "（IVを計算できません）"
-    : premium !== null ? "支払いプレミアムから逆算したIV" : (ivIn !== null ? "入力したIV" : "仮定のIV（直近20営業日のHV×1.15）");
+    : ivFallback ? ivFallback
+      : premium !== null ? "支払いプレミアムから逆算したIV" : (ivIn !== null ? "入力したIV" : "仮定のIV（直近20営業日のHV×1.15）");
   els.buyRiskSummary.innerHTML = [
     { name: "ATR", value: atr.toFixed(2), suffix: `（直近${ATR_PERIOD}営業日）`, sub: `株価の${(atr / price * 100).toFixed(1)}%。1日の値幅(高値−安値など)の平均的な大きさ`, note: `ATR(Average True Range)は、直近${ATR_PERIOD}営業日の「1日の値幅」の平均です（前日の終値からの飛びも含めます）。固定の線の幅の単位として使います。` },
     { name: `手仕舞いの線（ATR×${sel.mult}）`, value: sel.line.toFixed(2), sub: `買った日の終値${price.toFixed(2)}から ${sel.moveAmount.toFixed(2)}ドル（${pctTxt(sel.movePct, 1)}）${dirWord}価格`, note: "買った時点で決めて動かさない、1本の固定の線です。トレンドの判定や、日々の切り上げはしません。終値がこの線に届いたら手仕舞う、という目安です。" },
   ].map((it) => statCardHtml({ ...it, attrs: 'data-target="orderExplain"' })).join("");
   const money = (x) => (x === null || x === undefined ? "―" : x.toLocaleString("ja-JP", { maximumFractionDigits: 2 }));
-  // 資金の2%の損切りの線が、ATR×2(表の最小の倍率)より近いときは、その行を一番上に出す
-  const showRisk = tbl.riskRow && (tbl.riskRow.alreadyOver || tbl.riskRow.mult < Math.min(...BUY_ATR_MULTS));
-  const rowsAll = showRisk ? [tbl.riskRow, ...tbl.rows] : tbl.rows;
+  // 資金の2%の損切りの線の行は、あるとき(なければ、ない理由の行)、いつも、一番上に出す(ATR×倍率のどれより近いか遠いかにかかわらず)
+  const showRisk = !!tbl.riskRow;
+  // 資金の2%の線がない(全損しても、損失が資金の2%以内に収まる)ときは、その理由を、一番上の行に出す
+  const noRiskLine = capital > 0 && tbl.premium > 0 && !tbl.riskRow;
+  const rowsAll = showRisk ? [tbl.riskRow, ...tbl.rows] : (noRiskLine ? [{ noRisk: true }, ...tbl.rows] : tbl.rows);
   els.buyRiskBody.innerHTML = rowsAll.map((r) => {
+    if (r.noRisk) {
+      const n = t.planQty > 0 ? t.planQty : 1;
+      const allowedTotal = capital * 0.02;
+      const lossAll = tbl.premium * 100 * n;
+      const maxFull = Math.floor(allowedTotal / (tbl.premium * 100));
+      const nTxt = `${n}枚${t.planQty > 0 ? "" : "（枚数が未入力のため1枚）"}`;
+      return `<tr class="bs-risk"><td><b>資金2%の損切り</b><br><span class="bs-sub">${nTxt}の場合</span></td><td colspan="3"><b>線はありません</b>。全損しても、損失は最大${money(lossAll)}ドル（資金の${(lossAll / capital * 100).toFixed(2)}%）で、上限（資金の2%＝${money(allowedTotal)}ドル）以内に収まるためです。この支払い（1枚${money(tbl.premium * 100)}ドル）なら、${maxFull >= 1 ? `${maxFull}枚までは、全損しても2%以内です` : "1枚でも、全損すると2%を超えます"}。</td></tr>`;
+    }
     if (r.alreadyOver) {
       return `<tr class="bs-risk"><td><b>資金2%の損切り</b><br><span class="bs-sub">${r.contracts}枚の場合</span></td><td colspan="3"><b>すでに、いまの価格で、損失が資金の2%を超えています</b>（いまの理論価格との差で、1枚 ${money(r.nowLoss * 100)}ドルの損失。上限は${money(capital * 0.02)}ドル）。入力したIVから計算した理論価格が、支払いプレミアムよりずっと低いためです。IVを空欄にして、支払いプレミアムから逆算させてください</td></tr>`;
     }
@@ -3467,12 +3485,13 @@ function renderBuyRisk(t, price, strike, asOfDate) {
       + `<td>${r.optLoss === null ? "―" : `1枚 ${money(r.optLoss * 100)}ドル（支払いの${(r.optLossPct * 100).toFixed(0)}%）<br><span class="bs-sub">資金2%なら ${qtyOpt}</span>`}</td></tr>`;
   }).join("");
   const riskNote = showRisk && tbl.riskRow.alreadyOver ? "" : showRisk
-    ? `<br>・一番上の「資金2%の損切り」は、${tbl.riskRow.contracts}枚${t.planQty ? "" : "（枚数が未入力のため1枚）"}で、損失が資金の2%になる株価の位置です。ATR×2より近い（${tbl.riskRow.mult.toFixed(2)}倍）ため、表に出しています。この線より先まで待つと、資金の2%を超えます。`
+    ? `<br>・一番上の「資金2%の損切り」は、${tbl.riskRow.contracts}枚${t.planQty ? "" : "（枚数が未入力のため1枚）"}で、損失が資金の2%になる株価の位置です（ATR×${tbl.riskRow.mult.toFixed(2)}倍にあたります）。この線より先まで待つと、資金の2%を超えます。`
     : "";
   const warn = premium === null && ivIn === null ? "支払いプレミアム額（またはIV）が未入力のため、IVは仮定の値です。「2 注文プラン」に支払いプレミアム額を入れると、実際の価格に近づきます。 " : "";
   const capNote = capital > 0 ? `資金（${money(capital)}ドル）の2%＝${money(capital * 0.02)}ドルが、1回の手仕舞いで許せる損失の上限です。` : "「2 注文プラン」にトータル資金額を入れると、資金の2%に収まる枚数を出します。";
   const mism = premiumMismatchText(t, price, strike, "risk");
-  els.buyRiskNote.innerHTML = `${mism ? mism + "<br>" : ""}${warn}${capNote}${riskNote}<br>・オプションの価格は、満期までの日数・IV（${ivSrc}${tbl.iv !== null ? `：${(tbl.iv * 100).toFixed(1)}%` : ""}）はそのままで、株価だけが線まで動いたとしたBlack-Scholes（金利0・配当なし）の目安です。実際は、IVの変化や時間の経過、売買の差でずれます。`
+  const fbNote = ivFallback ? `※支払いプレミアム${premium.toFixed(2)}に合うIVが、見つかりませんでした（このプレミアムは、この権利行使価格${K2 !== null ? "のスプレッド" : ""}の理論上の価格の範囲の外です。IVを大きくしても小さくしても、この価格になりません）。このため、表は、${ivFallback}で計算しています。損益は、入力した支払いプレミアムを基準にするので、実際の価格とずれます。権利行使価格・プレミアム${K2 !== null ? "（差し引き後の正味）" : ""}の入力を、確認してください。買い側をAsk（売値）、売り側をBid（買値）で入れると、中間値で計算した理論価格より、差し引き後の正味が大きくなり、IVで再現できないことがあります。<br>` : "";
+  els.buyRiskNote.innerHTML = `${fbNote}${mism ? mism + "<br>" : ""}${warn}${capNote}${riskNote}<br>・オプションの価格は、満期までの日数・IV（${ivSrc}${tbl.iv !== null ? `：${(tbl.iv * 100).toFixed(1)}%` : ""}）はそのままで、株価だけが線まで動いたとしたBlack-Scholes（金利0・配当なし）の目安です。実際は、IVの変化や時間の経過、売買の差でずれます。`
     + `<br>・オプションの損失は、最大でも支払ったプレミアムです。満期が短い・OTMのとき、線に届く前に全損することがあります。`
     + `<br>・線は、期待値を上げるものではなく、<b>損失の大きさを決めるもの</b>です（過去の検証では、倍率を大きくするほど、平均と勝率は上がり、最悪の損失が深くなりました）。`;
   renderBuyTime(t, price, strike, asOfDate, tbl, kind, capital, ivSrc);
