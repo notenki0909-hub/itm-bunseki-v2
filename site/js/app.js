@@ -2005,8 +2005,6 @@ function renderRatioCard(t) {
       if (!nominalOf.has(K)) nominalOf.set(K, r);
     }
   }
-  // 講座の基準(比率0.90・0.85。プット売りのみ)の権利行使価格は、刻みにかかわらず目印をつける
-  const baseK = isPut ? { [roundStrike(price, 0.9, itmWhen)]: "講座の基準", [roundStrike(price, 0.85, itmWhen)]: "講座の基準（より安全）" } : {};
   const curK = effStrikeOf(t, price);
   if (!nominalOf.has(curK)) nominalOf.set(curK, null);
   const strikes = [...nominalOf.keys()].sort((x, y) => (isPut ? y - x : x - y));
@@ -2093,16 +2091,15 @@ function renderRatioCard(t) {
   }
 
   // 一覧(近い側から)
-  const baseLabel = (K) => baseK[K] || "";
+  // 現在の株価から、何%上か下か(権利行使価格÷現在の株価−1)
+  const distText = (K) => { const d = (K / price - 1) * 100; return `現在の株価から${Math.abs(d).toFixed(1)}%${d < 0 ? "下" : d > 0 ? "上" : "（同じ）"}`; };
   els.ratioBody.innerHTML = rows.map((x, k) => {
     const marks = [];
     if (rec && x.strike === rec.strike) marks.push("推奨");
     if (cur && x.strike === cur.strike) marks.push("いまの設定");
-    const lab = baseLabel(x.strike);
-    if (lab) marks.push(lab);
     const cls = rec && x.strike === rec.strike ? "ratio-rec" : cur && x.strike === cur.strike ? "ratio-cur" : inBand(k) ? "ratio-band" : "";
     const premLine = x.prem === null ? "" : `<br><span class="ratio-prem ${x.prem >= minPrem ? "ok" : "ng"}">受取 ${x.prem.toFixed(2)}${x.prem >= minPrem ? " ✓" : " ✗"}</span>`;
-    return `<tr class="${cls}"><td><b>${fmtStrike(x.strike)}</b> <span class="ratio-strike">（比率${ratioOf(x)}）</span>${marks.length ? `<br><span class="ratio-mark">${marks.join("・")}</span>` : ""}</td>`
+    return `<tr class="${cls}"><td><b>${fmtStrike(x.strike)}</b> <span class="ratio-strike">（比率${ratioOf(x)}）</span><br><span class="ratio-dist">${distText(x.strike)}</span>${marks.length ? `<br><span class="ratio-mark">${marks.join("・")}</span>` : ""}</td>`
       + `<td>${x.itm === null ? "―" : pctText(x.itm)}<br><span class="badge ${badgeLevelClass(x.level)}">${x.badge}</span></td>`
       + `<td>${x.theory === null ? "―" : pctText(x.theory)}${premLine}</td>`
       + `<td><button type="button" class="sp-btn" data-use-strike="${x.strike}">採用</button></td></tr>`;

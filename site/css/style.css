@@ -426,6 +426,7 @@ button:disabled{opacity:.6;cursor:default}
 .ratio-table-wrap{max-height:380px;overflow-y:auto}
 .ratio-table td,.ratio-table th{text-align:right;white-space:nowrap}
 .ratio-table td:first-child,.ratio-table th:first-child{text-align:left}
+.ratio-table .ratio-dist{font-size:11px;color:var(--muted)}
 .ratio-table .ratio-mark{font-size:10.5px;font-weight:700;color:var(--accent)}
 .ratio-table tr.ratio-rec td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
 .ratio-table tr.ratio-cur td{background:color-mix(in srgb,var(--muted) 14%,transparent)}
